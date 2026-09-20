@@ -38,6 +38,7 @@ fun RunEntity.toDomain(
     averagePaceSecPerKm = averagePaceSecPerKm,
     bestPaceSecPerKm = bestPaceSecPerKm,
     calories = calories,
+    steps = steps,
     goalType = runCatching { RunGoalType.valueOf(goalType) }.getOrDefault(RunGoalType.FREE),
     goalValue = goalValue,
     memo = memo,

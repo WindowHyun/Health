@@ -37,7 +37,8 @@ interface RunDao {
     @Query(
         """
         UPDATE run SET distanceMeters = :distanceMeters, durationSeconds = :durationSeconds,
-            averagePaceSecPerKm = :averagePace, bestPaceSecPerKm = :bestPace, calories = :calories
+            averagePaceSecPerKm = :averagePace, bestPaceSecPerKm = :bestPace,
+            calories = :calories, steps = :steps
         WHERE id = :id
         """,
     )
@@ -48,6 +49,7 @@ interface RunDao {
         averagePace: Double,
         bestPace: Double,
         calories: Int,
+        steps: Int,
     )
 
     @Query("UPDATE run SET endTime = :endTime WHERE id = :id")

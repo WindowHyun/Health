@@ -119,6 +119,7 @@ interface RunRepository {
         averagePaceSecPerKm: Double,
         bestPaceSecPerKm: Double,
         calories: Int,
+        steps: Int,
     )
 
     /** 러닝을 종료 상태로 만든다. */
@@ -130,6 +131,7 @@ interface RunRepository {
         averagePaceSecPerKm: Double,
         bestPaceSecPerKm: Double,
         calories: Int,
+        steps: Int,
     )
 
     /** 이번 러닝이 개인 기록을 갱신했는지 확인한다. */

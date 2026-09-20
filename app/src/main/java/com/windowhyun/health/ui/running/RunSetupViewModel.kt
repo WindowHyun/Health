@@ -9,6 +9,7 @@ import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.RunTrackingState
 import com.windowhyun.health.domain.repository.LocationTracker
 import com.windowhyun.health.domain.repository.SettingsRepository
+import com.windowhyun.health.domain.repository.StepCounter
 import com.windowhyun.health.service.RunServiceController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,8 @@ data class RunSetupUiState(
     val goalDurationMinutes: Int = 30,
     val hasLocationPermission: Boolean = false,
     val gpsEnabled: Boolean = false,
+    val stepSensorAvailable: Boolean = false,
+    val stepPermissionGranted: Boolean = false,
     val settings: AppSettings = AppSettings(),
     val tracking: RunTrackingState = RunTrackingState(),
 ) {
@@ -43,6 +46,7 @@ data class RunSetupUiState(
 @HiltViewModel
 class RunSetupViewModel @Inject constructor(
     private val locationTracker: LocationTracker,
+    private val stepCounter: StepCounter,
     private val runServiceController: RunServiceController,
     runTracker: RunTracker,
     settingsRepository: SettingsRepository,
@@ -67,6 +71,8 @@ class RunSetupViewModel @Inject constructor(
         it.copy(
             hasLocationPermission = locationTracker.hasLocationPermission(),
             gpsEnabled = locationTracker.isLocationAvailable(),
+            stepSensorAvailable = stepCounter.isAvailable(),
+            stepPermissionGranted = stepCounter.hasPermission(),
         )
     }
 

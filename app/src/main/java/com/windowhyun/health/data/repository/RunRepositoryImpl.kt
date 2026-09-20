@@ -57,6 +57,7 @@ class RunRepositoryImpl @Inject constructor(
                 averagePaceSecPerKm = run.averagePaceSecPerKm,
                 bestPaceSecPerKm = run.bestPaceSecPerKm,
                 calories = run.calories,
+                steps = run.steps,
                 goalType = run.goalType.name,
                 goalValue = run.goalValue,
                 memo = run.memo,
@@ -150,6 +151,7 @@ class RunRepositoryImpl @Inject constructor(
         averagePaceSecPerKm: Double,
         bestPaceSecPerKm: Double,
         calories: Int,
+        steps: Int,
     ) = runDao.updateProgress(
         id = runId,
         distanceMeters = distanceMeters,
@@ -157,6 +159,7 @@ class RunRepositoryImpl @Inject constructor(
         averagePace = averagePaceSecPerKm,
         bestPace = bestPaceSecPerKm,
         calories = calories,
+        steps = steps,
     )
 
     override suspend fun finishRun(
@@ -167,6 +170,7 @@ class RunRepositoryImpl @Inject constructor(
         averagePaceSecPerKm: Double,
         bestPaceSecPerKm: Double,
         calories: Int,
+        steps: Int,
     ) {
         runDao.updateProgress(
             id = runId,
@@ -175,6 +179,7 @@ class RunRepositoryImpl @Inject constructor(
             averagePace = averagePaceSecPerKm,
             bestPace = bestPaceSecPerKm,
             calories = calories,
+            steps = steps,
         )
         runDao.markFinished(runId, endTime)
     }

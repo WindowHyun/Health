@@ -19,6 +19,8 @@
 | 설정 | DataStore (Preferences) |
 | DI | Hilt 2.52 |
 | 위치 | Fused Location Provider + Foreground Service |
+| 지도 | osmdroid (OpenStreetMap, API 키 불필요) |
+| 걸음 수 | 기기 걸음 센서 (TYPE_STEP_COUNTER) |
 | 건강 데이터 | Health Connect *(Phase 4)* |
 | minSdk | **26** (Health Connect 클라이언트 요구사항) |
 | targetSdk / compileSdk | 35 |
@@ -58,6 +60,7 @@ app/src/main/java/com/windowhyun/health/
 │   │   ├── dao/                  # 쿼리
 │   │   └── relation/             # @Relation 조회 결과
 │   ├── location/                 # FusedLocationTracker
+│   ├── sensor/                   # SensorStepCounter (걸음 수)
 │   ├── tracking/                 # RunMetricsAccumulator, RunTracker
 │   ├── datastore/                # SettingsRepositoryImpl
 │   ├── mapper/                   # Entity ↔ Domain 변환
@@ -76,7 +79,7 @@ app/src/main/java/com/windowhyun/health/
     ├── gym/                      # 루틴 목록 · 루틴 편집 · 운동 선택 시트
     ├── session/                  # 운동 진행 · 세트 입력 · 휴식 타이머 · 종료 요약
     ├── history/                  # 기록 목록 · 기록 상세
-    ├── running/                  # 러닝 시작 · 진행 · 결과 · 경로 그리기
+    ├── running/                  # 러닝 시작 · 진행(숫자/지도) · 결과 · 지도
     └── settings/                 # 설정
 ```
 
@@ -97,8 +100,11 @@ RunTrackingService (Foreground)
 * 계산기는 `android.location.Location` 대신 자체 `LocationSample` 을 받아서
   **거리 · 페이스 · Lap 로직 전체를 JVM 단위 테스트로 검증**한다.
 * GPS 노이즈 대응: 정확도 30m 초과 · 3m 미만 이동 · 12m/s 초과 속도는 버린다.
-* 일시정지 구간은 거리에 넣지 않고 경로도 끊어서 그린다.
-* 경로는 지도 SDK 없이 Compose Canvas 로 그린다(API 키·네트워크 불필요).
+* 일시정지 구간은 거리에 넣지 않고 경로도 끊어서 그린다. 걸음 수도 같은 방식으로
+  정지 구간을 건너뛴다(센서 누적값의 기준점을 다시 잡는다).
+* 지도는 **osmdroid**(OpenStreetMap)를 쓴다. API 키와 결제 계정이 필요 없어 설치하면
+  바로 지도가 뜨고, 받은 타일은 기기에 캐시된다.
+  타일을 못 받아도 **경로 선과 시작/끝 표시는 그대로 보인다.**
 
 ---
 
@@ -124,9 +130,20 @@ run ──┬── run_lap
 | `workout_exercise` | 세션 안의 운동 | workout CASCADE |
 | `workout_set` | 세트(중량 kg, 반복, 완료 여부) | workout_exercise CASCADE |
 | `personal_record` | 그 세션에서 **새로 세운** PR | workout CASCADE |
-| `run` / `run_lap` / `run_location` | 러닝 (Phase 2 에서 사용) | run CASCADE |
+| `run` / `run_lap` / `run_location` | 러닝 기록 · Lap · GPS 경로 | run CASCADE |
 
 저장 단위는 항상 **kg / meter** 이고, kg↔lb · km↔mile 변환은 화면에서만 합니다.
+
+### 스키마 버전
+
+| 버전 | 내용 |
+| --- | --- |
+| v1 | 최초 스키마 (헬스 + 러닝 테이블 전체) |
+| v2 | `run.steps` 컬럼 추가 |
+
+스키마를 바꿀 때는 `HealthDatabase.MIGRATIONS` 에 마이그레이션을 추가하고
+`MigrationTest` 에 케이스를 넣습니다. 마이그레이션이 깨지면 업데이트하는 순간
+기존 기록이 사라지기 때문입니다.
 
 ---
 
@@ -199,7 +216,8 @@ APK 만 만들려면:
 | `ExerciseSeedTest` | 첫 실행 시 기본 종목 시드 |
 | `GeoUtilsTest` | Haversine 거리, 페이스, 칼로리 추정 |
 | `RunMetricsAccumulatorTest` | 거리 누적, GPS 노이즈 제거, 자동 Lap, 일시정지, 최고 페이스 |
-| `RunRepositoryTest` | 러닝 증분 저장과 개인 기록 판정 |
+| `RunRepositoryTest` | 러닝 증분 저장, 걸음 수·케이던스, 개인 기록 판정 |
+| `MigrationTest` | 옛 버전 DB 를 최신 스키마로 올려도 기록이 남는지 |
 
 ### 손으로 확인해 볼 시나리오
 
@@ -218,8 +236,10 @@ APK 만 만들려면:
 10. **화면을 끄고** 몇 분 뒤 다시 켜기 → 시간과 거리가 계속 쌓였는지 확인
 11. 일시정지 → 자리를 옮긴 뒤 계속 → 옮긴 거리가 더해지지 않고 경로가 끊겼는지 확인
 12. 1km 를 넘기면 Lap 이 자동으로 생기는지 확인
-13. 종료 → 결과 화면에서 경로·Lap·칼로리·개인기록 확인 → 메모 후 저장
-14. 목표 거리/시간 모드로 시작해 목표에 도달하면 자동으로 종료되는지 확인
+13. 우측 상단 **지도** 버튼 → 지도 위에 달린 경로가 따라 그려지는지 확인
+14. 걸음 수와 케이던스가 올라가는지 확인(걸음 센서가 있는 기기)
+15. 종료 → 결과 화면에서 지도·Lap·걸음·칼로리·개인기록 확인 → 메모 후 저장
+16. 목표 거리/시간 모드로 시작해 목표에 도달하면 자동으로 종료되는지 확인
 
 > 에뮬레이터에서는 Extended Controls → Location 에서 GPX/KML 경로를 재생하면
 > 실제 이동과 비슷하게 테스트할 수 있습니다.

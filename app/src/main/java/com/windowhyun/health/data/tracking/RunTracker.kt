@@ -8,6 +8,7 @@ import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.model.RunTrackingState
 import com.windowhyun.health.domain.repository.RunRepository
 import com.windowhyun.health.domain.repository.SettingsRepository
+import com.windowhyun.health.domain.repository.StepCounter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,7 @@ import javax.inject.Singleton
 class RunTracker @Inject constructor(
     private val runRepository: RunRepository,
     private val settingsRepository: SettingsRepository,
+    private val stepCounter: StepCounter,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
 
@@ -58,6 +60,7 @@ class RunTracker @Inject constructor(
                 runId = runId,
                 goal = goal,
                 startTime = System.currentTimeMillis(),
+                stepCountAvailable = stepCounter.isAvailable() && stepCounter.hasPermission(),
             )
         }
     }
@@ -77,6 +80,19 @@ class RunTracker @Inject constructor(
                 runRepository.appendLap(_state.value.runId, newLap)
             }
             publish(accumulator, lastAccuracy = sample.accuracyMeters)
+        }
+    }
+
+    /**
+     * 걸음 센서 값 1건. 센서는 부팅 이후 누적값을 주므로 누적기가 차이만 더한다.
+     * 일시정지 중에는 무시해서 정지한 동안의 걸음이 더해지지 않게 한다.
+     */
+    suspend fun onStepCount(rawCumulative: Long) {
+        mutex.withLock {
+            val accumulator = accumulator ?: return
+            if (_state.value.status != RunStatus.TRACKING) return
+            accumulator.onStepCount(rawCumulative)
+            publish(accumulator, lastAccuracy = _state.value.lastAccuracyMeters)
         }
     }
 
@@ -134,6 +150,7 @@ class RunTracker @Inject constructor(
                 averagePaceSecPerKm = accumulator.averagePaceSecPerKm,
                 bestPaceSecPerKm = accumulator.bestPaceSecPerKm,
                 calories = estimateRunCalories(bodyWeightKg, accumulator.distanceMeters),
+                steps = accumulator.steps.toInt(),
             )
             publish(accumulator, lastAccuracy = _state.value.lastAccuracyMeters)
             _state.update { it.copy(status = RunStatus.FINISHED, currentPaceSecPerKm = 0.0) }
@@ -169,7 +186,10 @@ class RunTracker @Inject constructor(
                 averagePaceSecPerKm = accumulator.averagePaceSecPerKm,
                 bestPaceSecPerKm = accumulator.bestPaceSecPerKm,
                 calories = estimateRunCalories(bodyWeightKg, accumulator.distanceMeters),
+                steps = accumulator.steps,
+                cadenceStepsPerMinute = accumulator.cadenceStepsPerMinute,
                 laps = accumulator.laps.toList(),
+                route = accumulator.routePoints.toList(),
                 lastAccuracyMeters = lastAccuracy,
             )
         }
@@ -187,6 +207,7 @@ class RunTracker @Inject constructor(
             averagePaceSecPerKm = accumulator.averagePaceSecPerKm,
             bestPaceSecPerKm = accumulator.bestPaceSecPerKm,
             calories = estimateRunCalories(bodyWeightKg, accumulator.distanceMeters),
+            steps = accumulator.steps.toInt(),
         )
     }
 

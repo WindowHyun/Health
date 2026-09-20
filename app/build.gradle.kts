@@ -35,8 +35,8 @@ android {
         applicationId = "com.windowhyun.health"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -90,6 +90,8 @@ android {
 
     buildFeatures {
         compose = true
+        // osmdroid 의 User-Agent 로 applicationId 를 쓰기 위해 필요하다.
+        buildConfig = true
     }
 
     packaging {
@@ -102,6 +104,12 @@ android {
         unitTests {
             isIncludeAndroidResources = true
         }
+    }
+
+    // 기기에서 돌리는 계측 테스트가 이전 스키마를 읽을 수 있게 한다.
+    // (JVM 단위 테스트는 schemas 디렉터리를 파일로 직접 읽는다 - MigrationTest 참고)
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
 }
 
@@ -137,8 +145,12 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
-    // Phase 2 / Phase 4 - declared up front so the module graph stays stable.
     implementation(libs.play.services.location)
+
+    // 지도. API 키가 필요 없고 타일을 기기에 캐시해 둔다.
+    implementation(libs.osmdroid.android)
+
+    // Phase 4 에서 사용.
     implementation(libs.health.connect.client)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)

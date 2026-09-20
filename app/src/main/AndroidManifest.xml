@@ -11,9 +11,25 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
+    <!-- 러닝 걸음 수 (Android 10+ 에서 런타임 권한) -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!--
+        지도 타일 내려받기.
+        기록 자체는 전부 기기 안에 저장되고, 네트워크는 OpenStreetMap 타일을
+        받는 데에만 쓴다. 받은 타일은 캐시되어 다음부터는 오프라인에서도 보인다.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- GPS 가 없는 기기에도 설치는 되도록(헬스 기능만 사용) -->
     <uses-feature
         android:name="android.hardware.location.gps"
+        android:required="false" />
+
+    <!-- 걸음 센서가 없는 기기에서도 동작하도록(걸음 수만 숨김) -->
+    <uses-feature
+        android:name="android.hardware.sensor.stepcounter"
         android:required="false" />
 
     <application

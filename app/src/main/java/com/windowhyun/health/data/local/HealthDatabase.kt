@@ -3,6 +3,8 @@ package com.windowhyun.health.data.local
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.windowhyun.health.data.local.dao.ExerciseDao
 import com.windowhyun.health.data.local.dao.PersonalRecordDao
 import com.windowhyun.health.data.local.dao.RoutineDao
@@ -38,7 +40,7 @@ import com.windowhyun.health.data.local.entity.WorkoutSetEntity
         RunLapEntity::class,
         RunLocationEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -51,5 +53,18 @@ abstract class HealthDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "health.db"
+
+        /**
+         * v2: 러닝에 걸음 수 컬럼 추가.
+         *
+         * 이미 저장된 러닝은 걸음 수를 알 수 없으므로 0 으로 둔다.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE run ADD COLUMN steps INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2)
     }
 }

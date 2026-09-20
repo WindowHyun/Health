@@ -165,6 +165,95 @@ class RunMetricsAccumulatorTest {
         assertThat(points.last().isSegmentStart).isTrue()
     }
 
+    /** 걸음 센서는 부팅 이후 누적값을 주므로 차이만 더한다. */
+    @Test
+    fun `accumulates steps from the cumulative sensor value`() {
+        val accumulator = RunMetricsAccumulator()
+        // 러닝 시작 시점에 기기는 이미 12,000 걸음을 세어 두었다.
+        accumulator.onStepCount(12_000)
+        accumulator.onStepCount(12_150)
+        accumulator.onStepCount(12_400)
+
+        assertThat(accumulator.steps).isEqualTo(400)
+    }
+
+    /** 첫 값은 기준점일 뿐 걸음 수로 잡지 않는다. */
+    @Test
+    fun `treats the first sensor value as a baseline`() {
+        val accumulator = RunMetricsAccumulator()
+        accumulator.onStepCount(50_000)
+
+        assertThat(accumulator.steps).isEqualTo(0)
+    }
+
+    /** 일시정지 동안 걸은 걸음은 더하지 않는다. */
+    @Test
+    fun `does not count steps taken while paused`() {
+        val accumulator = RunMetricsAccumulator()
+        accumulator.onStepCount(1_000)
+        accumulator.onStepCount(1_300)
+        assertThat(accumulator.steps).isEqualTo(300)
+
+        accumulator.breakSegment()
+        // 정지한 사이에 500 걸음을 더 걸었다.
+        accumulator.onStepCount(1_800)
+        assertThat(accumulator.steps).isEqualTo(300)
+
+        // 재개 후부터 다시 센다.
+        accumulator.onStepCount(1_900)
+        assertThat(accumulator.steps).isEqualTo(400)
+    }
+
+    /** 기기를 재부팅하면 누적값이 0 으로 돌아간다. 그때는 기준점만 새로 잡는다. */
+    @Test
+    fun `handles the sensor counter resetting`() {
+        val accumulator = RunMetricsAccumulator()
+        accumulator.onStepCount(90_000)
+        accumulator.onStepCount(90_200)
+        assertThat(accumulator.steps).isEqualTo(200)
+
+        accumulator.onStepCount(10)
+        assertThat(accumulator.steps).isEqualTo(200)
+
+        accumulator.onStepCount(60)
+        assertThat(accumulator.steps).isEqualTo(250)
+    }
+
+    /** 케이던스는 분당 걸음 수다. */
+    @Test
+    fun `computes cadence per minute`() {
+        val accumulator = RunMetricsAccumulator()
+        accumulator.onStepCount(0)
+        accumulator.onStepCount(360)
+        repeat(120) { accumulator.advanceTime() } // 2분
+
+        assertThat(accumulator.cadenceStepsPerMinute).isEqualTo(180)
+    }
+
+    /** 걸음 수가 없으면 케이던스와 보폭은 0 이다. */
+    @Test
+    fun `returns zero cadence without steps`() {
+        val accumulator = RunMetricsAccumulator()
+        repeat(60) { accumulator.advanceTime() }
+
+        assertThat(accumulator.cadenceStepsPerMinute).isEqualTo(0)
+        assertThat(accumulator.strideMeters).isEqualTo(0.0)
+    }
+
+    /** 지도에 그릴 전체 경로는 저장 여부와 무관하게 계속 쌓인다. */
+    @Test
+    fun `keeps the full route for the map`() {
+        val accumulator = RunMetricsAccumulator()
+        accumulator.run(totalMeters = 100.0, stepMeters = 10.0, secondsPerStep = 3)
+
+        val pointCount = accumulator.routePoints.size
+        assertThat(pointCount).isAtLeast(10)
+
+        // DB 로 내보내도 지도용 경로는 남아 있어야 한다.
+        accumulator.drainPendingPoints()
+        assertThat(accumulator.routePoints).hasSize(pointCount)
+    }
+
     /** 경로 포인트는 한 번 꺼내면 비워진다(중복 저장 방지). */
     @Test
     fun `drains pending points only once`() {

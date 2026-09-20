@@ -25,6 +25,7 @@ import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.repository.LocationTracker
 import com.windowhyun.health.domain.repository.SettingsRepository
+import com.windowhyun.health.domain.repository.StepCounter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -49,7 +50,10 @@ class RunTrackingService : LifecycleService() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
 
+    @Inject lateinit var stepCounter: StepCounter
+
     private var locationJob: Job? = null
+    private var stepJob: Job? = null
     private var tickerJob: Job? = null
     private var notificationJob: Job? = null
 
@@ -93,6 +97,13 @@ class RunTrackingService : LifecycleService() {
                 .collect { sample -> runTracker.onLocation(sample) }
         }
 
+        // 걸음 센서가 없거나 권한이 없으면 스트림이 비어 있어 아무 일도 하지 않는다.
+        stepJob = lifecycleScope.launch {
+            stepCounter.cumulativeSteps()
+                .catch { /* 센서 오류는 러닝 기록을 막지 않는다. */ }
+                .collect { raw -> runTracker.onStepCount(raw) }
+        }
+
         tickerJob = lifecycleScope.launch {
             while (isActive) {
                 delay(1_000)
@@ -127,6 +138,8 @@ class RunTrackingService : LifecycleService() {
     private fun stopTracking() {
         locationJob?.cancel()
         locationJob = null
+        stepJob?.cancel()
+        stepJob = null
         tickerJob?.cancel()
         tickerJob = null
         notificationJob?.cancel()
@@ -137,6 +150,7 @@ class RunTrackingService : LifecycleService() {
 
     override fun onDestroy() {
         locationJob?.cancel()
+        stepJob?.cancel()
         tickerJob?.cancel()
         notificationJob?.cancel()
         super.onDestroy()

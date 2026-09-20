@@ -75,6 +75,10 @@ fun RunSetupScreen(
         buildList {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // 걸음 수를 세려면 신체활동 권한이 필요하다. 거부해도 러닝 기록은 된다.
+                add(Manifest.permission.ACTIVITY_RECOGNITION)
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }
@@ -159,11 +163,23 @@ fun RunSetupScreen(
             }
 
             item {
-                Text(
-                    text = "자동 Lap: ${state.settings.autoLapMeters}m 마다",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column {
+                    Text(
+                        text = "자동 Lap: ${state.settings.autoLapMeters}m 마다",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = when {
+                            !state.stepSensorAvailable -> "걸음 수: 이 기기에는 걸음 센서가 없습니다"
+                            !state.stepPermissionGranted ->
+                                "걸음 수: 신체활동 권한이 없어 세지 않습니다 (러닝 기록은 정상)"
+                            else -> "걸음 수: 기록합니다"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             item {

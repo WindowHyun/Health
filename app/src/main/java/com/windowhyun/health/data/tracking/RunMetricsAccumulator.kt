@@ -37,13 +37,41 @@ class RunMetricsAccumulator(
     val laps: List<RunLap> get() = _laps
     private val _laps = mutableListOf<RunLap>()
 
-    /** 아직 DB 에 저장하지 않은 경로 포인트. */
+    /** 아직 DB 에 저장하지 않은 경로 포인트. 저장하면 비워진다. */
     private val pendingPoints = mutableListOf<RunPoint>()
+
+    /** 화면에 지도를 그리기 위한 전체 경로. 저장 여부와 무관하게 계속 쌓인다. */
+    private val _routePoints = mutableListOf<RunPoint>()
+    val routePoints: List<RunPoint> get() = _routePoints
 
     private var lastLapDistance = 0.0
     private var lastLapElapsed = 0L
 
+    /**
+     * 걸음 센서가 주는 마지막 누적값.
+     *
+     * 센서는 부팅 이후 누적값을 주므로 직전 값과의 차이만 더한다.
+     * 일시정지하면 null 로 비워서, 재개 후 첫 값은 기준점만 새로 잡고
+     * 정지한 동안 걸은 수가 더해지지 않게 한다.
+     */
+    private var lastRawStepCount: Long? = null
+
+    var steps: Long = 0
+        private set
+
     val averagePaceSecPerKm: Double get() = paceSecPerKm(distanceMeters, elapsedSeconds)
+
+    /** 평균 케이던스(분당 걸음 수). */
+    val cadenceStepsPerMinute: Int
+        get() = if (elapsedSeconds <= 0 || steps <= 0) {
+            0
+        } else {
+            (steps * 60.0 / elapsedSeconds).toInt()
+        }
+
+    /** 평균 보폭(m). 걸음 수가 없으면 0. */
+    val strideMeters: Double
+        get() = if (steps <= 0) 0.0 else distanceMeters / steps
 
     /**
      * 일시정지 후 재개. 다음 위치는 새 구간의 시작으로 표시되고
@@ -53,6 +81,21 @@ class RunMetricsAccumulator(
         lastAccepted = null
         segmentBreakPending = true
         paceWindow.clear()
+        lastRawStepCount = null
+    }
+
+    /**
+     * 걸음 센서 값 1건. [rawCumulative] 는 부팅 이후 누적값이다.
+     *
+     * 기기를 재부팅하면 누적값이 0 으로 돌아가는데, 그때는 값이 줄어드는 것으로
+     * 보이므로 기준점만 새로 잡고 더하지 않는다.
+     */
+    fun onStepCount(rawCumulative: Long) {
+        val last = lastRawStepCount
+        if (last != null && rawCumulative >= last) {
+            steps += rawCumulative - last
+        }
+        lastRawStepCount = rawCumulative
     }
 
     /** 1초 타이머가 호출한다. 일시정지 중에는 호출하지 않는다. */
@@ -82,13 +125,15 @@ class RunMetricsAccumulator(
         lastAccepted = sample
         segmentBreakPending = false
 
-        pendingPoints += RunPoint(
+        val point = RunPoint(
             latitude = sample.latitude,
             longitude = sample.longitude,
             altitude = sample.altitude,
             timestamp = sample.timestamp,
             isSegmentStart = isSegmentStart,
         )
+        pendingPoints += point
+        _routePoints += point
 
         paceWindow.addLast(elapsedSeconds to distanceMeters)
         trimPaceWindow()

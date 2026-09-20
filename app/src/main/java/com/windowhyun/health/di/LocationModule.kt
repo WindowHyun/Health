@@ -4,7 +4,9 @@ import android.content.Context
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.windowhyun.health.data.location.FusedLocationTracker
+import com.windowhyun.health.data.sensor.SensorStepCounter
 import com.windowhyun.health.domain.repository.LocationTracker
+import com.windowhyun.health.domain.repository.StepCounter
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -31,4 +33,8 @@ abstract class LocationModule {
     @Binds
     @Singleton
     abstract fun bindLocationTracker(impl: FusedLocationTracker): LocationTracker
+
+    @Binds
+    @Singleton
+    abstract fun bindStepCounter(impl: SensorStepCounter): StepCounter
 }

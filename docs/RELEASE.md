@@ -157,6 +157,59 @@ versionName = "0.2.0" // 사람이 읽는 버전.
 
 ## 7. 빌드 기록
 
+### v0.3.0 (versionCode 3) — 걸음 수 + 지도
+
+| 항목 | 값 |
+| --- | --- |
+| 빌드 일시 | 2026-09-20 09:0x UTC |
+| JDK / Gradle / AGP / Kotlin | 21.0.10 / 8.11.1 / 8.7.3 / 2.0.21 |
+
+**결과**
+
+| 단계 | 결과 |
+| --- | --- |
+| `testDebugUnitTest` | **73개 전부 통과** (실패 0) |
+| `lintRelease` | **오류 0** (경고 40건은 의존성 최신 버전 안내) |
+| `assembleRelease` | **BUILD SUCCESSFUL in 3m 6s** (98 tasks) |
+
+**산출물**
+
+| 항목 | 값 |
+| --- | --- |
+| 크기 | 2,179,808 bytes (약 2.2 MB) |
+| SHA-256 | `645e3dda64c73f3d404954eb0656bfd9b8d9b8cdd6fceb1d44cad660dd6119ad` |
+| 서명 | v2/v3 통과, RSA 4096 |
+
+v0.2.0 대비 약 340KB 늘었습니다. 지도 라이브러리(osmdroid)와, 아래 설명하는
+keep 규칙 때문입니다.
+
+**osmdroid 와 R8**
+
+osmdroid 는 consumer ProGuard 규칙을 제공하지 않습니다. 타일 제공자와 설정 제공자를
+리플렉션으로 만드는 경로가 있어, R8 이 지우면 **빌드는 성공해도 지도를 열 때 죽습니다.**
+그래서 `proguard-rules.pro` 에 통째로 남기는 규칙을 넣었습니다.
+
+```proguard
+-keep class org.osmdroid.** { *; }
+```
+
+APK 가 약 200KB 커지지만 지도를 못 그리는 것보다 낫습니다.
+규칙을 넣기 전후로 dex 를 확인해, `MapView` · `Polyline` · `Configuration` ·
+`TileSourceFactory` 가 남아 있는 것을 확인했습니다.
+
+**권한 변화**
+
+`ACTIVITY_RECOGNITION`(걸음 수), `INTERNET` · `ACCESS_NETWORK_STATE`(지도 타일)가
+추가되었습니다. 기록 자체는 여전히 전부 기기 안에만 저장되고, 네트워크는 지도 타일을
+받는 데에만 씁니다.
+
+**데이터베이스**
+
+스키마가 v1 → v2 로 올라갔습니다(`run.steps` 추가).
+`MigrationTest` 로 기존 기록이 그대로 남는지 검증했습니다.
+
+---
+
 ### v0.2.0 (versionCode 2) — Phase 2 까지
 
 | 항목 | 값 |

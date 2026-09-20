@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.Button
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -154,11 +156,39 @@ fun RunSummaryScreen(
                 }
             }
 
+            if (run != null && run.steps > 0) {
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatCard(
+                            label = "걸음",
+                            value = String.format(java.util.Locale.US, "%,d", run.steps),
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatCard(
+                            label = "케이던스",
+                            value = "${run.cadenceStepsPerMinute} spm",
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatCard(
+                            label = "보폭",
+                            value = String.format(java.util.Locale.US, "%.2f m", run.strideMeters),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
             item {
                 Text("이동 경로", style = MaterialTheme.typography.titleMedium)
             }
             item {
-                RouteMap(route = run?.route.orEmpty())
+                RunRouteMap(
+                    route = run?.route.orEmpty(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
             }
 
             if (!run?.laps.isNullOrEmpty()) {

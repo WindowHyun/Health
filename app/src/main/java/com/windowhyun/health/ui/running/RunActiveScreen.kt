@@ -14,11 +14,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsNotFixed
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +31,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -42,6 +49,7 @@ import com.windowhyun.health.core.util.formatDistance
 import com.windowhyun.health.core.util.formatDuration
 import com.windowhyun.health.core.util.formatPace
 import com.windowhyun.health.domain.model.RunStatus
+import java.util.Locale
 
 /**
  * 러닝 진행 화면.
@@ -56,6 +64,9 @@ fun RunActiveScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val tracking = state.tracking
+
+    // 기본은 큰 숫자 화면. 지도는 필요할 때만 한 번 눌러서 본다.
+    var showMap by rememberSaveable { mutableStateOf(false) }
 
     // 달리는 동안에는 화면이 꺼지지 않도록 한다.
     val view = LocalView.current
@@ -76,11 +87,29 @@ fun RunActiveScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            GpsIndicator(accuracyMeters = tracking.lastAccuracyMeters)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                GpsIndicator(accuracyMeters = tracking.lastAccuracyMeters)
+                FilledTonalButton(onClick = { showMap = !showMap }) {
+                    Icon(
+                        imageVector = if (showMap) Icons.Filled.Numbers else Icons.Filled.Map,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = if (showMap) "기록" else "지도",
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+            }
 
             tracking.goal.progress(tracking.distanceMeters, tracking.durationSeconds)?.let { progress ->
                 LinearProgressIndicator(
@@ -91,58 +120,23 @@ fun RunActiveScreen(
                 )
             }
 
-            Text(
-                text = "거리",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = formatDistance(tracking.distanceMeters, state.settings.distanceUnit),
-                style = HugeMetricTextStyle,
-                textAlign = TextAlign.Center,
-            )
-
-            Text(
-                text = "현재 페이스",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            Text(
-                text = formatPace(tracking.currentPaceSecPerKm),
-                style = HugeMetricTextStyle,
-                color = MaterialTheme.colorScheme.primary,
-            )
-
-            Row(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MetricColumn(label = "시간", value = formatDuration(tracking.durationSeconds))
-                MetricColumn(label = "평균 페이스", value = formatPace(tracking.averagePaceSecPerKm))
-            }
-
-            if (tracking.laps.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                ) {
-                    Text("Lap", style = MaterialTheme.typography.labelLarge)
-                    // 최근 Lap 이 위로 오게 뒤집어 보여 준다.
-                    tracking.laps.reversed().take(3).forEach { lap ->
-                        Text(
-                            text = "${lap.lapNumber}. ${formatDistance(lap.distanceMeters, state.settings.distanceUnit)}" +
-                                "  ${formatPace(lap.paceSecPerKm)}",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
+                if (showMap) {
+                    MapPane(state = state, modifier = Modifier.weight(1f))
+                } else {
+                    MetricsPane(
+                        state = state,
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                    )
                 }
             }
-
-            androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp))
 
             when (tracking.status) {
                 RunStatus.TRACKING -> Button(
@@ -190,7 +184,118 @@ fun RunActiveScreen(
                 else -> Unit
             }
 
-            androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp))
+            androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+/** 큰 숫자 화면. 달리면서 흘깃 보는 용도라 거리와 페이스를 가장 크게 둔다. */
+@Composable
+private fun MetricsPane(state: RunActiveUiState, modifier: Modifier = Modifier) {
+    val tracking = state.tracking
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "거리",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = formatDistance(tracking.distanceMeters, state.settings.distanceUnit),
+            style = HugeMetricTextStyle,
+            textAlign = TextAlign.Center,
+        )
+
+        Text(
+            text = "현재 페이스",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            text = formatPace(tracking.currentPaceSecPerKm),
+            style = HugeMetricTextStyle,
+            color = MaterialTheme.colorScheme.primary,
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            MetricColumn(label = "시간", value = formatDuration(tracking.durationSeconds))
+            MetricColumn(label = "평균 페이스", value = formatPace(tracking.averagePaceSecPerKm))
+        }
+
+        if (tracking.stepCountAvailable) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                MetricColumn(
+                    label = "걸음",
+                    value = String.format(Locale.US, "%,d", tracking.steps),
+                )
+                MetricColumn(
+                    label = "케이던스",
+                    value = "${tracking.cadenceStepsPerMinute} spm",
+                )
+            }
+        }
+
+        if (tracking.laps.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+            ) {
+                Text("Lap", style = MaterialTheme.typography.labelLarge)
+                // 최근 Lap 이 위로 오게 뒤집어 보여 준다.
+                tracking.laps.reversed().take(3).forEach { lap ->
+                    Text(
+                        text = "${lap.lapNumber}. ${formatDistance(lap.distanceMeters, state.settings.distanceUnit)}" +
+                            "  ${formatPace(lap.paceSecPerKm)}",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 지도 화면. 지도 위에 핵심 숫자만 겹쳐 보여 준다. */
+@Composable
+private fun MapPane(state: RunActiveUiState, modifier: Modifier = Modifier) {
+    val tracking = state.tracking
+    Column(modifier = modifier.fillMaxWidth()) {
+        RunRouteMap(
+            route = tracking.route,
+            followLatest = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            MetricColumn(
+                label = "거리",
+                value = formatDistance(tracking.distanceMeters, state.settings.distanceUnit),
+            )
+            MetricColumn(label = "페이스", value = formatPace(tracking.currentPaceSecPerKm))
+            if (tracking.stepCountAvailable) {
+                MetricColumn(label = "걸음", value = String.format(Locale.US, "%,d", tracking.steps))
+            } else {
+                MetricColumn(label = "시간", value = formatDuration(tracking.durationSeconds))
+            }
         }
     }
 }

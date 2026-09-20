@@ -25,6 +25,7 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): HealthDatabase =
         Room.databaseBuilder(context, HealthDatabase::class.java, HealthDatabase.NAME)
             .addCallback(ExerciseSeedCallback)
+            .addMigrations(*HealthDatabase.MIGRATIONS)
             .build()
 
     @Provides

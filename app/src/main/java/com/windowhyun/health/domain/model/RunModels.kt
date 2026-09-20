@@ -36,9 +36,18 @@ data class Run(
     val averagePaceSecPerKm: Double = 0.0,
     val bestPaceSecPerKm: Double = 0.0,
     val calories: Int = 0,
+    val steps: Int = 0,
     val goalType: RunGoalType = RunGoalType.FREE,
     val goalValue: Double = 0.0,
     val memo: String? = null,
     val laps: List<RunLap> = emptyList(),
     val route: List<RunPoint> = emptyList(),
-)
+) {
+    /** 평균 케이던스(분당 걸음 수). */
+    val cadenceStepsPerMinute: Int
+        get() = if (durationSeconds <= 0 || steps <= 0) 0 else (steps * 60.0 / durationSeconds).toInt()
+
+    /** 평균 보폭(m). */
+    val strideMeters: Double
+        get() = if (steps <= 0) 0.0 else distanceMeters / steps
+}

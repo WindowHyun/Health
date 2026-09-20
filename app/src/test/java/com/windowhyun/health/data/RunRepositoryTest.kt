@@ -42,6 +42,7 @@ class RunRepositoryTest {
         distanceMeters: Double,
         durationSeconds: Long,
         averagePace: Double = 0.0,
+        steps: Int = 0,
     ): Long {
         val runId = repository.startRun(RunGoalType.FREE, 0.0)
         repository.finishRun(
@@ -52,6 +53,7 @@ class RunRepositoryTest {
             averagePaceSecPerKm = averagePace,
             bestPaceSecPerKm = averagePace,
             calories = 100,
+            steps = steps,
         )
         return runId
     }
@@ -111,11 +113,13 @@ class RunRepositoryTest {
             averagePaceSecPerKm = 340.0,
             bestPaceSecPerKm = 300.0,
             calories = 90,
+            steps = 1_500,
         )
 
         val run = repository.getRun(runId)!!
         assertThat(run.distanceMeters).isWithin(0.001).of(1_234.0)
         assertThat(run.durationSeconds).isEqualTo(420)
+        assertThat(run.steps).isEqualTo(1_500)
         assertThat(run.startTime).isEqualTo(startTime)
         assertThat(run.endTime).isNull()
     }
@@ -206,6 +210,23 @@ class RunRepositoryTest {
         val bests = repository.comparePersonalBests(repository.getRun(sprintId)!!)
 
         assertThat(bests.isFastestAveragePace).isFalse()
+    }
+
+    /** 걸음 수가 저장되고 케이던스·보폭이 계산된다. */
+    @Test
+    fun `stores steps and derives cadence`() = runTest {
+        // 5km 를 30분에, 5,400 걸음
+        val runId = finishedRun(
+            distanceMeters = 5_000.0,
+            durationSeconds = 1_800,
+            averagePace = 360.0,
+            steps = 5_400,
+        )
+
+        val run = repository.getRun(runId)!!
+        assertThat(run.steps).isEqualTo(5_400)
+        assertThat(run.cadenceStepsPerMinute).isEqualTo(180)
+        assertThat(run.strideMeters).isWithin(0.001).of(5_000.0 / 5_400)
     }
 
     /** 홈 화면의 주간 합계에 러닝 거리가 반영된다. */

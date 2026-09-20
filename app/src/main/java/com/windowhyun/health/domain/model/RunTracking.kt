@@ -60,6 +60,12 @@ data class RunTrackingState(
     val averagePaceSecPerKm: Double = 0.0,
     val bestPaceSecPerKm: Double = 0.0,
     val calories: Int = 0,
+    /** 기기 걸음 센서로 센 이번 러닝의 걸음 수. */
+    val steps: Long = 0,
+    /** 평균 케이던스(분당 걸음 수). */
+    val cadenceStepsPerMinute: Int = 0,
+    /** 걸음 센서를 쓸 수 있는지. 없으면 화면에서 걸음 수를 숨긴다. */
+    val stepCountAvailable: Boolean = false,
     val laps: List<RunLap> = emptyList(),
     val route: List<RunPoint> = emptyList(),
     /** 마지막으로 받은 GPS 정확도. null 이면 아직 첫 수신 전. */
