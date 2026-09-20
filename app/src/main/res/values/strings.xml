@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Health</string>
+    <string name="rest_timer_channel_name">휴식 타이머</string>
+    <string name="rest_timer_channel_description">세트 사이 휴식 타이머 알림</string>
+    <string name="rest_timer_finished_title">휴식 종료</string>
+    <string name="rest_timer_finished_text">다음 세트를 시작하세요.</string>
+</resources>
