@@ -13,7 +13,9 @@ import com.windowhyun.health.ui.gym.RoutineListScreen
 import com.windowhyun.health.ui.history.HistoryScreen
 import com.windowhyun.health.ui.history.WorkoutDetailScreen
 import com.windowhyun.health.ui.home.HomeScreen
-import com.windowhyun.health.ui.running.RunningScreen
+import com.windowhyun.health.ui.running.RunActiveScreen
+import com.windowhyun.health.ui.running.RunSetupScreen
+import com.windowhyun.health.ui.running.RunSummaryScreen
 import com.windowhyun.health.ui.session.WorkoutSessionScreen
 import com.windowhyun.health.ui.session.WorkoutSummaryScreen
 import com.windowhyun.health.ui.settings.SettingsScreen
@@ -52,7 +54,34 @@ fun HealthNavHost(
             )
         }
 
-        composable(Routes.RUNNING) { RunningScreen() }
+        composable(Routes.RUNNING) {
+            RunSetupScreen(
+                onRunStarted = {
+                    navController.navigate(Routes.RUN_ACTIVE) {
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+
+        composable(Routes.RUN_ACTIVE) {
+            RunActiveScreen(
+                onFinished = {
+                    navController.navigate(Routes.RUN_SUMMARY) {
+                        // 진행 화면으로 되돌아가지 않도록 스택에서 제거한다.
+                        popUpTo(Routes.RUN_ACTIVE) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Routes.RUN_SUMMARY) {
+            RunSummaryScreen(
+                onClose = {
+                    navController.popBackStack(Routes.RUNNING, inclusive = false)
+                },
+            )
+        }
 
         composable(Routes.HISTORY) {
             HistoryScreen(

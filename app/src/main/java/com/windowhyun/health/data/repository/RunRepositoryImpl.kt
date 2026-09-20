@@ -6,6 +6,10 @@ import com.windowhyun.health.data.local.entity.RunLapEntity
 import com.windowhyun.health.data.local.entity.RunLocationEntity
 import com.windowhyun.health.data.mapper.toDomain
 import com.windowhyun.health.domain.model.Run
+import com.windowhyun.health.domain.model.RunGoalType
+import com.windowhyun.health.domain.model.RunLap
+import com.windowhyun.health.domain.model.RunPoint
+import com.windowhyun.health.domain.repository.RunPersonalBests
 import com.windowhyun.health.domain.repository.RunRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -13,7 +17,12 @@ import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Phase 2 에서 러닝 서비스가 사용한다. Phase 1 에서는 홈의 주간 합계에만 쓰인다. */
+/**
+ * 러닝 저장소.
+ *
+ * 기록 중에는 [startRun] 으로 행을 먼저 만들고 위치/Lap 을 증분 저장한다.
+ * 덕분에 기록 도중 앱이 죽어도 이미 달린 구간은 남는다.
+ */
 @Singleton
 class RunRepositoryImpl @Inject constructor(
     private val runDao: RunDao,
@@ -85,4 +94,110 @@ class RunRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteRun(id: Long) = runDao.deleteRun(id)
+
+    // ----- 기록 중 증분 저장 -----
+
+    override suspend fun startRun(goalType: RunGoalType, goalValue: Double): Long {
+        val now = System.currentTimeMillis()
+        return runDao.insertRun(
+            RunEntity(
+                date = LocalDate.now().toEpochDay(),
+                startTime = now,
+                endTime = null,
+                goalType = goalType.name,
+                goalValue = goalValue,
+            ),
+        )
+    }
+
+    override suspend fun getActiveRun(): Run? {
+        val run = runDao.getActiveRun() ?: return null
+        return run.toDomain(laps = runDao.getLaps(run.id), locations = runDao.getLocations(run.id))
+    }
+
+    override suspend fun appendRoutePoints(runId: Long, points: List<RunPoint>) {
+        if (points.isEmpty()) return
+        runDao.insertLocations(
+            points.map {
+                RunLocationEntity(
+                    runId = runId,
+                    latitude = it.latitude,
+                    longitude = it.longitude,
+                    altitude = it.altitude,
+                    timestamp = it.timestamp,
+                    isSegmentStart = it.isSegmentStart,
+                )
+            },
+        )
+    }
+
+    override suspend fun appendLap(runId: Long, lap: RunLap) {
+        runDao.insertLap(
+            RunLapEntity(
+                runId = runId,
+                lapNumber = lap.lapNumber,
+                distanceMeters = lap.distanceMeters,
+                durationSeconds = lap.durationSeconds,
+                paceSecPerKm = lap.paceSecPerKm,
+            ),
+        )
+    }
+
+    override suspend fun updateProgress(
+        runId: Long,
+        distanceMeters: Double,
+        durationSeconds: Long,
+        averagePaceSecPerKm: Double,
+        bestPaceSecPerKm: Double,
+        calories: Int,
+    ) = runDao.updateProgress(
+        id = runId,
+        distanceMeters = distanceMeters,
+        durationSeconds = durationSeconds,
+        averagePace = averagePaceSecPerKm,
+        bestPace = bestPaceSecPerKm,
+        calories = calories,
+    )
+
+    override suspend fun finishRun(
+        runId: Long,
+        endTime: Long,
+        distanceMeters: Double,
+        durationSeconds: Long,
+        averagePaceSecPerKm: Double,
+        bestPaceSecPerKm: Double,
+        calories: Int,
+    ) {
+        runDao.updateProgress(
+            id = runId,
+            distanceMeters = distanceMeters,
+            durationSeconds = durationSeconds,
+            averagePace = averagePaceSecPerKm,
+            bestPace = bestPaceSecPerKm,
+            calories = calories,
+        )
+        runDao.markFinished(runId, endTime)
+    }
+
+    override suspend fun comparePersonalBests(run: Run): RunPersonalBests {
+        val previousLongest = runDao.maxDistanceExcluding(run.id)
+        // 아주 짧은 러닝끼리 페이스를 비교하면 의미가 없으므로 1km 이상만 본다.
+        val comparable = run.distanceMeters >= MIN_PACE_RECORD_METERS
+        val previousBestPace = if (comparable) {
+            runDao.bestAveragePaceExcluding(run.id, MIN_PACE_RECORD_METERS)
+        } else {
+            null
+        }
+        return RunPersonalBests(
+            isLongestDistance = run.distanceMeters > previousLongest && run.distanceMeters > 0,
+            isFastestAveragePace = comparable && run.averagePaceSecPerKm > 0 &&
+                (previousBestPace == null || run.averagePaceSecPerKm < previousBestPace),
+            previousLongestMeters = previousLongest,
+            previousBestPaceSecPerKm = previousBestPace,
+        )
+    }
+
+    private companion object {
+        const val MIN_PACE_RECORD_METERS = 1_000.0
+    }
 }

@@ -44,6 +44,7 @@ import com.windowhyun.health.core.util.formatPace
 import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.Run
+import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.ui.components.EmptyMessage
 import com.windowhyun.health.ui.components.SectionHeader
@@ -105,6 +106,20 @@ fun HomeScreen(
                     ResumeWorkoutCard(
                         workout = state.activeWorkout!!,
                         onResume = { viewModel.startWorkout(null) },
+                    )
+                }
+            }
+
+            if (state.activeRun.isActive) {
+                item {
+                    ActiveRunCard(
+                        distanceText = formatDistance(
+                            state.activeRun.distanceMeters,
+                            state.settings.distanceUnit,
+                        ),
+                        durationText = formatDurationKorean(state.activeRun.durationSeconds),
+                        paused = state.activeRun.status == RunStatus.PAUSED,
+                        onOpen = onOpenRunning,
                     )
                 }
             }
@@ -214,6 +229,40 @@ private fun ResumeWorkoutCard(workout: Workout, onResume: () -> Unit) {
                 )
             }
             Button(onClick = onResume) { Text("이어하기") }
+        }
+    }
+}
+
+@Composable
+private fun ActiveRunCard(
+    distanceText: String,
+    durationText: String,
+    paused: Boolean,
+    onOpen: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (paused) "러닝 일시정지" else "러닝 기록 중",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Text(
+                    text = "$distanceText · $durationText",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Button(onClick = onOpen) { Text("돌아가기") }
         }
     }
 }

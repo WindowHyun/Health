@@ -6,6 +6,9 @@ import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Exercise
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.Run
+import com.windowhyun.health.domain.model.RunGoalType
+import com.windowhyun.health.domain.model.RunLap
+import com.windowhyun.health.domain.model.RunPoint
 import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.domain.model.WorkoutSummary
@@ -76,6 +79,14 @@ interface WorkoutRepository {
     fun observeWorkoutRecords(workoutId: Long): Flow<List<PersonalRecord>>
 }
 
+/** 러닝 개인 기록 비교 결과. */
+data class RunPersonalBests(
+    val isLongestDistance: Boolean = false,
+    val isFastestAveragePace: Boolean = false,
+    val previousLongestMeters: Double = 0.0,
+    val previousBestPaceSecPerKm: Double? = null,
+)
+
 interface RunRepository {
     fun observeRecentRuns(limit: Int): Flow<List<Run>>
     fun observeRunsBetween(from: LocalDate, to: LocalDate): Flow<List<Run>>
@@ -85,6 +96,44 @@ interface RunRepository {
     suspend fun saveRun(run: Run): Long
     suspend fun updateMemo(runId: Long, memo: String?)
     suspend fun deleteRun(id: Long)
+
+    // ----- 기록 중 사용하는 증분 저장 -----
+
+    /**
+     * 러닝을 시작하며 endTime = null 인 행을 먼저 만든다.
+     * 기록 중 위치/Lap 을 계속 붙이기 때문에 앱이 죽어도 데이터가 남는다.
+     */
+    suspend fun startRun(goalType: RunGoalType, goalValue: Double): Long
+
+    /** 아직 끝나지 않은 러닝(복구용). */
+    suspend fun getActiveRun(): Run?
+
+    suspend fun appendRoutePoints(runId: Long, points: List<RunPoint>)
+
+    suspend fun appendLap(runId: Long, lap: RunLap)
+
+    suspend fun updateProgress(
+        runId: Long,
+        distanceMeters: Double,
+        durationSeconds: Long,
+        averagePaceSecPerKm: Double,
+        bestPaceSecPerKm: Double,
+        calories: Int,
+    )
+
+    /** 러닝을 종료 상태로 만든다. */
+    suspend fun finishRun(
+        runId: Long,
+        endTime: Long,
+        distanceMeters: Double,
+        durationSeconds: Long,
+        averagePaceSecPerKm: Double,
+        bestPaceSecPerKm: Double,
+        calories: Int,
+    )
+
+    /** 이번 러닝이 개인 기록을 갱신했는지 확인한다. */
+    suspend fun comparePersonalBests(run: Run): RunPersonalBests
 }
 
 interface SettingsRepository {

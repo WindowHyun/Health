@@ -18,6 +18,8 @@ data class AppSettings(
     val vibrationEnabled: Boolean = true,
     val restTimerAutoStart: Boolean = true,
     val autoLapMeters: Int = 1000,
+    /** 러닝 칼로리 추정에 쓰는 체중(kg). */
+    val bodyWeightKg: Double = 70.0,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val healthConnectEnabled: Boolean = false,
     val keepScreenOnDuringWorkout: Boolean = true,

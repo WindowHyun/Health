@@ -28,6 +28,12 @@ object Routes {
 
     const val WORKOUT_DETAIL = "workout_detail"
     fun workoutDetail(workoutId: Long) = "$WORKOUT_DETAIL/$workoutId"
+
+    /** 러닝 진행 화면. 상태는 RunTracker 가 들고 있어 인자가 필요 없다. */
+    const val RUN_ACTIVE = "run_active"
+
+    /** 러닝 결과 화면. */
+    const val RUN_SUMMARY = "run_summary"
 }
 
 /** 하단 네비게이션 탭. 설정은 홈 우측 상단 버튼으로만 접근한다. */

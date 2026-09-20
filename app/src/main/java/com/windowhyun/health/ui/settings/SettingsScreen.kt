@@ -31,6 +31,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.model.WeightUnit
+import com.windowhyun.health.core.util.formatWeight
 import com.windowhyun.health.domain.model.ThemeMode
 
 /** 설정. 홈 우측 상단 버튼으로만 들어온다. */
@@ -122,6 +123,16 @@ fun SettingsScreen(
                 )
             }
 
+            item {
+                StepperRow(
+                    title = "체중",
+                    subtitle = "러닝 칼로리 추정에 사용합니다.",
+                    value = formatWeight(settings.bodyWeightKg, settings.weightUnit),
+                    onMinus = { viewModel.setBodyWeightKg(settings.bodyWeightKg - 0.5) },
+                    onPlus = { viewModel.setBodyWeightKg(settings.bodyWeightKg + 0.5) },
+                )
+            }
+
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { SettingSectionTitle("화면") }
 
@@ -164,7 +175,13 @@ private fun SettingSectionTitle(title: String) {
 }
 
 @Composable
-private fun StepperRow(title: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
+private fun StepperRow(
+    title: String,
+    value: String,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+    subtitle: String? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -172,7 +189,16 @@ private fun StepperRow(title: String, value: String, onMinus: () -> Unit, onPlus
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         IconButton(onClick = onMinus) { Icon(Icons.Filled.Remove, contentDescription = "줄이기") }
         Text(value, style = MaterialTheme.typography.titleMedium)
         IconButton(onClick = onPlus) { Icon(Icons.Filled.Add, contentDescription = "늘리기") }

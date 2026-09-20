@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.core.util.endOfWeek
 import com.windowhyun.health.core.util.startOfWeek
+import com.windowhyun.health.data.tracking.RunTracker
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.Run
+import com.windowhyun.health.domain.model.RunTrackingState
 import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.repository.RoutineRepository
 import com.windowhyun.health.domain.repository.RunRepository
@@ -39,6 +41,8 @@ data class HomeUiState(
     val recentWorkouts: List<Workout> = emptyList(),
     val recentRuns: List<Run> = emptyList(),
     val activeWorkout: Workout? = null,
+    /** 기록 중인 러닝이 있으면 홈에서도 바로 들어갈 수 있게 한다. */
+    val activeRun: RunTrackingState = RunTrackingState(),
     val settings: AppSettings = AppSettings(),
 )
 
@@ -48,6 +52,7 @@ class HomeViewModel @Inject constructor(
     routineRepository: RoutineRepository,
     runRepository: RunRepository,
     settingsRepository: SettingsRepository,
+    runTracker: RunTracker,
 ) : ViewModel() {
 
     private val today = LocalDate.now()
@@ -82,7 +87,8 @@ class HomeViewModel @Inject constructor(
         recentFlow,
         routineRepository.observeRoutinesForDay(today.dayOfWeek),
         settingsRepository.settings,
-    ) { weekly, recent, todayRoutines, settings ->
+        runTracker.state,
+    ) { weekly, recent, todayRoutines, settings, activeRun ->
         HomeUiState(
             today = today,
             weekly = weekly,
@@ -90,6 +96,7 @@ class HomeViewModel @Inject constructor(
             recentWorkouts = recent.first,
             recentRuns = recent.second,
             activeWorkout = recent.third,
+            activeRun = activeRun,
             settings = settings,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())

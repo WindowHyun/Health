@@ -39,6 +39,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setAutoLapMeters(meters: Int) = update { it.copy(autoLapMeters = meters.coerceIn(100, 10_000)) }
 
+    fun setBodyWeightKg(weightKg: Double) =
+        update { it.copy(bodyWeightKg = weightKg.coerceIn(20.0, 250.0)) }
+
     fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
 
     fun setKeepScreenOn(enabled: Boolean) = update { it.copy(keepScreenOnDuringWorkout = enabled) }

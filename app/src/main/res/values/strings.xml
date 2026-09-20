@@ -5,4 +5,8 @@
     <string name="rest_timer_channel_description">세트 사이 휴식 타이머 알림</string>
     <string name="rest_timer_finished_title">휴식 종료</string>
     <string name="rest_timer_finished_text">다음 세트를 시작하세요.</string>
+    <string name="run_tracking_channel_name">러닝 기록</string>
+    <string name="run_tracking_channel_description">러닝을 기록하는 동안 표시되는 알림</string>
+    <string name="run_in_progress">러닝 기록 중</string>
+    <string name="run_paused">러닝 일시정지</string>
 </resources>

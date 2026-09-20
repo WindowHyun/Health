@@ -3,6 +3,7 @@ package com.windowhyun.health.data.datastore
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -30,6 +31,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val VIBRATION = booleanPreferencesKey("vibration_enabled")
         val REST_AUTO_START = booleanPreferencesKey("rest_timer_auto_start")
         val AUTO_LAP_METERS = intPreferencesKey("auto_lap_meters")
+        val BODY_WEIGHT_KG = doublePreferencesKey("body_weight_kg")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val HEALTH_CONNECT = booleanPreferencesKey("health_connect_enabled")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
@@ -48,6 +50,7 @@ class SettingsRepositoryImpl @Inject constructor(
             vibrationEnabled = prefs[Keys.VIBRATION] ?: defaults.vibrationEnabled,
             restTimerAutoStart = prefs[Keys.REST_AUTO_START] ?: defaults.restTimerAutoStart,
             autoLapMeters = prefs[Keys.AUTO_LAP_METERS] ?: defaults.autoLapMeters,
+            bodyWeightKg = prefs[Keys.BODY_WEIGHT_KG] ?: defaults.bodyWeightKg,
             themeMode = prefs[Keys.THEME_MODE]?.let { name ->
                 runCatching { ThemeMode.valueOf(name) }.getOrNull()
             } ?: defaults.themeMode,
@@ -67,6 +70,7 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.VIBRATION] = updated.vibrationEnabled
             prefs[Keys.REST_AUTO_START] = updated.restTimerAutoStart
             prefs[Keys.AUTO_LAP_METERS] = updated.autoLapMeters
+            prefs[Keys.BODY_WEIGHT_KG] = updated.bodyWeightKg
             prefs[Keys.THEME_MODE] = updated.themeMode.name
             prefs[Keys.HEALTH_CONNECT] = updated.healthConnectEnabled
             prefs[Keys.KEEP_SCREEN_ON] = updated.keepScreenOnDuringWorkout

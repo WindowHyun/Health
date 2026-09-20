@@ -25,10 +25,21 @@ class HealthApplication : Application() {
             enableVibration(true)
             setShowBadge(false)
         }
-        manager.createNotificationChannel(restChannel)
+        val runChannel = NotificationChannel(
+            CHANNEL_RUN_TRACKING,
+            getString(R.string.run_tracking_channel_name),
+            // 기록 중 내내 떠 있는 알림이므로 소리 없이 조용히.
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = getString(R.string.run_tracking_channel_description)
+            setShowBadge(false)
+        }
+
+        manager.createNotificationChannels(listOf(restChannel, runChannel))
     }
 
     companion object {
         const val CHANNEL_REST_TIMER = "rest_timer"
+        const val CHANNEL_RUN_TRACKING = "run_tracking"
     }
 }
