@@ -164,6 +164,19 @@ APK 만 만들려면:
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### 릴리즈 APK
+
+기기에 설치해서 쓰려면 서명된 릴리즈 APK 가 필요합니다.
+키스토어 준비부터 서명 검증까지의 전체 과정과 실제 빌드 기록은
+**[docs/RELEASE.md](docs/RELEASE.md)** 에 정리해 두었습니다.
+
+```bash
+./gradlew clean :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+# -> app/build/outputs/apk/release/app-release.apk
+```
+
+버전별 변경 내용은 [CHANGELOG.md](CHANGELOG.md) 를 참고하세요.
+
 ---
 
 ## 테스트 방법

@@ -11,3 +11,7 @@ captures/
 *.aab
 *.keystore
 .kotlin/
+
+# 릴리즈 서명 정보 (절대 커밋하지 않음)
+keystore.properties
+*.jks
