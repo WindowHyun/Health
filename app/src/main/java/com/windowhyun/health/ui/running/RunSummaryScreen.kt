@@ -190,6 +190,16 @@ fun RunSummaryScreen(
                         .clip(RoundedCornerShape(12.dp)),
                 )
             }
+            item {
+                val tileStatus by rememberMapTileStatus(hasRoute = !run?.route.isNullOrEmpty())
+                tileStatus?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             if (!run?.laps.isNullOrEmpty()) {
                 item {
