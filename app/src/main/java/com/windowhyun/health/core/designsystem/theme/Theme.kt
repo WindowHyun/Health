@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.windowhyun.health.domain.model.ThemeMode
 
-private val LightColors = lightColorScheme(
+internal val LightColors = lightColorScheme(
     primary = md_light_primary,
     onPrimary = md_light_onPrimary,
     primaryContainer = md_light_primaryContainer,
@@ -39,9 +39,21 @@ private val LightColors = lightColorScheme(
     surfaceVariant = md_light_surfaceVariant,
     onSurfaceVariant = md_light_onSurfaceVariant,
     outline = md_light_outline,
+    outlineVariant = md_light_outlineVariant,
+    inverseSurface = md_light_inverseSurface,
+    inverseOnSurface = md_light_inverseOnSurface,
+    // 라이트의 반전 강조색은 다크의 기본 강조색이다(반대도 같다).
+    inversePrimary = md_dark_primary,
+    surfaceDim = md_light_surfaceDim,
+    surfaceBright = md_light_surfaceBright,
+    surfaceContainerLowest = md_light_surfaceContainerLowest,
+    surfaceContainerLow = md_light_surfaceContainerLow,
+    surfaceContainer = md_light_surfaceContainer,
+    surfaceContainerHigh = md_light_surfaceContainerHigh,
+    surfaceContainerHighest = md_light_surfaceContainerHighest,
 )
 
-private val DarkColors = darkColorScheme(
+internal val DarkColors = darkColorScheme(
     primary = md_dark_primary,
     onPrimary = md_dark_onPrimary,
     primaryContainer = md_dark_primaryContainer,
@@ -65,6 +77,17 @@ private val DarkColors = darkColorScheme(
     surfaceVariant = md_dark_surfaceVariant,
     onSurfaceVariant = md_dark_onSurfaceVariant,
     outline = md_dark_outline,
+    outlineVariant = md_dark_outlineVariant,
+    inverseSurface = md_dark_inverseSurface,
+    inverseOnSurface = md_dark_inverseOnSurface,
+    inversePrimary = md_light_primary,
+    surfaceDim = md_dark_surfaceDim,
+    surfaceBright = md_dark_surfaceBright,
+    surfaceContainerLowest = md_dark_surfaceContainerLowest,
+    surfaceContainerLow = md_dark_surfaceContainerLow,
+    surfaceContainer = md_dark_surfaceContainer,
+    surfaceContainerHigh = md_dark_surfaceContainerHigh,
+    surfaceContainerHighest = md_dark_surfaceContainerHighest,
 )
 
 /**
