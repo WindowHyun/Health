@@ -59,7 +59,9 @@ class FusedLocationTracker @Inject constructor(
                             latitude = location.latitude,
                             longitude = location.longitude,
                             altitude = if (location.hasAltitude()) location.altitude else 0.0,
-                            accuracyMeters = if (location.hasAccuracy()) location.accuracy else 0f,
+                            // 정확도를 모르면 0(최상)이 아니라 null 로 둔다. 0 으로 두면
+                            // 품질을 알 수 없는 좌표가 노이즈 필터를 그대로 통과한다.
+                            accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
                             timestamp = location.time.takeIf { it > 0 } ?: System.currentTimeMillis(),
                         ),
                     )

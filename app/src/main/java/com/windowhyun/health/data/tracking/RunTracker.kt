@@ -1,7 +1,6 @@
 package com.windowhyun.health.data.tracking
 
 import com.windowhyun.health.core.util.estimateRunCalories
-import com.windowhyun.health.di.ApplicationScope
 import com.windowhyun.health.domain.model.LocationSample
 import com.windowhyun.health.domain.model.RunGoal
 import com.windowhyun.health.domain.model.RunStatus
@@ -9,12 +8,10 @@ import com.windowhyun.health.domain.model.RunTrackingState
 import com.windowhyun.health.domain.repository.RunRepository
 import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.domain.repository.StepCounter
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
@@ -34,7 +31,6 @@ class RunTracker @Inject constructor(
     private val runRepository: RunRepository,
     private val settingsRepository: SettingsRepository,
     private val stepCounter: StepCounter,
-    @ApplicationScope private val scope: CoroutineScope,
 ) {
 
     private val _state = MutableStateFlow(RunTrackingState())
@@ -75,9 +71,8 @@ class RunTracker @Inject constructor(
                 return
             }
 
-            val newLap = accumulator.onLocation(sample)
-            if (newLap != null) {
-                runRepository.appendLap(_state.value.runId, newLap)
+            accumulator.onLocation(sample).forEach { lap ->
+                runRepository.appendLap(_state.value.runId, lap)
             }
             publish(accumulator, lastAccuracy = sample.accuracyMeters)
         }
@@ -167,13 +162,17 @@ class RunTracker @Inject constructor(
         }
     }
 
-    /** 결과 화면을 닫을 때 상태를 비운다(기록은 DB 에 남는다). */
-    fun reset() {
-        scope.launch {
-            mutex.withLock {
-                accumulator = null
-                _state.value = RunTrackingState()
-            }
+    /**
+     * 결과 화면을 닫을 때 상태를 비운다(기록은 DB 에 남는다).
+     *
+     * 예전에는 앱 스코프에 던져 두고 바로 반환했는데, 그러면 초기화가 실행되기 전에
+     * 새 러닝이 시작될 경우 방금 시작한 상태를 지워 버릴 수 있었다.
+     * discard() 와 같이 호출한 쪽이 완료를 기다리게 한다.
+     */
+    suspend fun reset() {
+        mutex.withLock {
+            accumulator = null
+            _state.value = RunTrackingState()
         }
     }
 

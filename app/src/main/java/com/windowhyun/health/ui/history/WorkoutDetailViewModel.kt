@@ -37,7 +37,8 @@ class WorkoutDetailViewModel @Inject constructor(
 
     private val workoutId: Long = savedStateHandle[Routes.ARG_WORKOUT_ID] ?: 0L
 
-    private val memoState = MutableStateFlow("")
+    // null 은 "아직 불러오지 않음". 사용자가 먼저 입력하면 덮어쓰지 않는다.
+    private val memoState = MutableStateFlow<String?>(null)
     private val deletedState = MutableStateFlow(false)
 
     val uiState: StateFlow<WorkoutDetailUiState> = combine(
@@ -51,14 +52,14 @@ class WorkoutDetailViewModel @Inject constructor(
             workout = workout,
             personalRecords = records,
             settings = settings,
-            memo = memo,
+            memo = memo.orEmpty(),
             deleted = deleted,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WorkoutDetailUiState())
 
     init {
         viewModelScope.launch {
-            memoState.value = workoutRepository.getWorkout(workoutId)?.memo.orEmpty()
+            memoState.compareAndSet(null, workoutRepository.getWorkout(workoutId)?.memo.orEmpty())
         }
     }
 
@@ -67,7 +68,7 @@ class WorkoutDetailViewModel @Inject constructor(
     }
 
     fun saveMemo() {
-        viewModelScope.launch { workoutRepository.updateMemo(workoutId, memoState.value) }
+        viewModelScope.launch { workoutRepository.updateMemo(workoutId, memoState.value.orEmpty()) }
     }
 
     /** 잘못 기록한 세트를 고친다. */

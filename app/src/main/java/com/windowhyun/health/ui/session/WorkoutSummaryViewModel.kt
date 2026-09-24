@@ -37,7 +37,8 @@ class WorkoutSummaryViewModel @Inject constructor(
 
     private val workoutId: Long = savedStateHandle[Routes.ARG_WORKOUT_ID] ?: 0L
 
-    private val memoState = MutableStateFlow("")
+    // null 은 "아직 불러오지 않음". 사용자가 먼저 입력하면 덮어쓰지 않는다.
+    private val memoState = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<WorkoutSummaryUiState> = combine(
         workoutRepository.observeWorkoutDetail(workoutId),
@@ -49,13 +50,13 @@ class WorkoutSummaryViewModel @Inject constructor(
             workout = workout,
             personalRecords = records,
             settings = settings,
-            memo = memo,
+            memo = memo.orEmpty(),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WorkoutSummaryUiState())
 
     init {
         viewModelScope.launch {
-            memoState.value = workoutRepository.getWorkout(workoutId)?.memo.orEmpty()
+            memoState.compareAndSet(null, workoutRepository.getWorkout(workoutId)?.memo.orEmpty())
         }
     }
 
@@ -65,6 +66,6 @@ class WorkoutSummaryViewModel @Inject constructor(
 
     /** 메모는 화면을 떠날 때 저장한다. */
     fun saveMemo() {
-        viewModelScope.launch { workoutRepository.updateMemo(workoutId, memoState.value) }
+        viewModelScope.launch { workoutRepository.updateMemo(workoutId, memoState.value.orEmpty()) }
     }
 }

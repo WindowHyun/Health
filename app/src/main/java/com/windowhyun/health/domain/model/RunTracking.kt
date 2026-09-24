@@ -43,8 +43,11 @@ data class LocationSample(
     val latitude: Double,
     val longitude: Double,
     val altitude: Double = 0.0,
-    /** 수평 정확도(m). 값이 클수록 신뢰도가 낮다. */
-    val accuracyMeters: Float = 0f,
+    /**
+     * 수평 정확도(m). 값이 클수록 신뢰도가 낮다.
+     * null 은 "기기가 정확도를 알려 주지 않음"이며, 0(최상)과 구분해야 한다.
+     */
+    val accuracyMeters: Float?,
     val timestamp: Long,
 )
 

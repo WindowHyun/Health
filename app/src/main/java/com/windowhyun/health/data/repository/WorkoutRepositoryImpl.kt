@@ -167,7 +167,9 @@ class WorkoutRepositoryImpl @Inject constructor(
                 weightKg = weightKg,
                 reps = reps,
                 completed = completed,
-                completedAt = if (completed) System.currentTimeMillis() else null,
+                // 이미 완료된 세트의 중량/횟수를 고쳐도 최초 완료 시각은 유지한다
+                // (updateSet 과 같은 규칙).
+                completedAt = if (completed) stored.completedAt ?: System.currentTimeMillis() else null,
             ),
         )
     }
@@ -182,18 +184,25 @@ class WorkoutRepositoryImpl @Inject constructor(
 
         // PR 은 endTime 을 채우기 전에 계산한다.
         // 이력 조회가 endTime IS NOT NULL 조건을 쓰므로 진행 중인 세션이 자동으로 제외된다.
+        // 같은 종목을 한 세션에 두 번 넣을 수 있으므로 종목 단위로 합쳐서 계산한다.
+        // 블록마다 따로 계산하면 같은 기준선과 두 번 비교해 PR 이 중복으로 생긴다.
         val personalRecords = buildList {
-            workout.exercises.filter { it.completedSets.isNotEmpty() }.forEach { record ->
-                val history = workoutDao.getCompletedSetHistory(record.exercise.id)
-                addAll(
-                    PersonalRecordCalculator.newRecords(
-                        exerciseId = record.exercise.id,
-                        exerciseName = record.exercise.name,
-                        previous = PersonalRecordCalculator.fromHistory(history),
-                        session = PersonalRecordCalculator.fromSession(record.sets),
-                    ),
-                )
-            }
+            workout.exercises
+                .filter { it.completedSets.isNotEmpty() }
+                .groupBy { it.exercise.id }
+                .forEach { (exerciseId, records) ->
+                    val history = workoutDao.getCompletedSetHistory(exerciseId)
+                    addAll(
+                        PersonalRecordCalculator.newRecords(
+                            exerciseId = exerciseId,
+                            exerciseName = records.first().exercise.name,
+                            previous = PersonalRecordCalculator.fromHistory(history),
+                            session = PersonalRecordCalculator.fromSession(
+                                records.flatMap { it.sets },
+                            ),
+                        ),
+                    )
+                }
         }
 
         // 완료하지 않은 세트와, 한 세트도 하지 않은 운동은 기록에서 정리한다.
@@ -253,7 +262,9 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override fun observeWorkoutRecords(workoutId: Long): Flow<List<PersonalRecord>> =
         personalRecordDao.observeByWorkout(workoutId).map { rows ->
-            rows.map { row ->
+            // 예전 버전이 남긴 중복 행이 있을 수 있다. 화면은 (종목, 종류)로 구분하므로
+            // 여기서 한 번 더 걸러 같은 짝이 두 번 나오지 않게 한다.
+            rows.distinctBy { it.exerciseId to it.type }.map { row ->
                 PersonalRecord(
                     exerciseId = row.exerciseId,
                     exerciseName = row.exerciseName,

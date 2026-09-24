@@ -30,15 +30,23 @@ object PersonalRecordCalculator {
         val isEmpty: Boolean get() = maxWeightKg <= 0.0 && maxSessionVolumeKg <= 0.0
     }
 
-    /** 과거 이력으로부터 기존 기록을 계산한다. */
+    /**
+     * 과거 이력으로부터 기존 기록을 계산한다.
+     *
+     * 완료 표시만 남고 횟수가 0 으로 지워진 세트는 제외한다.
+     * [fromSession] 과 기준이 달라지면 기준선이 오염되어 이후 PR 이 막힌다.
+     */
     fun fromHistory(history: List<ExerciseSetHistory>): Bests {
-        if (history.isEmpty()) return Bests()
-        val maxWeight = history.maxOf { it.weightKg }
-        val sessionVolumes = history
-            .groupBy { it.workoutExerciseId }
+        val usable = history.filter { it.reps > 0 && it.weightKg > 0.0 }
+        if (usable.isEmpty()) return Bests()
+        val maxWeight = usable.maxOf { it.weightKg }
+        // 한 세션에 같은 종목이 두 번 들어갈 수 있으므로 세션(workoutId) 단위로 합산한다.
+        // 블록(workoutExerciseId) 단위로 묶으면 세션 합계보다 작게 나와 기준이 어긋난다.
+        val sessionVolumes = usable
+            .groupBy { it.workoutId }
             .mapValues { (_, sets) -> sets.sumOf { setVolume(it.weightKg, it.reps) } }
         val maxSessionVolume = sessionVolumes.values.maxOrNull() ?: 0.0
-        val best = history.maxByOrNull { estimateOneRepMax(it.weightKg, it.reps) }
+        val best = usable.maxByOrNull { estimateOneRepMax(it.weightKg, it.reps) }
         return Bests(
             maxWeightKg = maxWeight,
             maxSessionVolumeKg = maxSessionVolume,
@@ -50,7 +58,7 @@ object PersonalRecordCalculator {
 
     /** 이번 세션에서 그 종목으로 세운 기록을 계산한다. */
     fun fromSession(sets: List<WorkoutSet>): Bests {
-        val completed = sets.filter { it.completed && it.reps > 0 }
+        val completed = sets.filter { it.completed && it.reps > 0 && it.weightKg > 0.0 }
         if (completed.isEmpty()) return Bests()
         val best = completed.maxByOrNull { it.estimatedOneRepMax }
         return Bests(

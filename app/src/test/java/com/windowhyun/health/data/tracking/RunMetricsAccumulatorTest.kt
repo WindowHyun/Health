@@ -20,7 +20,7 @@ class RunMetricsAccumulatorTest {
     private fun sampleAt(
         meters: Double,
         timestamp: Long,
-        accuracy: Float = 5f,
+        accuracy: Float? = 5f,
     ) = LocationSample(
         latitude = baseLat + meters / metersPerDegreeLat,
         longitude = baseLon,
@@ -90,6 +90,40 @@ class RunMetricsAccumulatorTest {
         accumulator.onLocation(sampleAt(500.0, 1_000))
 
         assertThat(accumulator.distanceMeters).isEqualTo(0.0)
+    }
+
+    /**
+     * 기기가 정확도를 알려 주지 않으면(null) 버린다.
+     * 예전에는 이런 좌표가 0m(=최상)로 들어와 노이즈 필터를 그냥 통과했다.
+     */
+    @Test
+    fun `rejects samples with unknown accuracy`() {
+        val accumulator = RunMetricsAccumulator()
+        accumulator.onLocation(sampleAt(0.0, 0))
+        accumulator.onLocation(sampleAt(100.0, 30_000, accuracy = null))
+
+        assertThat(accumulator.distanceMeters).isEqualTo(0.0)
+    }
+
+    /**
+     * 신호가 오래 끊겼다가 큰 점프가 들어오면 Lap 경계를 여러 번 넘는다.
+     * 한 번에 하나만 만들면 그 Lap 하나가 몇 km 짜리가 된다.
+     */
+    @Test
+    fun `creates every lap crossed by one large jump`() {
+        val accumulator = RunMetricsAccumulator(autoLapMeters = 1_000)
+        accumulator.onLocation(sampleAt(0.0, 0))
+        // 신호 끊김: 600초 동안 3.2km 이동(평균 5.3m/s 라 속도 필터는 통과)
+        repeat(600) { accumulator.advanceTime() }
+        val laps = accumulator.onLocation(sampleAt(3_200.0, 600_000))
+
+        assertThat(laps).hasSize(3)
+        assertThat(accumulator.laps.map { it.lapNumber }).containsExactly(1, 2, 3).inOrder()
+        accumulator.laps.forEach {
+            assertThat(it.distanceMeters).isWithin(1.0).of(1_000.0)
+        }
+        // 나눠 준 시간의 합이 실제 경과 시간을 넘지 않아야 한다.
+        assertThat(accumulator.laps.sumOf { it.durationSeconds }).isAtMost(600)
     }
 
     /** 1km 마다 Lap 이 만들어지고 Lap 페이스가 계산된다. */

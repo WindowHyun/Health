@@ -107,10 +107,10 @@ class RunMetricsAccumulator(
     /**
      * GPS 샘플 1건 처리.
      *
-     * @return 이번 호출로 새로 만들어진 Lap (없으면 null)
+     * @return 이번 호출로 새로 만들어진 Lap 목록 (없으면 빈 목록)
      */
-    fun onLocation(sample: LocationSample): RunLap? {
-        if (!isAcceptable(sample)) return null
+    fun onLocation(sample: LocationSample): List<RunLap> {
+        if (!isAcceptable(sample)) return emptyList()
 
         val previous = lastAccepted
         val isSegmentStart = segmentBreakPending
@@ -139,17 +139,18 @@ class RunMetricsAccumulator(
         trimPaceWindow()
         updateCurrentPace()
 
-        return checkLap()
+        return checkLaps()
     }
 
     /**
      * 노이즈 걸러내기.
-     * - 정확도가 나쁜 샘플은 버린다
+     * - 정확도가 나쁘거나 알 수 없는 샘플은 버린다
      * - 직전 점과 너무 가까우면(GPS 흔들림) 버린다
      * - 사람이 낼 수 없는 속도로 튀면 버린다
      */
     private fun isAcceptable(sample: LocationSample): Boolean {
-        if (sample.accuracyMeters > MAX_ACCURACY_METERS) return false
+        val accuracy = sample.accuracyMeters ?: return false
+        if (accuracy > MAX_ACCURACY_METERS) return false
         val previous = lastAccepted ?: return true
 
         val meters = haversineMeters(
@@ -198,23 +199,41 @@ class RunMetricsAccumulator(
         }
     }
 
-    /** 자동 Lap 경계를 넘었으면 Lap 을 만든다. */
-    private fun checkLap(): RunLap? {
-        if (autoLapMeters <= 0) return null
-        if (distanceMeters - lastLapDistance < autoLapMeters) return null
+    /**
+     * 자동 Lap 경계를 넘었으면 Lap 을 만든다.
+     *
+     * 신호가 오래 끊겼다가 큰 점프가 들어오면 경계를 여러 번 넘을 수 있으므로
+     * 한 번에 여러 Lap 을 만든다. 한 개만 만들면 그 Lap 하나가 몇 km 짜리가 된다.
+     * 점프 구간의 시간은 거리에 비례해 나눈다.
+     */
+    private fun checkLaps(): List<RunLap> {
+        if (autoLapMeters <= 0) return emptyList()
+        if (distanceMeters - lastLapDistance < autoLapMeters) return emptyList()
 
-        val lapDistance = distanceMeters - lastLapDistance
-        val lapDuration = elapsedSeconds - lastLapElapsed
-        val lap = RunLap(
-            lapNumber = _laps.size + 1,
-            distanceMeters = lapDistance,
-            durationSeconds = lapDuration,
-            paceSecPerKm = paceSecPerKm(lapDistance, lapDuration),
-        )
-        _laps += lap
-        lastLapDistance = distanceMeters
-        lastLapElapsed = elapsedSeconds
-        return lap
+        val pendingDistance = distanceMeters - lastLapDistance
+        val pendingDuration = elapsedSeconds - lastLapElapsed
+        val created = mutableListOf<RunLap>()
+
+        while (distanceMeters - lastLapDistance >= autoLapMeters) {
+            val lapDistance = autoLapMeters.toDouble()
+            // 이번 호출에서 늘어난 거리에 비례해 시간을 나눈다.
+            val lapDuration = if (pendingDistance > 0) {
+                (pendingDuration * (lapDistance / pendingDistance)).toLong()
+            } else {
+                pendingDuration
+            }
+            val lap = RunLap(
+                lapNumber = _laps.size + 1,
+                distanceMeters = lapDistance,
+                durationSeconds = lapDuration,
+                paceSecPerKm = paceSecPerKm(lapDistance, lapDuration),
+            )
+            _laps += lap
+            created += lap
+            lastLapDistance += lapDistance
+            lastLapElapsed += lapDuration
+        }
+        return created
     }
 
     /**

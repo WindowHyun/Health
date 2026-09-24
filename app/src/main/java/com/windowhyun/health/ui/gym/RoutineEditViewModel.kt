@@ -27,10 +27,11 @@ data class RoutineEditUiState(
     val name: String = "",
     val scheduledDays: Set<DayOfWeek> = emptySet(),
     val items: List<RoutineItem> = emptyList(),
+    val saving: Boolean = false,
     val saved: Boolean = false,
 ) {
     val isNew: Boolean get() = routineId == 0L
-    val canSave: Boolean get() = name.isNotBlank() && items.isNotEmpty()
+    val canSave: Boolean get() = name.isNotBlank() && items.isNotEmpty() && !saving && !saved
 }
 
 /**
@@ -126,11 +127,17 @@ class RoutineEditViewModel @Inject constructor(
         )
     }
 
+    /**
+     * 저장은 한 번만 실행되어야 한다.
+     * 가드가 없으면 저장 버튼을 빠르게 두 번 눌렀을 때 새 루틴이 두 개 만들어진다
+     * (새 루틴은 id 가 0 이라 두 번째 호출도 새로 삽입한다).
+     */
     fun save() {
         val state = _uiState.value
         if (!state.canSave) return
+        _uiState.update { it.copy(saving = true) }
         viewModelScope.launch {
-            routineRepository.saveRoutine(
+            val savedId = routineRepository.saveRoutine(
                 Routine(
                     id = state.routineId,
                     name = state.name.trim(),
@@ -138,7 +145,7 @@ class RoutineEditViewModel @Inject constructor(
                     items = state.items,
                 ),
             )
-            _uiState.update { it.copy(saved = true) }
+            _uiState.update { it.copy(routineId = savedId, saving = false, saved = true) }
         }
     }
 

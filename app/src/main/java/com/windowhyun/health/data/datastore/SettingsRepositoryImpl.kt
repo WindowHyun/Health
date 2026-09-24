@@ -1,6 +1,7 @@
 package com.windowhyun.health.data.datastore
 
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
@@ -37,9 +38,12 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
     }
 
-    override val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
+    override val settings: Flow<AppSettings> = dataStore.data.map { it.toSettings() }
+
+    private fun Preferences.toSettings(): AppSettings {
+        val prefs = this
         val defaults = AppSettings()
-        AppSettings(
+        return AppSettings(
             defaultRestSeconds = prefs[Keys.DEFAULT_REST_SECONDS] ?: defaults.defaultRestSeconds,
             weightUnit = prefs[Keys.WEIGHT_UNIT]?.let { name ->
                 runCatching { WeightUnit.valueOf(name) }.getOrNull()
@@ -61,9 +65,16 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun current(): AppSettings = settings.first()
 
+    /**
+     * 읽기와 쓰기를 [DataStore.edit] 안에서 함께 처리한다.
+     *
+     * 밖에서 읽고 안에서 쓰면, 설정 두 개를 빠르게 연달아 바꿨을 때
+     * 나중 것이 먼저 것을 덮어써서 변경이 사라진다(lost update).
+     * edit 블록은 직렬화되므로 안에서 읽으면 항상 최신 값을 본다.
+     */
     override suspend fun update(transform: (AppSettings) -> AppSettings) {
-        val updated = transform(current())
         dataStore.edit { prefs ->
+            val updated = transform(prefs.toSettings())
             prefs[Keys.DEFAULT_REST_SECONDS] = updated.defaultRestSeconds
             prefs[Keys.WEIGHT_UNIT] = updated.weightUnit.name
             prefs[Keys.DISTANCE_UNIT] = updated.distanceUnit.name
