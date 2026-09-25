@@ -129,13 +129,16 @@ interface WorkoutDao {
     @Query(
         """
         SELECT s.* FROM workout_set s
-        WHERE s.completed = 1 AND s.workoutExerciseId = (
+        WHERE s.completed = 1 AND s.setType != 'WARMUP' AND s.workoutExerciseId = (
             SELECT we.id FROM workout_exercise we
             JOIN workout w ON w.id = we.workoutId
             WHERE we.exerciseId = :exerciseId
               AND w.endTime IS NOT NULL
               AND w.id != :excludeWorkoutId
-              AND EXISTS (SELECT 1 FROM workout_set x WHERE x.workoutExerciseId = we.id AND x.completed = 1)
+              AND EXISTS (
+                  SELECT 1 FROM workout_set x
+                  WHERE x.workoutExerciseId = we.id AND x.completed = 1 AND x.setType != 'WARMUP'
+              )
             ORDER BY w.startTime DESC LIMIT 1
         )
         ORDER BY s.setNumber
@@ -150,11 +153,12 @@ interface WorkoutDao {
     @Query(
         """
         SELECT w.id AS workoutId, we.id AS workoutExerciseId, s.weightKg AS weightKg,
-               s.reps AS reps, w.startTime AS startTime
+               s.reps AS reps, s.durationSeconds AS durationSeconds, w.startTime AS startTime
         FROM workout_set s
         JOIN workout_exercise we ON we.id = s.workoutExerciseId
         JOIN workout w ON w.id = we.workoutId
-        WHERE we.exerciseId = :exerciseId AND s.completed = 1 AND w.endTime IS NOT NULL
+        WHERE we.exerciseId = :exerciseId AND s.completed = 1 AND s.setType != 'WARMUP'
+          AND w.endTime IS NOT NULL
         ORDER BY w.startTime
         """,
     )

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -19,6 +20,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +34,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.text.KeyboardOptions
+import com.windowhyun.health.core.model.ExerciseTrackingType
+import com.windowhyun.health.core.model.SetType
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatWeightValue
 import com.windowhyun.health.domain.model.WorkoutSet
@@ -42,29 +45,44 @@ import com.windowhyun.health.domain.model.WorkoutSet
  *
  * 입력값은 화면에서만 보관하다가 값이 바뀔 때마다 [onValuesChange] 로 저장한다.
  * DB 의 값으로 매번 되돌리지 않기 때문에 타이핑 중 커서가 튀지 않는다.
+ *
+ * 운동의 기록 방식에 따라 보이는 입력칸이 달라진다.
+ * 플랭크처럼 시간으로 재는 운동은 중량·횟수 대신 시간만 받는다.
  */
 @Composable
 fun SetRow(
     set: WorkoutSet,
     weightUnit: WeightUnit,
-    onValuesChange: (weightKg: Double, reps: Int) -> Unit,
-    onToggleCompleted: (weightKg: Double, reps: Int) -> Unit,
+    onValuesChange: (weightKg: Double, reps: Int, durationSeconds: Int) -> Unit,
+    onToggleCompleted: (weightKg: Double, reps: Int, durationSeconds: Int) -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
+    trackingType: ExerciseTrackingType = ExerciseTrackingType.WEIGHT_REPS,
+    onCycleSetType: (() -> Unit)? = null,
 ) {
     // set.id 가 같은 동안에는 화면 입력값을 유지한다.
     var weightText by remember(set.id) {
         mutableStateOf(formatWeightValue(weightUnit.fromKg(set.weightKg)))
     }
     var repsText by remember(set.id) { mutableStateOf(if (set.reps > 0) set.reps.toString() else "") }
+    var durationText by remember(set.id) {
+        mutableStateOf(if (set.durationSeconds > 0) set.durationSeconds.toString() else "")
+    }
 
-    val weightKg = weightText.toDoubleOrNull()?.let { weightUnit.toKg(it) } ?: 0.0
-    val reps = repsText.toIntOrNull() ?: 0
+    fun weightKg() = weightText.toDoubleOrNull()?.let { weightUnit.toKg(it) } ?: 0.0
+    fun reps() = repsText.toIntOrNull() ?: 0
+    fun duration() = durationText.toIntOrNull() ?: 0
 
-    val background = if (set.completed) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.surface
+    val isWarmup = set.setType == SetType.WARMUP
+    val background = when {
+        set.completed && isWarmup -> MaterialTheme.colorScheme.secondaryContainer
+        set.completed -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surface
+    }
+    // 완료 버튼을 누를 수 있는 조건은 기록 방식에 따라 다르다.
+    val hasValue = when (trackingType) {
+        ExerciseTrackingType.TIME -> duration() > 0
+        else -> reps() > 0
     }
 
     Row(
@@ -75,43 +93,58 @@ fun SetRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Box(modifier = Modifier.width(32.dp), contentAlignment = Alignment.Center) {
-            Text(
-                text = "${set.setNumber}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+        SetNumberChip(set = set, onCycleSetType = onCycleSetType)
+
+        when (trackingType) {
+            ExerciseTrackingType.WEIGHT_REPS -> {
+                NumberField(
+                    value = weightText,
+                    onValueChange = {
+                        weightText = it.filter { ch -> ch.isDigit() || ch == '.' }
+                        onValuesChange(weightKg(), reps(), duration())
+                    },
+                    suffix = weightUnit.label,
+                    label = "${set.setNumber}세트 중량",
+                    modifier = Modifier.weight(1f),
+                )
+                NumberField(
+                    value = repsText,
+                    onValueChange = {
+                        repsText = it.filter { ch -> ch.isDigit() }
+                        onValuesChange(weightKg(), reps(), duration())
+                    },
+                    suffix = "회",
+                    label = "${set.setNumber}세트 횟수",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            ExerciseTrackingType.REPS_ONLY -> NumberField(
+                value = repsText,
+                onValueChange = {
+                    repsText = it.filter { ch -> ch.isDigit() }
+                    onValuesChange(weightKg(), reps(), duration())
+                },
+                suffix = "회",
+                label = "${set.setNumber}세트 횟수",
+                modifier = Modifier.weight(2f),
+            )
+
+            ExerciseTrackingType.TIME -> NumberField(
+                value = durationText,
+                onValueChange = {
+                    durationText = it.filter { ch -> ch.isDigit() }
+                    onValuesChange(weightKg(), reps(), duration())
+                },
+                suffix = "초",
+                label = "${set.setNumber}세트 시간",
+                modifier = Modifier.weight(2f),
             )
         }
 
-        NumberField(
-            value = weightText,
-            onValueChange = {
-                weightText = it.filter { ch -> ch.isDigit() || ch == '.' }
-                onValuesChange(
-                    weightText.toDoubleOrNull()?.let { v -> weightUnit.toKg(v) } ?: 0.0,
-                    repsText.toIntOrNull() ?: 0,
-                )
-            },
-            suffix = weightUnit.label,
-            modifier = Modifier.weight(1f),
-        )
-
-        NumberField(
-            value = repsText,
-            onValueChange = {
-                repsText = it.filter { ch -> ch.isDigit() }
-                onValuesChange(
-                    weightText.toDoubleOrNull()?.let { v -> weightUnit.toKg(v) } ?: 0.0,
-                    repsText.toIntOrNull() ?: 0,
-                )
-            },
-            suffix = "회",
-            modifier = Modifier.weight(1f),
-        )
-
         FilledIconButton(
-            onClick = { onToggleCompleted(weightKg, reps) },
-            enabled = set.completed || reps > 0,
+            onClick = { onToggleCompleted(weightKg(), reps(), duration()) },
+            enabled = set.completed || hasValue,
             modifier = Modifier.size(52.dp),
             colors = if (set.completed) {
                 IconButtonDefaults.filledIconButtonColors(
@@ -138,11 +171,47 @@ fun SetRow(
     }
 }
 
+/**
+ * 세트 번호. 누르면 종류가 본세트 → 워밍업 → 드롭 → 실패 순으로 바뀐다.
+ *
+ * 종류를 고르는 별도 메뉴를 두지 않는 이유는, 운동 중 조작을 한 번으로 끝내기 위해서다.
+ */
+@Composable
+private fun SetNumberChip(set: WorkoutSet, onCycleSetType: (() -> Unit)?) {
+    val label = set.setType.shortLabel.ifEmpty { "${set.setNumber}" }
+    val color = if (set.setType == SetType.NORMAL) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+
+    if (onCycleSetType == null) {
+        Box(modifier = Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+            Text(text = label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        return
+    }
+
+    TextButton(
+        onClick = onCycleSetType,
+        modifier = Modifier.width(40.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = color,
+        )
+    }
+}
+
 @Composable
 private fun NumberField(
     value: String,
     onValueChange: (String) -> Unit,
     suffix: String,
+    label: String,
     modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
@@ -150,6 +219,7 @@ private fun NumberField(
         onValueChange = onValueChange,
         modifier = modifier,
         singleLine = true,
+        label = null,
         textStyle = TextStyle(
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,

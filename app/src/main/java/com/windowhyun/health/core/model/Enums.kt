@@ -45,3 +45,44 @@ enum class DistanceUnit(val label: String, val perMeter: Double) {
 
     fun toMeters(value: Double): Double = value / perMeter
 }
+
+/**
+ * 세트 종류.
+ *
+ * 워밍업은 기록에는 남기지만 볼륨·반복·PR 집계에서 뺀다.
+ * 섞어서 세면 총 볼륨과 개인 기록이 실제보다 부풀려진다.
+ */
+enum class SetType(val label: String, val shortLabel: String) {
+    WARMUP("워밍업", "W"),
+    NORMAL("본세트", ""),
+    DROP("드롭세트", "D"),
+    FAILURE("실패세트", "F"),
+    ;
+
+    /** 집계에 넣는 세트인가. */
+    val countsTowardVolume: Boolean get() = this != WARMUP
+
+    /** 화면에서 눌렀을 때 넘어갈 다음 종류. */
+    fun next(): SetType = entries[(ordinal + 1) % entries.size]
+}
+
+/**
+ * 운동을 무엇으로 기록하는지.
+ *
+ * 플랭크처럼 시간으로 재는 운동을 중량x횟수로만 기록하면 아예 남길 수가 없다.
+ */
+enum class ExerciseTrackingType(val label: String) {
+    /** 중량 x 횟수. 대부분의 웨이트. */
+    WEIGHT_REPS("중량 × 횟수"),
+
+    /** 횟수만. 푸시업·풀업 같은 맨몸운동. */
+    REPS_ONLY("횟수"),
+
+    /** 시간. 플랭크·행잉 등. */
+    TIME("시간"),
+    ;
+
+    val usesWeight: Boolean get() = this == WEIGHT_REPS
+    val usesReps: Boolean get() = this == WEIGHT_REPS || this == REPS_ONLY
+    val usesDuration: Boolean get() = this == TIME
+}

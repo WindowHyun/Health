@@ -29,6 +29,7 @@ data class ExerciseSetHistory(
     val workoutExerciseId: Long,
     val weightKg: Double,
     val reps: Int,
+    val durationSeconds: Int,
     val startTime: Long,
 )
 

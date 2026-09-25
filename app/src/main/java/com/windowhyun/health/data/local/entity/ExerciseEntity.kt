@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
+import com.windowhyun.health.core.model.ExerciseTrackingType
 
 /**
  * 운동 종목 사전. 기본 제공 종목 + 사용자가 추가한 종목이 함께 들어간다.
@@ -25,4 +26,7 @@ data class ExerciseEntity(
     val isBuiltIn: Boolean = false,
     /** 이 종목의 기본 휴식시간(초). null 이면 앱 설정값을 사용한다. */
     val defaultRestSeconds: Int? = null,
+    /** 무엇으로 기록하는 운동인지(중량x횟수 / 횟수 / 시간). */
+    @ColumnInfo(defaultValue = "'WEIGHT_REPS'")
+    val trackingType: ExerciseTrackingType = ExerciseTrackingType.WEIGHT_REPS,
 )

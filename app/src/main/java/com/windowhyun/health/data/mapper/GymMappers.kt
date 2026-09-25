@@ -39,6 +39,7 @@ fun ExerciseEntity.toDomain(): Exercise = Exercise(
     bodyPart = bodyPart,
     isBuiltIn = isBuiltIn,
     defaultRestSeconds = defaultRestSeconds,
+    trackingType = trackingType,
 )
 
 fun Exercise.toEntity(): ExerciseEntity = ExerciseEntity(
@@ -48,6 +49,7 @@ fun Exercise.toEntity(): ExerciseEntity = ExerciseEntity(
     bodyPart = bodyPart,
     isBuiltIn = isBuiltIn,
     defaultRestSeconds = defaultRestSeconds,
+    trackingType = trackingType,
 )
 
 // ---------- Routine ----------
@@ -91,6 +93,8 @@ fun WorkoutSetEntity.toDomain(): WorkoutSet = WorkoutSet(
     weightKg = weightKg,
     reps = reps,
     completed = completed,
+    durationSeconds = durationSeconds,
+    setType = setType,
 )
 
 fun WorkoutExerciseWithSets.toDomain(): WorkoutExerciseRecord = WorkoutExerciseRecord(
@@ -139,4 +143,6 @@ fun WorkoutSet.toEntity(workoutExerciseId: Long): WorkoutSetEntity = WorkoutSetE
     weightKg = weightKg,
     reps = reps,
     completed = completed,
+    durationSeconds = durationSeconds,
+    setType = setType,
 )

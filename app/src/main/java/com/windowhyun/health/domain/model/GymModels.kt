@@ -2,6 +2,8 @@ package com.windowhyun.health.domain.model
 
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
+import com.windowhyun.health.core.model.ExerciseTrackingType
+import com.windowhyun.health.core.model.SetType
 import com.windowhyun.health.core.util.estimateOneRepMax
 import com.windowhyun.health.core.util.setVolume
 import java.time.DayOfWeek
@@ -15,6 +17,7 @@ data class Exercise(
     val bodyPart: BodyPart,
     val isBuiltIn: Boolean = false,
     val defaultRestSeconds: Int? = null,
+    val trackingType: ExerciseTrackingType = ExerciseTrackingType.WEIGHT_REPS,
 )
 
 /** 루틴에 들어 있는 운동 한 줄. */
@@ -44,9 +47,16 @@ data class WorkoutSet(
     val weightKg: Double,
     val reps: Int,
     val completed: Boolean,
+    val durationSeconds: Int = 0,
+    val setType: SetType = SetType.NORMAL,
 ) {
-    val volume: Double get() = setVolume(weightKg, reps)
-    val estimatedOneRepMax: Double get() = estimateOneRepMax(weightKg, reps)
+    /** 집계에 넣는 세트인가. 워밍업은 뺀다. */
+    val counts: Boolean get() = completed && setType.countsTowardVolume
+
+    val volume: Double get() = if (counts) setVolume(weightKg, reps) else 0.0
+
+    val estimatedOneRepMax: Double
+        get() = if (counts) estimateOneRepMax(weightKg, reps) else 0.0
 }
 
 /** 세션 안에서 수행한 운동 한 줄. */
@@ -58,7 +68,11 @@ data class WorkoutExerciseRecord(
     val sets: List<WorkoutSet> = emptyList(),
 ) {
     val completedSets: List<WorkoutSet> get() = sets.filter { it.completed }
-    val totalVolume: Double get() = completedSets.sumOf { it.volume }
+
+    /** 집계 대상 세트. 워밍업은 빠진다. */
+    val countedSets: List<WorkoutSet> get() = sets.filter { it.counts }
+
+    val totalVolume: Double get() = countedSets.sumOf { it.volume }
     val isFinished: Boolean get() = sets.isNotEmpty() && sets.all { it.completed }
 }
 
@@ -76,8 +90,10 @@ data class Workout(
 ) {
     val isActive: Boolean get() = endTime == null
     val totalVolume: Double get() = exercises.sumOf { it.totalVolume }
-    val totalCompletedSets: Int get() = exercises.sumOf { it.completedSets.size }
-    val totalReps: Int get() = exercises.sumOf { ex -> ex.completedSets.sumOf { it.reps } }
-    val performedExerciseCount: Int get() = exercises.count { it.completedSets.isNotEmpty() }
+
+    // 아래 집계는 모두 본세트 기준이다. 워밍업까지 세면 실제 운동량보다 부풀려진다.
+    val totalCompletedSets: Int get() = exercises.sumOf { it.countedSets.size }
+    val totalReps: Int get() = exercises.sumOf { ex -> ex.countedSets.sumOf { it.reps } }
+    val performedExerciseCount: Int get() = exercises.count { it.countedSets.isNotEmpty() }
     val displayName: String get() = routineName ?: "자유 운동"
 }

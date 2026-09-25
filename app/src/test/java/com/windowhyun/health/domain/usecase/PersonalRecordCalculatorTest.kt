@@ -8,12 +8,18 @@ import org.junit.Test
 
 class PersonalRecordCalculatorTest {
 
-    private fun history(weight: Double, reps: Int, workoutExerciseId: Long) =
+    private fun history(
+        weight: Double,
+        reps: Int,
+        workoutExerciseId: Long,
+        durationSeconds: Int = 0,
+    ) =
         ExerciseSetHistory(
             workoutId = workoutExerciseId,
             workoutExerciseId = workoutExerciseId,
             weightKg = weight,
             reps = reps,
+            durationSeconds = durationSeconds,
             startTime = workoutExerciseId,
         )
 

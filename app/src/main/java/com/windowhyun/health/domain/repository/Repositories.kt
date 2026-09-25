@@ -2,6 +2,7 @@ package com.windowhyun.health.domain.repository
 
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.PersonalRecord
+import com.windowhyun.health.core.model.SetType
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Exercise
 import com.windowhyun.health.domain.model.Routine
@@ -58,7 +59,16 @@ interface WorkoutRepository {
     suspend fun addSet(workoutExerciseId: Long): Long
     suspend fun removeSet(setId: Long)
     suspend fun updateSet(set: WorkoutSet, workoutExerciseId: Long)
-    suspend fun setCompleted(setId: Long, weightKg: Double, reps: Int, completed: Boolean)
+    suspend fun setCompleted(
+        setId: Long,
+        weightKg: Double,
+        reps: Int,
+        completed: Boolean,
+        durationSeconds: Int = 0,
+    )
+
+    /** 세트 종류 변경(본세트 · 워밍업 · 드롭 · 실패). */
+    suspend fun setSetType(setId: Long, setType: SetType)
 
     /** 같은 종목을 마지막으로 수행했을 때의 세트들. */
     suspend fun getLastPerformance(exerciseId: Long, excludeWorkoutId: Long): List<WorkoutSet>

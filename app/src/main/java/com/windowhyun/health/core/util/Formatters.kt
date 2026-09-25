@@ -68,3 +68,19 @@ fun formatPace(secondsPerUnit: Double): String {
     val total = secondsPerUnit.roundToLong()
     return String.format(Locale.US, "%d'%02d\"", total / 60, total % 60)
 }
+
+/** 개인 기록 값을 종류에 맞게 표기한다. */
+fun formatPersonalRecordValue(
+    type: com.windowhyun.health.core.model.PersonalRecordType,
+    value: Double,
+    unit: WeightUnit,
+): String = when (type) {
+    com.windowhyun.health.core.model.PersonalRecordType.MAX_WEIGHT,
+    com.windowhyun.health.core.model.PersonalRecordType.MAX_ESTIMATED_ONE_RM,
+    -> formatWeight(value, unit)
+
+    com.windowhyun.health.core.model.PersonalRecordType.MAX_VOLUME -> formatVolume(value, unit)
+    com.windowhyun.health.core.model.PersonalRecordType.MAX_REPS -> "${value.toInt()}회"
+    com.windowhyun.health.core.model.PersonalRecordType.MAX_DURATION ->
+        formatDuration(value.toLong())
+}

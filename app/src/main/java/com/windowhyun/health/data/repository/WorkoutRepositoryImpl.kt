@@ -1,6 +1,7 @@
 package com.windowhyun.health.data.repository
 
 import com.windowhyun.health.core.model.PersonalRecord
+import com.windowhyun.health.core.model.SetType
 import com.windowhyun.health.core.model.PersonalRecordType
 import com.windowhyun.health.data.local.dao.ExerciseDao
 import com.windowhyun.health.data.local.dao.PersonalRecordDao
@@ -104,6 +105,7 @@ class WorkoutRepositoryImpl @Inject constructor(
             setNumber = setNumber,
             weightKg = reference?.weightKg ?: 0.0,
             reps = reference?.reps ?: 0,
+            durationSeconds = reference?.durationSeconds ?: 0,
             completed = false,
         )
     }
@@ -137,9 +139,17 @@ class WorkoutRepositoryImpl @Inject constructor(
                 setNumber = (last?.setNumber ?: 0) + 1,
                 weightKg = last?.weightKg ?: 0.0,
                 reps = last?.reps ?: 0,
+                durationSeconds = last?.durationSeconds ?: 0,
+                setType = last?.setType ?: SetType.NORMAL,
                 completed = false,
             ),
         )
+    }
+
+    /** 세트 종류를 바꾼다(본세트 <-> 워밍업 등). */
+    override suspend fun setSetType(setId: Long, setType: SetType) {
+        val stored = workoutDao.getSet(setId) ?: return
+        workoutDao.updateSet(stored.copy(setType = setType))
     }
 
     override suspend fun removeSet(setId: Long) {
@@ -160,12 +170,19 @@ class WorkoutRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun setCompleted(setId: Long, weightKg: Double, reps: Int, completed: Boolean) {
+    override suspend fun setCompleted(
+        setId: Long,
+        weightKg: Double,
+        reps: Int,
+        completed: Boolean,
+        durationSeconds: Int,
+    ) {
         val stored = workoutDao.getSet(setId) ?: return
         workoutDao.updateSet(
             stored.copy(
                 weightKg = weightKg,
                 reps = reps,
+                durationSeconds = durationSeconds,
                 completed = completed,
                 // 이미 완료된 세트의 중량/횟수를 고쳐도 최초 완료 시각은 유지한다
                 // (updateSet 과 같은 규칙).
@@ -200,6 +217,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                             session = PersonalRecordCalculator.fromSession(
                                 records.flatMap { it.sets },
                             ),
+                            trackingType = records.first().exercise.trackingType,
                         ),
                     )
                 }

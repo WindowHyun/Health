@@ -72,9 +72,16 @@ class WorkoutDetailViewModel @Inject constructor(
     }
 
     /** 잘못 기록한 세트를 고친다. */
-    fun updateSet(set: WorkoutSet, weightKg: Double, reps: Int) {
+    fun updateSet(set: WorkoutSet, weightKg: Double, reps: Int, durationSeconds: Int) {
         viewModelScope.launch {
-            workoutRepository.setCompleted(set.id, weightKg, reps, set.completed)
+            workoutRepository.setCompleted(set.id, weightKg, reps, set.completed, durationSeconds)
+        }
+    }
+
+    /** 지난 기록에서 워밍업을 뒤늦게 표시할 수 있게 한다. */
+    fun cycleSetType(set: WorkoutSet) {
+        viewModelScope.launch {
+            workoutRepository.setSetType(set.id, set.setType.next())
         }
     }
 

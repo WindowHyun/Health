@@ -14,14 +14,16 @@ object ExerciseSeedCallback : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
         DefaultExercises.all.forEach { exercise ->
             db.execSQL(
-                "INSERT INTO exercise (name, category, bodyPart, isBuiltIn, defaultRestSeconds) " +
-                    "VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO exercise " +
+                    "(name, category, bodyPart, isBuiltIn, defaultRestSeconds, trackingType) " +
+                    "VALUES (?, ?, ?, ?, ?, ?)",
                 arrayOf(
                     exercise.name,
                     exercise.category.name,
                     exercise.bodyPart.name,
                     if (exercise.isBuiltIn) 1 else 0,
                     exercise.defaultRestSeconds,
+                    exercise.trackingType.name,
                 ),
             )
         }

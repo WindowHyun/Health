@@ -141,9 +141,10 @@ fun WorkoutSessionScreen(
                     weightUnit = state.settings.weightUnit,
                     defaultRestSeconds = state.settings.defaultRestSeconds,
                     onValuesChange = viewModel::updateSetValues,
-                    onToggleCompleted = { set, weightKg, reps ->
-                        viewModel.toggleSetCompleted(set, weightKg, reps, record.restSeconds)
+                    onToggleCompleted = { set, weightKg, reps, duration ->
+                        viewModel.toggleSetCompleted(set, weightKg, reps, duration, record.restSeconds)
                     },
+                    onCycleSetType = viewModel::cycleSetType,
                     onAddSet = { viewModel.addSet(record.id) },
                     onRemoveSet = viewModel::removeSet,
                     onRemoveExercise = { viewModel.removeExercise(record.id) },
@@ -237,8 +238,9 @@ private fun ExerciseCard(
     lastSets: List<WorkoutSet>,
     weightUnit: WeightUnit,
     defaultRestSeconds: Int,
-    onValuesChange: (WorkoutSet, Double, Int) -> Unit,
-    onToggleCompleted: (WorkoutSet, Double, Int) -> Unit,
+    onValuesChange: (WorkoutSet, Double, Int, Int) -> Unit,
+    onToggleCompleted: (WorkoutSet, Double, Int, Int) -> Unit,
+    onCycleSetType: (WorkoutSet) -> Unit,
     onAddSet: () -> Unit,
     onRemoveSet: (Long) -> Unit,
     onRemoveExercise: () -> Unit,
@@ -284,8 +286,14 @@ private fun ExerciseCard(
                 SetRow(
                     set = set,
                     weightUnit = weightUnit,
-                    onValuesChange = { weightKg, reps -> onValuesChange(set, weightKg, reps) },
-                    onToggleCompleted = { weightKg, reps -> onToggleCompleted(set, weightKg, reps) },
+                    trackingType = record.exercise.trackingType,
+                    onValuesChange = { weightKg, reps, duration ->
+                        onValuesChange(set, weightKg, reps, duration)
+                    },
+                    onToggleCompleted = { weightKg, reps, duration ->
+                        onToggleCompleted(set, weightKg, reps, duration)
+                    },
+                    onCycleSetType = { onCycleSetType(set) },
                     onRemove = { onRemoveSet(set.id) },
                     modifier = Modifier.padding(vertical = 2.dp),
                 )

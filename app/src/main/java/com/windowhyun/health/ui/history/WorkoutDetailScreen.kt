@@ -38,6 +38,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.util.formatDurationKorean
 import com.windowhyun.health.core.util.formatKoreanFull
+import com.windowhyun.health.core.util.formatPersonalRecordValue
 import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.core.util.formatWeight
 import com.windowhyun.health.ui.components.ConfirmDialog
@@ -117,7 +118,9 @@ fun WorkoutDetailScreen(
                             Icon(Icons.Filled.EmojiEvents, contentDescription = null)
                             Text(
                                 text = "${record.exerciseName} · ${record.type.label} " +
-                                    formatWeight(record.value, state.settings.weightUnit),
+                                    formatPersonalRecordValue(
+                                        record.type, record.value, state.settings.weightUnit,
+                                    ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(start = 8.dp),
                             )
@@ -144,10 +147,12 @@ fun WorkoutDetailScreen(
                             SetRow(
                                 set = set,
                                 weightUnit = state.settings.weightUnit,
-                                onValuesChange = { weightKg, reps ->
-                                    viewModel.updateSet(set, weightKg, reps)
+                                trackingType = record.exercise.trackingType,
+                                onValuesChange = { weightKg, reps, duration ->
+                                    viewModel.updateSet(set, weightKg, reps, duration)
                                 },
-                                onToggleCompleted = { _, _ -> },
+                                onToggleCompleted = { _, _, _ -> },
+                                onCycleSetType = { viewModel.cycleSetType(set) },
                                 onRemove = { viewModel.deleteSet(set.id) },
                                 modifier = Modifier.padding(vertical = 2.dp),
                             )

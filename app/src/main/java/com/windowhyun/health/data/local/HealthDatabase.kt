@@ -40,7 +40,7 @@ import com.windowhyun.health.data.local.entity.WorkoutSetEntity
         RunLapEntity::class,
         RunLocationEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -65,6 +65,34 @@ abstract class HealthDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2)
+        /**
+         * v3: 세트 종류(워밍업 등)와 시간 기록, 운동의 기록 방식 추가.
+         *
+         * 기존 세트는 전부 본세트로 본다. 기본 제공 종목 중 시간·횟수로 재는 것들은
+         * 이름으로 찾아 기록 방식을 맞춰 준다(시드는 최초 1회만 돌기 때문에
+         * 이미 설치된 기기에는 적용되지 않는다).
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE workout_set ADD COLUMN durationSeconds INTEGER NOT NULL DEFAULT 0",
+                )
+                db.execSQL(
+                    "ALTER TABLE workout_set ADD COLUMN setType TEXT NOT NULL DEFAULT 'NORMAL'",
+                )
+                db.execSQL(
+                    "ALTER TABLE exercise ADD COLUMN trackingType TEXT NOT NULL DEFAULT 'WEIGHT_REPS'",
+                )
+                db.execSQL(
+                    "UPDATE exercise SET trackingType = 'TIME' WHERE isBuiltIn = 1 AND name IN ('플랭크')",
+                )
+                db.execSQL(
+                    "UPDATE exercise SET trackingType = 'REPS_ONLY' WHERE isBuiltIn = 1 AND name IN " +
+                        "('풀업', '딥스', '푸시업', '크런치', '행잉 레그레이즈', '버피')",
+                )
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
     }
 }

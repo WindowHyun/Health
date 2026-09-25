@@ -122,10 +122,17 @@ class WorkoutSessionViewModel @Inject constructor(
 
     // ---------- 세트 조작 ----------
 
-    /** 중량/횟수만 갱신(완료 상태는 그대로). */
-    fun updateSetValues(set: WorkoutSet, weightKg: Double, reps: Int) {
+    /** 중량/횟수/시간만 갱신(완료 상태는 그대로). */
+    fun updateSetValues(set: WorkoutSet, weightKg: Double, reps: Int, durationSeconds: Int) {
         viewModelScope.launch {
-            workoutRepository.setCompleted(set.id, weightKg, reps, set.completed)
+            workoutRepository.setCompleted(set.id, weightKg, reps, set.completed, durationSeconds)
+        }
+    }
+
+    /** 세트 번호를 누르면 종류가 순환한다(본세트 → 워밍업 → 드롭 → 실패). */
+    fun cycleSetType(set: WorkoutSet) {
+        viewModelScope.launch {
+            workoutRepository.setSetType(set.id, set.setType.next())
         }
     }
 
@@ -133,10 +140,16 @@ class WorkoutSessionViewModel @Inject constructor(
      * 세트 완료 버튼. 완료로 바뀌면 설정에 따라 휴식 타이머를 자동 시작한다.
      * [restSeconds] 는 운동별 휴식시간(없으면 앱 기본값).
      */
-    fun toggleSetCompleted(set: WorkoutSet, weightKg: Double, reps: Int, restSeconds: Int?) {
+    fun toggleSetCompleted(
+        set: WorkoutSet,
+        weightKg: Double,
+        reps: Int,
+        durationSeconds: Int,
+        restSeconds: Int?,
+    ) {
         viewModelScope.launch {
             val nowCompleted = !set.completed
-            workoutRepository.setCompleted(set.id, weightKg, reps, nowCompleted)
+            workoutRepository.setCompleted(set.id, weightKg, reps, nowCompleted, durationSeconds)
             val settings = settingsRepository.current()
             if (nowCompleted && settings.restTimerAutoStart) {
                 startRestTimer(restSeconds ?: settings.defaultRestSeconds)

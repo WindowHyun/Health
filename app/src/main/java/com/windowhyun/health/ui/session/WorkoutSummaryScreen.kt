@@ -35,6 +35,7 @@ import com.windowhyun.health.core.model.PersonalRecord
 import com.windowhyun.health.core.model.PersonalRecordType
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatDurationKorean
+import com.windowhyun.health.core.util.formatPersonalRecordValue
 import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.core.util.formatWeight
 import com.windowhyun.health.ui.components.StatCard
@@ -167,20 +168,13 @@ private fun PersonalRecordCard(record: PersonalRecord, weightUnit: WeightUnit) {
             )
             Text(text = record.type.label, style = MaterialTheme.typography.labelMedium)
             Text(
-                text = when (record.type) {
-                    PersonalRecordType.MAX_WEIGHT -> formatWeight(record.value, weightUnit)
-                    PersonalRecordType.MAX_VOLUME -> formatVolume(record.value, weightUnit)
-                    PersonalRecordType.MAX_ESTIMATED_ONE_RM -> formatWeight(record.value, weightUnit)
-                },
+                text = formatPersonalRecordValue(record.type, record.value, weightUnit),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
             record.previousValue?.let { previous ->
                 Text(
-                    text = "이전 기록 " + when (record.type) {
-                        PersonalRecordType.MAX_VOLUME -> formatVolume(previous, weightUnit)
-                        else -> formatWeight(previous, weightUnit)
-                    },
+                    text = "이전 기록 " + formatPersonalRecordValue(record.type, previous, weightUnit),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

@@ -1,5 +1,6 @@
 package com.windowhyun.health.domain.usecase
 
+import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.core.model.PersonalRecord
 import com.windowhyun.health.core.model.PersonalRecordType
 import com.windowhyun.health.core.util.estimateOneRepMax
@@ -23,11 +24,17 @@ object PersonalRecordCalculator {
         val maxWeightKg: Double = 0.0,
         val maxSessionVolumeKg: Double = 0.0,
         val maxOneRepMaxKg: Double = 0.0,
+        /** 횟수로 재는 운동의 최고 횟수. */
+        val maxReps: Int = 0,
+        /** 시간으로 재는 운동의 최고 유지 시간(초). */
+        val maxDurationSeconds: Int = 0,
         /** 최고 1RM 을 만든 세트 정보. */
         val bestWeightKg: Double? = null,
         val bestReps: Int? = null,
     ) {
-        val isEmpty: Boolean get() = maxWeightKg <= 0.0 && maxSessionVolumeKg <= 0.0
+        val isEmpty: Boolean
+            get() = maxWeightKg <= 0.0 && maxSessionVolumeKg <= 0.0 &&
+                maxReps <= 0 && maxDurationSeconds <= 0
     }
 
     /**
@@ -37,8 +44,12 @@ object PersonalRecordCalculator {
      * [fromSession] 과 기준이 달라지면 기준선이 오염되어 이후 PR 이 막힌다.
      */
     fun fromHistory(history: List<ExerciseSetHistory>): Bests {
+        // 기록 방식과 무관한 지표(최고 횟수·최고 시간)는 별도로 센다.
+        val maxReps = history.maxOfOrNull { it.reps } ?: 0
+        val maxDuration = history.maxOfOrNull { it.durationSeconds } ?: 0
+
         val usable = history.filter { it.reps > 0 && it.weightKg > 0.0 }
-        if (usable.isEmpty()) return Bests()
+        if (usable.isEmpty()) return Bests(maxReps = maxReps, maxDurationSeconds = maxDuration)
         val maxWeight = usable.maxOf { it.weightKg }
         // 한 세션에 같은 종목이 두 번 들어갈 수 있으므로 세션(workoutId) 단위로 합산한다.
         // 블록(workoutExerciseId) 단위로 묶으면 세션 합계보다 작게 나와 기준이 어긋난다.
@@ -51,6 +62,8 @@ object PersonalRecordCalculator {
             maxWeightKg = maxWeight,
             maxSessionVolumeKg = maxSessionVolume,
             maxOneRepMaxKg = best?.let { estimateOneRepMax(it.weightKg, it.reps) } ?: 0.0,
+            maxReps = maxReps,
+            maxDurationSeconds = maxDuration,
             bestWeightKg = best?.weightKg,
             bestReps = best?.reps,
         )
@@ -58,13 +71,20 @@ object PersonalRecordCalculator {
 
     /** 이번 세션에서 그 종목으로 세운 기록을 계산한다. */
     fun fromSession(sets: List<WorkoutSet>): Bests {
-        val completed = sets.filter { it.completed && it.reps > 0 && it.weightKg > 0.0 }
-        if (completed.isEmpty()) return Bests()
-        val best = completed.maxByOrNull { it.estimatedOneRepMax }
+        // 워밍업은 집계에서 뺀다(WorkoutSet.counts).
+        val counted = sets.filter { it.counts }
+        val maxReps = counted.maxOfOrNull { it.reps } ?: 0
+        val maxDuration = counted.maxOfOrNull { it.durationSeconds } ?: 0
+
+        val weighted = counted.filter { it.reps > 0 && it.weightKg > 0.0 }
+        if (weighted.isEmpty()) return Bests(maxReps = maxReps, maxDurationSeconds = maxDuration)
+        val best = weighted.maxByOrNull { it.estimatedOneRepMax }
         return Bests(
-            maxWeightKg = completed.maxOf { it.weightKg },
-            maxSessionVolumeKg = completed.sumOf { it.volume },
+            maxWeightKg = weighted.maxOf { it.weightKg },
+            maxSessionVolumeKg = weighted.sumOf { it.volume },
             maxOneRepMaxKg = best?.estimatedOneRepMax ?: 0.0,
+            maxReps = maxReps,
+            maxDurationSeconds = maxDuration,
             bestWeightKg = best?.weightKg,
             bestReps = best?.reps,
         )
@@ -79,10 +99,39 @@ object PersonalRecordCalculator {
         exerciseName: String,
         previous: Bests,
         session: Bests,
+        trackingType: ExerciseTrackingType = ExerciseTrackingType.WEIGHT_REPS,
     ): List<PersonalRecord> {
         if (session.isEmpty) return emptyList()
         val epsilon = 0.0001
         val records = mutableListOf<PersonalRecord>()
+
+        // 시간으로 재는 운동은 최고 시간만, 횟수로 재는 운동은 최고 횟수만 의미가 있다.
+        if (trackingType == ExerciseTrackingType.TIME) {
+            if (session.maxDurationSeconds > previous.maxDurationSeconds) {
+                records += PersonalRecord(
+                    exerciseId = exerciseId,
+                    exerciseName = exerciseName,
+                    type = PersonalRecordType.MAX_DURATION,
+                    value = session.maxDurationSeconds.toDouble(),
+                    previousValue = previous.maxDurationSeconds.toDouble().takeIf { it > 0 },
+                )
+            }
+            return records
+        }
+
+        if (trackingType == ExerciseTrackingType.REPS_ONLY) {
+            if (session.maxReps > previous.maxReps) {
+                records += PersonalRecord(
+                    exerciseId = exerciseId,
+                    exerciseName = exerciseName,
+                    type = PersonalRecordType.MAX_REPS,
+                    value = session.maxReps.toDouble(),
+                    previousValue = previous.maxReps.toDouble().takeIf { it > 0 },
+                    reps = session.maxReps,
+                )
+            }
+            return records
+        }
 
         if (session.maxWeightKg > previous.maxWeightKg + epsilon) {
             records += PersonalRecord(
