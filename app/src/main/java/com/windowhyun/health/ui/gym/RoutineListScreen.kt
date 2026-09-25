@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,13 +57,34 @@ fun RoutineListScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var routineToDelete by remember { mutableStateOf<Routine?>(null) }
+    var showTemplateSheet by remember { mutableStateOf(false) }
+    val templateViewModel: RoutineTemplateViewModel = hiltViewModel()
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
 
     LaunchedEffect(Unit) {
         viewModel.startedWorkoutId.collectLatest { onStartWorkout(it) }
     }
 
+    LaunchedEffect(Unit) {
+        templateViewModel.applied.collectLatest { result ->
+            showTemplateSheet = false
+            val message = if (result.createdRoutineNames.isEmpty()) {
+                "루틴을 만들지 못했습니다. 종목이 먼저 있어야 합니다."
+            } else {
+                "'${result.template.title}' 추가됨 · ${result.createdRoutineNames.joinToString(", ")}" +
+                    if (result.missingExerciseNames.isNotEmpty()) {
+                        " (없는 종목 ${result.missingExerciseNames.size}개 제외)"
+                    } else {
+                        ""
+                    }
+            }
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("헬스") }) },
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onCreateRoutine,
@@ -105,6 +127,16 @@ fun RoutineListScreen(
                 }
             }
 
+            item {
+                OutlinedButton(
+                    onClick = { showTemplateSheet = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Filled.Star, contentDescription = null)
+                    Text("유명한 루틴 템플릿에서 추가", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+
             if (!state.loading && state.routines.isEmpty()) {
                 item {
                     EmptyMessage(
@@ -125,6 +157,13 @@ fun RoutineListScreen(
                 )
             }
         }
+    }
+
+    if (showTemplateSheet) {
+        RoutineTemplateSheet(
+            onPick = { template -> templateViewModel.applyTemplate(template) },
+            onDismiss = { showTemplateSheet = false },
+        )
     }
 
     routineToDelete?.let { routine ->
