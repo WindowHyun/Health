@@ -63,6 +63,7 @@ fun HomeScreen(
     onOpenGym: () -> Unit,
     onOpenRunning: () -> Unit,
     onOpenWorkout: (Long) -> Unit,
+    onOpenRun: (Long) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -177,7 +178,11 @@ fun HomeScreen(
                 }
             } else {
                 items(state.recentRuns, key = { it.id }) { run ->
-                    RecentRunCard(run = run, distanceUnit = state.settings.distanceUnit)
+                    RecentRunCard(
+                        run = run,
+                        distanceUnit = state.settings.distanceUnit,
+                        onClick = { onOpenRun(run.id) },
+                    )
                 }
             }
 
@@ -374,8 +379,16 @@ private fun RecentWorkoutCard(
 }
 
 @Composable
-private fun RecentRunCard(run: Run, distanceUnit: com.windowhyun.health.core.model.DistanceUnit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun RecentRunCard(
+    run: Run,
+    distanceUnit: com.windowhyun.health.core.model.DistanceUnit,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = formatDistance(run.distanceMeters, distanceUnit),

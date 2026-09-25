@@ -34,6 +34,11 @@ object Routes {
 
     /** 러닝 결과 화면. */
     const val RUN_SUMMARY = "run_summary"
+
+    /** 저장된 러닝 1건. */
+    const val RUN_DETAIL = "run_detail"
+    const val ARG_RUN_ID = "runId"
+    fun runDetail(runId: Long) = "$RUN_DETAIL/$runId"
 }
 
 /** 하단 네비게이션 탭. 설정은 홈 우측 상단 버튼으로만 접근한다. */

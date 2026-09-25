@@ -10,15 +10,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -34,17 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.util.formatDistance
-import com.windowhyun.health.core.util.formatDuration
 import com.windowhyun.health.core.util.formatKoreanFull
 import com.windowhyun.health.core.util.formatPace
 import com.windowhyun.health.ui.components.ConfirmDialog
-import com.windowhyun.health.ui.components.StatCard
 
 /** 러닝 결과. 거리·시간·페이스·Lap·경로·개인기록을 한 화면에 모아 보여 준다. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -127,106 +121,24 @@ fun RunSummaryScreen(
             }
 
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatCard(
-                        label = "총 시간",
-                        value = formatDuration(run?.durationSeconds ?: 0),
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatCard(
-                        label = "평균 페이스",
-                        value = formatPace(run?.averagePaceSecPerKm ?: 0.0),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatCard(
-                        label = "최고 페이스",
-                        value = formatPace(run?.bestPaceSecPerKm ?: 0.0),
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatCard(
-                        label = "칼로리",
-                        value = "${run?.calories ?: 0}kcal",
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-
-            if (run != null && run.steps > 0) {
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatCard(
-                            label = "걸음",
-                            value = String.format(java.util.Locale.US, "%,d", run.steps),
-                            modifier = Modifier.weight(1f),
-                        )
-                        StatCard(
-                            label = "케이던스",
-                            value = "${run.cadenceStepsPerMinute} spm",
-                            modifier = Modifier.weight(1f),
-                        )
-                        StatCard(
-                            label = "보폭",
-                            value = String.format(java.util.Locale.US, "%.2f m", run.strideMeters),
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
+                RunStatGrid(
+                    run = run ?: return@item,
+                    distanceUnit = state.settings.distanceUnit,
+                )
             }
 
             item {
                 Text("이동 경로", style = MaterialTheme.typography.titleMedium)
             }
             item {
-                RunRouteMap(
-                    route = run?.route.orEmpty(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(280.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                )
-            }
-            item {
-                val tileStatus by rememberMapTileStatus(hasRoute = !run?.route.isNullOrEmpty())
-                tileStatus?.let { message ->
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                RunRouteSection(run = run ?: return@item)
             }
 
             if (!run?.laps.isNullOrEmpty()) {
                 item {
-                    Text("Lap", style = MaterialTheme.typography.titleMedium)
+                    Text("구간 기록", style = MaterialTheme.typography.titleMedium)
                 }
-                items(run.laps, key = { it.lapNumber }) { lap ->
-                    Column {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = "${lap.lapNumber} " +
-                                    formatDistance(lap.distanceMeters, state.settings.distanceUnit),
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                text = "${formatPace(lap.paceSecPerKm)}  ${formatDuration(lap.durationSeconds)}",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
-                        HorizontalDivider()
-                    }
-                }
+                runLapItems(laps = run.laps, distanceUnit = state.settings.distanceUnit)
             }
 
             item {

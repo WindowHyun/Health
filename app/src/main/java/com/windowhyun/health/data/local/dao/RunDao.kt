@@ -2,6 +2,7 @@ package com.windowhyun.health.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -14,7 +15,8 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface RunDao {
 
-    @Insert
+    /** id 가 0 이면 새로 넣고, 이미 있는 id 면 그 행을 갈아 끼운다(복원·수정용). */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRun(run: RunEntity): Long
 
     @Update

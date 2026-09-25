@@ -14,6 +14,7 @@ import com.windowhyun.health.ui.history.HistoryScreen
 import com.windowhyun.health.ui.history.WorkoutDetailScreen
 import com.windowhyun.health.ui.home.HomeScreen
 import com.windowhyun.health.ui.running.RunActiveScreen
+import com.windowhyun.health.ui.running.RunDetailScreen
 import com.windowhyun.health.ui.running.RunSetupScreen
 import com.windowhyun.health.ui.running.RunSummaryScreen
 import com.windowhyun.health.ui.session.WorkoutSessionScreen
@@ -43,6 +44,7 @@ fun HealthNavHost(
                 onOpenGym = { navController.navigate(Routes.GYM) },
                 onOpenRunning = { navController.navigate(Routes.RUNNING) },
                 onOpenWorkout = { workoutId -> navController.navigate(Routes.workoutDetail(workoutId)) },
+                onOpenRun = { runId -> navController.navigate(Routes.runDetail(runId)) },
             )
         }
 
@@ -86,6 +88,7 @@ fun HealthNavHost(
         composable(Routes.HISTORY) {
             HistoryScreen(
                 onOpenWorkout = { workoutId -> navController.navigate(Routes.workoutDetail(workoutId)) },
+                onOpenRun = { runId -> navController.navigate(Routes.runDetail(runId)) },
             )
         }
 
@@ -130,6 +133,13 @@ fun HealthNavHost(
             arguments = listOf(navArgument(Routes.ARG_WORKOUT_ID) { type = NavType.LongType }),
         ) {
             WorkoutDetailScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = "${Routes.RUN_DETAIL}/{${Routes.ARG_RUN_ID}}",
+            arguments = listOf(navArgument(Routes.ARG_RUN_ID) { type = NavType.LongType }),
+        ) {
+            RunDetailScreen(onBack = { navController.popBackStack() })
         }
     }
 }

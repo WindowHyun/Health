@@ -46,9 +46,14 @@ class RunRepositoryImpl @Inject constructor(
         return run.toDomain(laps = runDao.getLaps(id), locations = runDao.getLocations(id))
     }
 
+    /**
+     * 러닝 1건을 통째로 저장한다. id 가 있으면 그 기록을 갈아 끼우므로,
+     * Lap 과 경로까지 채운 [run] 을 넘겨야 한다(빈 채로 넘기면 그만큼 지워진다).
+     */
     override suspend fun saveRun(run: Run): Long {
         val runId = runDao.insertRun(
             RunEntity(
+                id = run.id,
                 date = run.date.toEpochDay(),
                 startTime = run.startTime,
                 endTime = run.endTime,
