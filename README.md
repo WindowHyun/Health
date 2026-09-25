@@ -123,12 +123,12 @@ run ──┬── run_lap
 
 | 테이블 | 설명 | 주요 삭제 규칙 |
 | --- | --- | --- |
-| `exercise` | 운동 종목 사전 (기본 제공 + 사용자 추가) | — |
+| `exercise` | 운동 종목 사전 (기본 제공 + 사용자 추가). 기록 방식(중량×횟수 / 횟수 / 시간)을 가짐 | — |
 | `routine` | 루틴. 요일은 비트마스크로 저장 | — |
 | `routine_exercise` | 루틴 안의 운동 + 순서 + 기본 세트 + 휴식시간 | routine CASCADE |
 | `workout` | 운동 세션. `endTime = null` 이면 진행 중 | routine **SET NULL** (루틴을 지워도 기록은 남음) |
 | `workout_exercise` | 세션 안의 운동 | workout CASCADE |
-| `workout_set` | 세트(중량 kg, 반복, 완료 여부) | workout_exercise CASCADE |
+| `workout_set` | 세트(중량 kg, 반복, 시간, 세트 종류, 완료 여부) | workout_exercise CASCADE |
 | `personal_record` | 그 세션에서 **새로 세운** PR | workout CASCADE |
 | `run` / `run_lap` / `run_location` | 러닝 기록 · Lap · GPS 경로 | run CASCADE |
 
@@ -140,6 +140,7 @@ run ──┬── run_lap
 | --- | --- |
 | v1 | 최초 스키마 (헬스 + 러닝 테이블 전체) |
 | v2 | `run.steps` 컬럼 추가 |
+| v3 | `workout_set.setType` · `workout_set.durationSeconds` · `exercise.trackingType` 추가. 기존 세트는 본세트, 기본 종목은 이름으로 기록 방식을 채움 |
 
 스키마를 바꿀 때는 `HealthDatabase.MIGRATIONS` 에 마이그레이션을 추가하고
 `MigrationTest` 에 케이스를 넣습니다. 마이그레이션이 깨지면 업데이트하는 순간
@@ -153,14 +154,26 @@ run ──┬── run_lap
 | --- | --- | --- |
 | **Phase 1** | Room DB · 운동 종목 · 루틴 · 운동 진행 · 세트 기록 · 휴식 타이머 · 운동 저장 · PR · 과거 기록 | ✅ 완료 |
 | **Phase 2** | GPS 권한 · Foreground Service · 러닝 기록 · 거리/페이스 · 자동 Lap · 경로 · 러닝 저장 | ✅ 완료 |
-| Phase 3 | 캘린더 · 헬스/러닝 통계 · 성장 그래프 · 러닝 기록 상세 | ⬜ 예정 |
-| Phase 4 | Health Connect · 백업/복원 · UI/UX 개선 | ⬜ 예정 |
+| Phase 3 | 캘린더 · 헬스/러닝 통계 · 성장 그래프 | ⬜ 예정 |
+| Phase 4 | Health Connect · UI/UX 개선 | ⬜ 예정 |
+
+Phase 사이에, 다른 운동 앱과 비교해 빠져 있던 것 중 개인 앱에 꼭 필요한
+항목을 우선순위대로 채웠습니다(v0.4.0). 남은 목록은
+[docs/ROADMAP.md](docs/ROADMAP.md) 에 있습니다.
+
+| 항목 | 상태 |
+| --- | --- |
+| 백업 / 복원 · CSV 내보내기 | ✅ v0.4.0 |
+| 러닝 기록 상세 · 헬스+러닝 통합 기록 목록 | ✅ v0.4.0 |
+| 세트 타입(워밍업 구분) | ✅ v0.4.0 |
+| 시간·횟수 기반 운동 | ✅ v0.4.0 |
+| 러닝 자동 일시정지 · 음성 안내 · 원판 계산기 | ⬜ 예정 |
 
 각 Phase 가 끝날 때마다 앱은 항상 실행 가능한 상태를 유지합니다.
 러닝 관련 테이블은 마이그레이션을 줄이기 위해 스키마 v1 에 미리 포함했습니다.
 
-> Phase 2 기준으로 저장된 러닝은 **홈 화면의 "최근 러닝 기록"** 에서 볼 수 있습니다.
-> 기록 탭의 캘린더와 러닝 상세 화면은 Phase 3 에서 붙습니다.
+> 저장된 러닝은 **기록 탭**과 홈 화면의 "최근 러닝 기록"에서 열어 볼 수 있습니다.
+> 기록 탭의 캘린더와 통계 그래프는 Phase 3 에서 붙습니다.
 
 ---
 

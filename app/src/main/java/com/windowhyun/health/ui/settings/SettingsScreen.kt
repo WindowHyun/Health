@@ -1,5 +1,14 @@
 package com.windowhyun.health.ui.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.windowhyun.health.ui.components.ConfirmDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -154,13 +163,129 @@ fun SettingsScreen(
                     subtitle = "Phase 4 에서 추가됩니다. 연결하지 않아도 앱 기록은 그대로 사용할 수 있습니다.",
                 )
             }
-            item {
-                DisabledRow(
-                    title = "데이터 백업 / 복원",
-                    subtitle = "Phase 4 에서 추가됩니다.",
-                )
-            }
+            item { DataSection() }
         }
+    }
+}
+
+/**
+ * 백업 / 복원 / CSV 내보내기.
+ *
+ * 서버가 없는 앱이라 기기를 잃어버리면 기록도 같이 사라진다.
+ * 백업 파일이 유일한 복구 수단이므로 설정 맨 위가 아니라도 눈에 띄게 둔다.
+ */
+@Composable
+private fun DataSection(viewModel: BackupViewModel = hiltViewModel()) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+
+    val createBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri -> uri?.let(viewModel::exportBackup) }
+
+    // 백업 파일을 application/json 으로 저장하지 않는 앱도 있어서 전체를 받는다.
+    val openBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> pendingRestoreUri = uri }
+
+    val createWorkoutCsv = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri -> uri?.let(viewModel::exportWorkoutCsv) }
+
+    val createRunCsv = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri -> uri?.let(viewModel::exportRunCsv) }
+
+    Column {
+        ActionRow(
+            title = "백업 파일 만들기",
+            subtitle = "모든 기록과 설정을 JSON 파일 하나로 저장합니다.",
+            enabled = !state.working,
+            onClick = { createBackup.launch(viewModel.backupFileName()) },
+        )
+        ActionRow(
+            title = "백업에서 복원",
+            subtitle = "지금 기록을 모두 지우고 파일의 내용으로 바꿉니다.",
+            enabled = !state.working,
+            onClick = { openBackup.launch(arrayOf("*/*")) },
+        )
+        ActionRow(
+            title = "헬스 기록 CSV 내보내기",
+            subtitle = "엑셀이나 스프레드시트에서 볼 수 있습니다.",
+            enabled = !state.working,
+            onClick = { createWorkoutCsv.launch(viewModel.workoutCsvFileName()) },
+        )
+        ActionRow(
+            title = "러닝 기록 CSV 내보내기",
+            subtitle = "엑셀이나 스프레드시트에서 볼 수 있습니다.",
+            enabled = !state.working,
+            onClick = { createRunCsv.launch(viewModel.runCsvFileName()) },
+        )
+
+        if (state.working) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        }
+
+        state.message?.let { message ->
+            ResultText(text = message, color = MaterialTheme.colorScheme.primary)
+        }
+        state.error?.let { error ->
+            ResultText(text = error, color = MaterialTheme.colorScheme.error)
+        }
+    }
+
+    pendingRestoreUri?.let { uri ->
+        ConfirmDialog(
+            title = "지금 기록을 모두 바꿀까요?",
+            message = "복원하면 이 기기에 있는 운동·러닝·루틴 기록이 모두 지워지고 " +
+                "백업 파일의 내용으로 바뀝니다. 되돌릴 수 없습니다.",
+            confirmLabel = "복원",
+            onConfirm = {
+                pendingRestoreUri = null
+                viewModel.restoreBackup(uri)
+            },
+            onDismiss = { pendingRestoreUri = null },
+        )
+    }
+}
+
+@Composable
+private fun ResultText(text: String, color: androidx.compose.ui.graphics.Color) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = color,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
+private fun ActionRow(
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 10.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (enabled) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.outline
+            },
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

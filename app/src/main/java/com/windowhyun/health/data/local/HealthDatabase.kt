@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.windowhyun.health.data.local.dao.BackupDao
 import com.windowhyun.health.data.local.dao.ExerciseDao
 import com.windowhyun.health.data.local.dao.PersonalRecordDao
 import com.windowhyun.health.data.local.dao.RoutineDao
@@ -50,6 +51,7 @@ abstract class HealthDatabase : RoomDatabase() {
     abstract fun workoutDao(): WorkoutDao
     abstract fun runDao(): RunDao
     abstract fun personalRecordDao(): PersonalRecordDao
+    abstract fun backupDao(): BackupDao
 
     companion object {
         const val NAME = "health.db"

@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 /**
@@ -35,8 +36,8 @@ android {
         applicationId = "com.windowhyun.health"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.3.3"
+        versionCode = 7
+        versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -154,6 +155,8 @@ dependencies {
     implementation(libs.health.connect.client)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

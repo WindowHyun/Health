@@ -3,6 +3,7 @@ package com.windowhyun.health.di
 import android.content.Context
 import androidx.room.Room
 import com.windowhyun.health.data.local.HealthDatabase
+import com.windowhyun.health.data.local.dao.BackupDao
 import com.windowhyun.health.data.local.dao.ExerciseDao
 import com.windowhyun.health.data.local.dao.PersonalRecordDao
 import com.windowhyun.health.data.local.dao.RoutineDao
@@ -42,4 +43,7 @@ object DatabaseModule {
 
     @Provides
     fun providePersonalRecordDao(db: HealthDatabase): PersonalRecordDao = db.personalRecordDao()
+
+    @Provides
+    fun provideBackupDao(db: HealthDatabase): BackupDao = db.backupDao()
 }

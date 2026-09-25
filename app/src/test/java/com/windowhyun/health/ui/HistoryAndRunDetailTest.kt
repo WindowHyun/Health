@@ -24,7 +24,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -179,11 +178,11 @@ class HistoryAndRunDetailTest {
 
         viewModel.setMemo("바람이 셌다")
         viewModel.saveMemo()
-        advanceUntilIdle()
 
-        // uiState 는 구독이 있을 때만 흐르므로 다시 구독해 최신 값을 받는다.
-        val state = viewModel.uiState.first { !it.memoDirty && !it.editingMemo }
-        assertThat(state.run?.memo).isEqualTo("바람이 셌다")
+        // 저장이 끝나 상태에 반영될 때까지 기다린다(Room 은 자기 스레드에서 쓴다).
+        val state = viewModel.uiState.first { it.run?.memo == "바람이 셌다" }
+        assertThat(state.memoDirty).isFalse()
+        assertThat(state.editingMemo).isFalse()
         assertThat(runs.getRun(runId)?.memo).isEqualTo("바람이 셌다")
     }
 
@@ -196,8 +195,9 @@ class HistoryAndRunDetailTest {
 
         viewModel.setMemo("저장 안 누름")
         viewModel.saveMemoIfNeeded()
-        advanceUntilIdle()
 
+        // Room 은 자기 스레드에서 쓰므로, 저장이 끝난 뒤 상태가 바뀌는 것을 기다린다.
+        viewModel.uiState.first { !it.memoDirty && it.run?.memo == "저장 안 누름" }
         assertThat(runs.getRun(runId)?.memo).isEqualTo("저장 안 누름")
     }
 
@@ -211,8 +211,8 @@ class HistoryAndRunDetailTest {
 
         viewModel.setMemo("   ")
         viewModel.saveMemo()
-        advanceUntilIdle()
 
+        viewModel.uiState.first { !it.memoDirty && !it.editingMemo && it.run?.memo == null }
         assertThat(runs.getRun(runId)?.memo).isNull()
     }
 
@@ -224,7 +224,6 @@ class HistoryAndRunDetailTest {
         viewModel.uiState.first { !it.loading }
 
         viewModel.delete()
-        advanceUntilIdle()
 
         assertThat(viewModel.uiState.first { it.deleted }.deleted).isTrue()
         assertThat(runs.getRun(runId)).isNull()

@@ -14,6 +14,7 @@ datastore = "1.1.1"
 playServicesLocation = "21.3.0"
 healthConnect = "1.1.0-alpha07"
 kotlinxCoroutines = "1.9.0"
+kotlinxSerialization = "1.7.3"
 junit = "4.13.2"
 androidxJunit = "1.2.1"
 espresso = "3.6.1"
@@ -55,6 +56,7 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxJunit" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
@@ -69,3 +71,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

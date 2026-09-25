@@ -14,6 +14,8 @@ import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.domain.model.WorkoutSummary
 import kotlinx.coroutines.flow.Flow
+import java.io.InputStream
+import java.io.OutputStream
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -152,4 +154,41 @@ interface SettingsRepository {
     val settings: Flow<AppSettings>
     suspend fun current(): AppSettings
     suspend fun update(transform: (AppSettings) -> AppSettings)
+}
+
+/** 백업 파일 한 건의 내용 요약. 내보내기·복원 후 무엇이 오갔는지 알려 준다. */
+data class BackupSummary(
+    val createdAt: Long = 0,
+    val appVersion: String = "",
+    val routineCount: Int = 0,
+    val customExerciseCount: Int = 0,
+    val workoutCount: Int = 0,
+    val setCount: Int = 0,
+    val runCount: Int = 0,
+    /** 연결이 끊어져 버린 행 수. 정상 파일이면 0 이다. */
+    val droppedRows: Int = 0,
+)
+
+/** 백업 파일을 읽을 수 없을 때. 메시지는 그대로 사용자에게 보여 준다. */
+class BackupFormatException(message: String) : Exception(message)
+
+/**
+ * 기록 내보내기 / 가져오기.
+ *
+ * 서버가 없는 앱이라 기기를 바꾸거나 앱을 지우면 기록이 사라진다.
+ * 백업 파일이 유일한 복구 수단이다.
+ */
+interface BackupRepository {
+
+    /** 전체 기록을 JSON 으로 쓴다. */
+    suspend fun exportBackup(output: OutputStream): BackupSummary
+
+    /** 백업 파일을 읽어 기존 기록을 **전부 대체**한다. */
+    suspend fun restoreBackup(input: InputStream): BackupSummary
+
+    /** 헬스 기록을 세트 단위 CSV 로 쓴다. 반환값은 줄 수(머리글 제외). */
+    suspend fun exportWorkoutCsv(output: OutputStream): Int
+
+    /** 러닝 기록을 CSV 로 쓴다. 반환값은 줄 수(머리글 제외). */
+    suspend fun exportRunCsv(output: OutputStream): Int
 }
