@@ -1,5 +1,7 @@
 package com.windowhyun.health.data.backup
 
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Required
 import kotlinx.serialization.Serializable
 
 /**
@@ -12,12 +14,19 @@ import kotlinx.serialization.Serializable
  *    있는지가 id 로 이어져 있어서, 새로 번호를 매기면 연결이 끊어진다.
  * 2. 모든 필드에 기본값을 둔다. 옛 버전에서 만든 파일에 새 필드가 없어도
  *    읽을 수 있어야 한다.
+ *
+ * 단, [formatVersion] 과 [createdAt] 은 파일에 **반드시** 있어야 한다([Required]).
+ * 기본값만으로 읽히게 두면 `{}` 나 다른 앱의 JSON 도 "빈 백업"으로 읽혀서,
+ * 잘못 고른 파일 하나로 기록 전체가 지워진다.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class BackupFile(
     /** 형식 버전. 읽을 수 없는 미래 버전을 만나면 거절한다. */
+    @Required
     val formatVersion: Int = CURRENT_FORMAT_VERSION,
     /** 만든 시각(epoch millis). 복원 화면에서 "언제 백업" 인지 보여 준다. */
+    @Required
     val createdAt: Long = 0,
     /** 만든 앱 버전. 문제가 생겼을 때 어디서 나온 파일인지 알 수 있다. */
     val appVersion: String = "",

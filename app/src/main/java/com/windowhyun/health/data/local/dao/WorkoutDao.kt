@@ -1,6 +1,7 @@
 package com.windowhyun.health.data.local.dao
 
 import androidx.room.Dao
+import com.windowhyun.health.core.model.ExerciseTrackingType
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -105,6 +106,26 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_set WHERE id = :id")
     suspend fun getSet(id: Long): WorkoutSetEntity?
 
+    /** 이 세트가 속한 종목의 기록 방식. 쓰지 않는 칸을 비우는 데 쓴다. */
+    @Query(
+        """
+        SELECT e.trackingType FROM workout_set s
+        JOIN workout_exercise we ON s.workoutExerciseId = we.id
+        JOIN exercise e ON we.exerciseId = e.id
+        WHERE s.id = :setId
+        """,
+    )
+    suspend fun getTrackingTypeOfSet(setId: Long): ExerciseTrackingType?
+
+    @Query(
+        """
+        SELECT e.trackingType FROM workout_exercise we
+        JOIN exercise e ON we.exerciseId = e.id
+        WHERE we.id = :workoutExerciseId
+        """,
+    )
+    suspend fun getTrackingTypeOfWorkoutExercise(workoutExerciseId: Long): ExerciseTrackingType?
+
     @Query("SELECT * FROM workout_set WHERE workoutExerciseId = :workoutExerciseId ORDER BY setNumber")
     suspend fun getSets(workoutExerciseId: Long): List<WorkoutSetEntity>
 
@@ -166,4 +187,23 @@ interface WorkoutDao {
 
     @Query("SELECT DISTINCT we.exerciseId FROM workout_exercise we WHERE we.workoutId = :workoutId")
     suspend fun getExerciseIdsInWorkout(workoutId: Long): List<Long>
+
+    /** 세트가 속한 운동 기록과 종목. 끝난 기록을 고칠 때 PR 을 다시 계산하는 데 쓴다. */
+    @Query(
+        """
+        SELECT w.id AS workoutId, we.exerciseId AS exerciseId, w.endTime AS endTime
+        FROM workout_set s
+        JOIN workout_exercise we ON s.workoutExerciseId = we.id
+        JOIN workout w ON we.workoutId = w.id
+        WHERE s.id = :setId
+        """,
+    )
+    suspend fun getSetOwner(setId: Long): SetOwner?
+
+    @Query("SELECT id, endTime FROM workout WHERE id IN (:ids)")
+    suspend fun getEndTimes(ids: List<Long>): List<WorkoutEndTime>
 }
+
+data class SetOwner(val workoutId: Long, val exerciseId: Long, val endTime: Long?)
+
+data class WorkoutEndTime(val id: Long, val endTime: Long?)

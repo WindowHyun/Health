@@ -47,42 +47,46 @@ class RunRepositoryImpl @Inject constructor(
     }
 
     /**
-     * 러닝 1건을 통째로 저장한다. id 가 있으면 그 기록을 갈아 끼우므로,
-     * Lap 과 경로까지 채운 [run] 을 넘겨야 한다(빈 채로 넘기면 그만큼 지워진다).
+     * 러닝 1건을 저장한다.
+     *
+     * - 새 기록(id 0 이거나 DB 에 없는 id): 기록과 Lap·경로를 한 트랜잭션으로 넣는다.
+     * - 이미 있는 기록: 기록 행만 고친다. Lap·경로는 건드리지 않는다. 목록 조회로 받은
+     *   Run 에는 Lap·경로가 비어 있어서, 그대로 갈아 끼우면 경로가 통째로 사라진다.
      */
     override suspend fun saveRun(run: Run): Long {
-        val runId = runDao.insertRun(
-            RunEntity(
-                id = run.id,
-                date = run.date.toEpochDay(),
-                startTime = run.startTime,
-                endTime = run.endTime,
-                durationSeconds = run.durationSeconds,
-                distanceMeters = run.distanceMeters,
-                averagePaceSecPerKm = run.averagePaceSecPerKm,
-                bestPaceSecPerKm = run.bestPaceSecPerKm,
-                calories = run.calories,
-                steps = run.steps,
-                goalType = run.goalType.name,
-                goalValue = run.goalValue,
-                memo = run.memo,
-            ),
+        val entity = RunEntity(
+            id = run.id,
+            date = run.date.toEpochDay(),
+            startTime = run.startTime,
+            endTime = run.endTime,
+            durationSeconds = run.durationSeconds,
+            distanceMeters = run.distanceMeters,
+            averagePaceSecPerKm = run.averagePaceSecPerKm,
+            bestPaceSecPerKm = run.bestPaceSecPerKm,
+            calories = run.calories,
+            steps = run.steps,
+            goalType = run.goalType.name,
+            goalValue = run.goalValue,
+            memo = run.memo,
         )
-        runDao.insertLaps(
-            run.laps.map {
+        if (run.id != 0L && runDao.getRun(run.id) != null) {
+            runDao.updateRun(entity)
+            return run.id
+        }
+        return runDao.insertRunWithDetails(
+            run = entity,
+            laps = run.laps.map {
                 RunLapEntity(
-                    runId = runId,
+                    runId = 0,
                     lapNumber = it.lapNumber,
                     distanceMeters = it.distanceMeters,
                     durationSeconds = it.durationSeconds,
                     paceSecPerKm = it.paceSecPerKm,
                 )
             },
-        )
-        runDao.insertLocations(
-            run.route.map {
+            locations = run.route.map {
                 RunLocationEntity(
-                    runId = runId,
+                    runId = 0,
                     latitude = it.latitude,
                     longitude = it.longitude,
                     altitude = it.altitude,
@@ -91,7 +95,6 @@ class RunRepositoryImpl @Inject constructor(
                 )
             },
         )
-        return runId
     }
 
     override suspend fun updateMemo(runId: Long, memo: String?) {

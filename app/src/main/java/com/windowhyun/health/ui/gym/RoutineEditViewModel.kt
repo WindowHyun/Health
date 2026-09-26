@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
+import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.domain.model.Exercise
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.RoutineItem
@@ -89,12 +90,23 @@ class RoutineEditViewModel @Inject constructor(
     }
 
     /** 사전에 없는 종목을 즉석에서 만들어 바로 루틴에 넣는다. */
-    fun createAndAddExercise(name: String, category: ExerciseCategory, bodyPart: BodyPart) {
+    fun createAndAddExercise(
+        name: String,
+        category: ExerciseCategory,
+        bodyPart: BodyPart,
+        trackingType: ExerciseTrackingType,
+    ) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             val id = exerciseRepository.addExercise(
-                Exercise(id = 0, name = trimmed, category = category, bodyPart = bodyPart),
+                Exercise(
+                    id = 0,
+                    name = trimmed,
+                    category = category,
+                    bodyPart = bodyPart,
+                    trackingType = trackingType,
+                ),
             )
             exerciseRepository.getExercise(id)?.let { addExercise(it) }
         }

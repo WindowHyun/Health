@@ -180,8 +180,8 @@ fun WorkoutSessionScreen(
                 viewModel.addExercise(it.id)
                 showPicker = false
             },
-            onCreate = { name, category, bodyPart ->
-                viewModel.createAndAddExercise(name, category, bodyPart)
+            onCreate = { name, category, bodyPart, trackingType ->
+                viewModel.createAndAddExercise(name, category, bodyPart, trackingType)
                 showPicker = false
             },
             onDismiss = { showPicker = false },

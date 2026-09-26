@@ -37,39 +37,55 @@ class RoutineTemplateViewModel @Inject constructor(
     private val _applied = MutableSharedFlow<TemplateApplyResult>(extraBufferCapacity = 1)
     val applied = _applied.asSharedFlow()
 
+    /**
+     * 적용 중인지. 시트는 결과가 나와야 닫히므로, 그 사이 카드를 한 번 더 누르면
+     * 같은 루틴이 두 벌 만들어진다. 메인 스레드에서만 읽고 쓴다.
+     */
+    private var applying = false
+
     fun applyTemplate(template: RoutineTemplates.Template) {
+        if (applying) return
+        applying = true
         viewModelScope.launch {
-            val byName = exerciseRepository.observeExercises().first().associateBy { it.name }
-            val missing = mutableSetOf<String>()
-            val createdNames = mutableListOf<String>()
+            try {
+                apply(template)
+            } finally {
+                applying = false
+            }
+        }
+    }
 
-            template.days.forEach { day ->
-                val items = day.exercises.mapNotNull { (name, sets) ->
-                    val exercise = byName[name]
-                    if (exercise == null) {
-                        missing += name
-                        null
-                    } else {
-                        exercise to sets
-                    }
-                }.mapIndexed { index, (exercise, sets) ->
-                    RoutineItem(
-                        exercise = exercise,
-                        orderIndex = index,
-                        defaultSets = sets,
-                        restSeconds = exercise.defaultRestSeconds,
-                    )
-                }
+    private suspend fun apply(template: RoutineTemplates.Template) {
+        val byName = exerciseRepository.observeExercises().first().associateBy { it.name }
+        val missing = mutableSetOf<String>()
+        val createdNames = mutableListOf<String>()
 
-                if (items.isNotEmpty()) {
-                    routineRepository.saveRoutine(
-                        Routine(id = 0, name = day.routineName, items = items),
-                    )
-                    createdNames += day.routineName
+        template.days.forEach { day ->
+            val items = day.exercises.mapNotNull { (name, sets) ->
+                val exercise = byName[name]
+                if (exercise == null) {
+                    missing += name
+                    null
+                } else {
+                    exercise to sets
                 }
+            }.mapIndexed { index, (exercise, sets) ->
+                RoutineItem(
+                    exercise = exercise,
+                    orderIndex = index,
+                    defaultSets = sets,
+                    restSeconds = exercise.defaultRestSeconds,
+                )
             }
 
-            _applied.emit(TemplateApplyResult(template, createdNames, missing))
+            if (items.isNotEmpty()) {
+                routineRepository.saveRoutine(
+                    Routine(id = 0, name = day.routineName, items = items),
+                )
+                createdNames += day.routineName
+            }
         }
+
+        _applied.emit(TemplateApplyResult(template, createdNames, missing))
     }
 }

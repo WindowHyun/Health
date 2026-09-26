@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.model.ExerciseCategory
@@ -178,6 +179,7 @@ class BackupRepositoryTest {
     /** 설정도 백업에 들어간다. 단위를 다시 맞추게 하지 않는다. */
     @Test
     fun `restores settings`() = runTest(dispatcher) {
+        seedRecords()
         settings.update { it.copy(weightUnit = WeightUnit.LB, bodyWeightKg = 82.5) }
         val bytes = exportBytes()
         settings.update { it.copy(weightUnit = WeightUnit.KG, bodyWeightKg = 70.0) }
@@ -262,6 +264,7 @@ class BackupRepositoryTest {
     @Test
     fun `restores a file that contains orphan rows`() = runTest(dispatcher) {
         val file = BackupFile(
+            createdAt = 1,
             exercises = listOf(
                 BackupExercise(id = 1, name = "스쿼트", category = "BARBELL", bodyPart = "LEG"),
             ),
@@ -290,6 +293,100 @@ class BackupRepositoryTest {
         val restored = workouts.getWorkout(1)!!
         assertThat(restored.exercises).hasSize(1)
         assertThat(restored.totalVolume).isWithin(0.001).of(600.0)
+    }
+
+    /**
+     * 잘못 고른 파일로 기록이 지워지면 안 된다.
+     *
+     * 모든 필드에 기본값이 있어 `{}` 도 "빈 백업"으로 읽혔고, 복원은 전부 대체라서
+     * 기록이 통째로 사라졌다.
+     */
+    @Test
+    fun `rejects json that is not a backup and keeps the records`() = runTest(dispatcher) {
+        seedRecords()
+        val notBackups = listOf(
+            "{}",
+            """{"theme":"dark","fontSize":14}""",
+            """{"formatVersion":1}""",
+            """{"createdAt":1700000000000}""",
+        )
+
+        notBackups.forEach { text ->
+            val error = runCatching {
+                backup.restoreBackup(ByteArrayInputStream(text.toByteArray()))
+            }.exceptionOrNull()
+            assertWithMessage(text).that(error).isInstanceOf(BackupFormatException::class.java)
+        }
+
+        assertThat(db.backupDao().allWorkouts()).hasSize(1)
+        assertThat(db.backupDao().allRuns()).hasSize(1)
+        assertThat(db.backupDao().allExercises()).isNotEmpty()
+    }
+
+    /** 백업 표시는 있지만 기록이 하나도 없으면 복원하지 않는다. 지우기만 하고 끝나기 때문이다. */
+    @Test
+    fun `rejects a backup with no records`() = runTest(dispatcher) {
+        seedRecords()
+        val empty = """{"formatVersion":1,"createdAt":1700000000000}"""
+
+        val error = runCatching {
+            backup.restoreBackup(ByteArrayInputStream(empty.toByteArray()))
+        }.exceptionOrNull()
+
+        assertThat(error).isInstanceOf(BackupFormatException::class.java)
+        assertThat(db.backupDao().allWorkouts()).hasSize(1)
+    }
+
+    /** 없는 루틴을 가리키는 운동 기록은 루틴 연결만 끊고 살린다. */
+    @Test
+    fun `keeps a workout whose routine is missing`() = runTest(dispatcher) {
+        val file = BackupFile(
+            createdAt = 1,
+            exercises = listOf(
+                BackupExercise(id = 1, name = "스쿼트", category = "BARBELL", bodyPart = "LEG"),
+            ),
+            workouts = listOf(BackupWorkout(id = 1, routineId = 7, routineName = "하체", date = 20_000, startTime = 1_000)),
+            workoutExercises = listOf(BackupWorkoutExercise(id = 1, workoutId = 1, exerciseId = 1)),
+            workoutSets = listOf(
+                BackupWorkoutSet(id = 1, workoutExerciseId = 1, setNumber = 1, weightKg = 60.0, reps = 10, completed = true),
+            ),
+        )
+
+        backup.restoreBackup(ByteArrayInputStream(Json.encodeToString(BackupFile.serializer(), file).toByteArray()))
+
+        val restored = workouts.getWorkout(1)!!
+        assertThat(restored.routineId).isNull()
+        assertThat(restored.routineName).isEqualTo("하체") // 이름 스냅샷은 남는다
+        assertThat(restored.totalVolume).isWithin(0.001).of(600.0)
+    }
+
+    /** id 가 겹치거나 이름이 같은 종목이 있어도 복원이 통째로 실패하지 않는다. */
+    @Test
+    fun `survives duplicate ids and duplicate exercise names`() = runTest(dispatcher) {
+        val file = BackupFile(
+            createdAt = 1,
+            exercises = listOf(
+                BackupExercise(id = 1, name = "스쿼트", category = "BARBELL", bodyPart = "LEG"),
+                BackupExercise(id = 1, name = "스쿼트", category = "BARBELL", bodyPart = "LEG"),
+                // 이름만 같은 다른 id. 여기에 딸린 세트는 id 1 쪽으로 옮겨 살린다.
+                BackupExercise(id = 2, name = "스쿼트", category = "BARBELL", bodyPart = "LEG"),
+            ),
+            workouts = listOf(
+                BackupWorkout(id = 1, date = 20_000, startTime = 1_000),
+                BackupWorkout(id = 1, date = 20_000, startTime = 1_000),
+            ),
+            workoutExercises = listOf(BackupWorkoutExercise(id = 1, workoutId = 1, exerciseId = 2)),
+            workoutSets = listOf(
+                BackupWorkoutSet(id = 1, workoutExerciseId = 1, setNumber = 1, weightKg = 100.0, reps = 5, completed = true),
+            ),
+        )
+
+        backup.restoreBackup(ByteArrayInputStream(Json.encodeToString(BackupFile.serializer(), file).toByteArray()))
+
+        assertThat(db.backupDao().allExercises()).hasSize(1)
+        val restored = workouts.getWorkout(1)!!
+        assertThat(restored.exercises.single().exercise.name).isEqualTo("스쿼트")
+        assertThat(restored.totalVolume).isWithin(0.001).of(500.0)
     }
 
     /** 헬스 CSV 는 세트마다 한 줄이고, 쉼표가 든 값은 따옴표로 감싼다. */

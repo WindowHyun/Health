@@ -93,7 +93,7 @@ class BackupRepositoryImpl @Inject constructor(
             val file = try {
                 input.use { json.decodeFromStream<BackupFile>(it) }
             } catch (e: Exception) {
-                throw BackupFormatException("백업 파일을 읽을 수 없습니다. 이 앱에서 만든 파일인지 확인해 주세요.")
+                throw BackupFormatException(NOT_A_BACKUP)
             }
 
             if (file.formatVersion > BackupFile.CURRENT_FORMAT_VERSION) {
@@ -101,6 +101,14 @@ class BackupRepositoryImpl @Inject constructor(
                     "더 새로운 버전에서 만든 백업입니다(형식 v${file.formatVersion}). " +
                         "앱을 업데이트한 뒤 다시 시도해 주세요.",
                 )
+            }
+            if (file.formatVersion < 1 || file.createdAt <= 0) {
+                throw BackupFormatException(NOT_A_BACKUP)
+            }
+            // 복원은 전부 대체라서, 내용이 없는 파일을 받아들이면 기록만 지우고 끝난다.
+            // 이 앱이 만든 백업에는 적어도 기본 종목이 들어 있다.
+            if (file.exercises.isEmpty() && file.workouts.isEmpty() && file.runs.isEmpty()) {
+                throw BackupFormatException("백업 파일에 기록이 하나도 없습니다. 복원하지 않았습니다.")
             }
 
             val clean = file.dropOrphans()
@@ -214,6 +222,8 @@ class BackupRepositoryImpl @Inject constructor(
 
 /** 엑셀은 BOM 이 없으면 CSV 를 UTF-8 로 열지 않아 한글이 깨진다. */
 private const val BOM = "\uFEFF"
+
+private const val NOT_A_BACKUP = "백업 파일을 읽을 수 없습니다. 이 앱에서 만든 파일인지 확인해 주세요."
 
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -367,34 +377,63 @@ private fun BackupRunLocation.toEntity() =
 // ----- 파일 검사 -----
 
 /**
- * 부모가 없는 행을 버린다.
+ * 파일을 DB 제약에 맞게 다듬는다.
  *
- * 파일이 손상되었거나 손으로 고친 경우 외래키 제약에 걸려 복원 전체가 실패한다.
- * 그러면 멀쩡한 기록까지 못 살리므로, 끊어진 행만 빼고 나머지를 살린다.
+ * 파일이 손상되었거나 손으로 고친 경우, 제약 하나만 어겨도 복원 트랜잭션 전체가
+ * 되돌아가서 멀쩡한 기록까지 못 살린다. 그래서 넣기 전에 걸러 둔다.
+ *
+ * - 같은 id 가 두 번 나오면 처음 것만 남긴다(기본키).
+ * - 이름이 같은 종목은 하나로 합치고, 그 종목을 가리키던 행은 남긴 쪽으로 옮긴다
+ *   (종목 이름은 UNIQUE). 버리면 거기에 딸린 세트까지 사라진다.
+ * - 없는 루틴을 가리키는 운동 기록은 루틴 연결만 끊는다. 루틴을 지웠을 때와 같다.
+ * - 그 밖에 부모가 없는 행은 버린다.
  */
 internal fun BackupFile.dropOrphans(): BackupFile {
-    val exerciseIds = exercises.map { it.id }.toSet()
+    val uniqueExercises = exercises.distinctBy { it.id }
+    val keptByName = uniqueExercises.distinctBy { it.name }
+    val canonicalIdByName = keptByName.associate { it.name to it.id }
+    // 이름이 겹쳐 빠진 종목의 id -> 남긴 종목의 id
+    val exerciseIdMap = uniqueExercises.associate { it.id to canonicalIdByName.getValue(it.name) }
+    fun Long.exercise(): Long? = exerciseIdMap[this]
+
+    val routines = routines.distinctBy { it.id }
+    val workouts = workouts.distinctBy { it.id }
+    val runs = runs.distinctBy { it.id }
     val routineIds = routines.map { it.id }.toSet()
     val workoutIds = workouts.map { it.id }.toSet()
     val runIds = runs.map { it.id }.toSet()
 
-    val keptRoutineExercises = routineExercises.filter {
-        it.routineId in routineIds && it.exerciseId in exerciseIds
+    val keptRoutineExercises = routineExercises.distinctBy { it.id }.mapNotNull { row ->
+        val exerciseId = row.exerciseId.exercise() ?: return@mapNotNull null
+        row.copy(exerciseId = exerciseId).takeIf { it.routineId in routineIds }
     }
-    val keptWorkoutExercises = workoutExercises.filter {
-        it.workoutId in workoutIds && it.exerciseId in exerciseIds
+    val keptWorkoutExercises = workoutExercises.distinctBy { it.id }.mapNotNull { row ->
+        val exerciseId = row.exerciseId.exercise() ?: return@mapNotNull null
+        row.copy(exerciseId = exerciseId).takeIf { it.workoutId in workoutIds }
     }
     val workoutExerciseIds = keptWorkoutExercises.map { it.id }.toSet()
 
     return copy(
+        exercises = keptByName,
+        routines = routines,
         routineExercises = keptRoutineExercises,
-        workoutExercises = keptWorkoutExercises,
-        workoutSets = workoutSets.filter { it.workoutExerciseId in workoutExerciseIds },
-        personalRecords = personalRecords.filter {
-            it.workoutId in workoutIds && it.exerciseId in exerciseIds
+        workouts = workouts.map { workout ->
+            if (workout.routineId != null && workout.routineId !in routineIds) {
+                workout.copy(routineId = null)
+            } else {
+                workout
+            }
         },
-        runLaps = runLaps.filter { it.runId in runIds },
-        runLocations = runLocations.filter { it.runId in runIds },
+        workoutExercises = keptWorkoutExercises,
+        workoutSets = workoutSets.distinctBy { it.id }
+            .filter { it.workoutExerciseId in workoutExerciseIds },
+        personalRecords = personalRecords.distinctBy { it.id }.mapNotNull { row ->
+            val exerciseId = row.exerciseId.exercise() ?: return@mapNotNull null
+            row.copy(exerciseId = exerciseId).takeIf { it.workoutId in workoutIds }
+        },
+        runs = runs,
+        runLaps = runLaps.distinctBy { it.id }.filter { it.runId in runIds },
+        runLocations = runLocations.distinctBy { it.id }.filter { it.runId in runIds },
     )
 }
 

@@ -3,6 +3,14 @@ package com.windowhyun.health.ui
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.windowhyun.health.domain.model.RunLap
+import com.windowhyun.health.domain.model.RunPoint
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.joinAll
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -46,6 +54,10 @@ import java.time.LocalDate
 class HistoryAndRunDetailTest {
 
     private val dispatcher = StandardTestDispatcher()
+
+    /** 앱 수명 스코프 대역. 테스트에서 이 안의 작업이 끝나길 기다릴 수 있게 Job 을 따로 둔다. */
+    private val appJob = SupervisorJob()
+    private val appScope = CoroutineScope(dispatcher + appJob)
 
     private lateinit var db: HealthDatabase
     private lateinit var workouts: WorkoutRepository
@@ -155,6 +167,7 @@ class HistoryAndRunDetailTest {
         runRepository = runs,
         settingsRepository = settings,
         savedStateHandle = SavedStateHandle(mapOf(Routes.ARG_RUN_ID to runId)),
+        appScope = appScope,
     )
 
     /** 저장된 러닝을 id 로 열 수 있어야 한다. */
@@ -199,6 +212,30 @@ class HistoryAndRunDetailTest {
         // Room 은 자기 스레드에서 쓰므로, 저장이 끝난 뒤 상태가 바뀌는 것을 기다린다.
         viewModel.uiState.first { !it.memoDirty && it.run?.memo == "저장 안 누름" }
         assertThat(runs.getRun(runId)?.memo).isEqualTo("저장 안 누름")
+    }
+
+    /**
+     * 뒤로 가기로 화면이 사라져도 쓰던 메모는 저장된다.
+     *
+     * 뒤로 가면 ViewModel 이 정리되며 viewModelScope 가 취소된다. 저장을 그 스코프에서
+     * 하면 DB 에 쓰기 전에 끊겨 메모가 사라진다.
+     */
+    @Test
+    fun `saves a pending memo when the screen is closed`() = runTest(dispatcher) {
+        val runId = finishRun(distanceMeters = 5_000.0, minutesAgo = 10)
+        val store = ViewModelStore()
+        val viewModel = ViewModelProvider.create(
+            store,
+            viewModelFactory { initializer { runDetailViewModel(runId) } },
+        )[RunDetailViewModel::class]
+        viewModel.uiState.first { !it.loading }
+
+        viewModel.setMemo("뒤로 가기 전에 씀")
+        // 뒤로 가기와 같다: ViewModel 정리 -> viewModelScope 취소 -> onCleared
+        store.clear()
+        appJob.children.toList().joinAll()
+
+        assertThat(runs.getRun(runId)?.memo).isEqualTo("뒤로 가기 전에 씀")
     }
 
     /** 빈 메모는 null 로 지운다. 목록에 빈 따옴표가 뜨지 않게 한다. */
@@ -251,6 +288,26 @@ class HistoryAndRunDetailTest {
         assertThat(sameId).isEqualTo(runId)
         assertThat(runs.getRun(runId)?.distanceMeters).isWithin(0.001).of(6_000.0)
         assertThat(historyViewModel().uiState.first { !it.loading }.entries).hasSize(1)
+    }
+
+    /**
+     * Lap·경로 없이 받은 러닝(목록 조회 결과)을 저장해도 경로가 지워지면 안 된다.
+     * 행을 갈아 끼우는 방식이면 CASCADE 로 Lap 과 GPS 경로가 함께 사라진다.
+     */
+    @Test
+    fun `saving a run keeps its laps and route`() = runTest(dispatcher) {
+        val runId = finishRun(distanceMeters = 5_000.0, minutesAgo = 10)
+        runs.appendLap(runId, RunLap(lapNumber = 1, distanceMeters = 1_000.0, durationSeconds = 300, paceSecPerKm = 300.0))
+        runs.appendRoutePoints(runId, listOf(RunPoint(latitude = 37.5, longitude = 127.0, timestamp = 1)))
+
+        val fromList = runs.observeRecentRuns(10).first().single()
+        assertThat(fromList.laps).isEmpty() // 목록 조회는 Lap 을 싣지 않는다
+        runs.saveRun(fromList.copy(memo = "목록에서 고침"))
+
+        val stored = runs.getRun(runId)!!
+        assertThat(stored.memo).isEqualTo("목록에서 고침")
+        assertThat(stored.laps).hasSize(1)
+        assertThat(stored.route).hasSize(1)
     }
 
     /** 1년이 넘은 기록은 목록 범위 밖이다. */

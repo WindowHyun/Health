@@ -2,7 +2,6 @@ package com.windowhyun.health.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -15,9 +14,23 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface RunDao {
 
-    /** id 가 0 이면 새로 넣고, 이미 있는 id 면 그 행을 갈아 끼운다(복원·수정용). */
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    // REPLACE 를 쓰지 않는다. 기존 행을 지우고 넣는 방식이라 CASCADE 로 Lap 과
+    // GPS 경로가 함께 지워진다.
+    @Insert
     suspend fun insertRun(run: RunEntity): Long
+
+    /** 러닝과 Lap·경로를 한 번에 넣는다. 중간에 실패하면 아무것도 남지 않는다. */
+    @Transaction
+    suspend fun insertRunWithDetails(
+        run: RunEntity,
+        laps: List<RunLapEntity>,
+        locations: List<RunLocationEntity>,
+    ): Long {
+        val runId = insertRun(run)
+        insertLaps(laps.map { it.copy(runId = runId) })
+        insertLocations(locations.map { it.copy(runId = runId) })
+        return runId
+    }
 
     @Update
     suspend fun updateRun(run: RunEntity)

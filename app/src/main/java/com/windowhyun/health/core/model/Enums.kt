@@ -62,8 +62,18 @@ enum class SetType(val label: String, val shortLabel: String) {
     /** 집계에 넣는 세트인가. */
     val countsTowardVolume: Boolean get() = this != WARMUP
 
-    /** 화면에서 눌렀을 때 넘어갈 다음 종류. */
-    fun next(): SetType = entries[(ordinal + 1) % entries.size]
+    /**
+     * 세트 번호를 눌렀을 때 넘어갈 다음 종류: 본세트 → 워밍업 → 드롭 → 실패 → 본세트.
+     *
+     * 선언 순서를 따르면 본세트 다음이 드롭이 되어, 가장 흔한 "워밍업 표시"에
+     * 세 번을 눌러야 한다. 그래서 순서를 따로 적는다.
+     */
+    fun next(): SetType = when (this) {
+        NORMAL -> WARMUP
+        WARMUP -> DROP
+        DROP -> FAILURE
+        FAILURE -> NORMAL
+    }
 }
 
 /**

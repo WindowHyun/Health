@@ -3,12 +3,14 @@ package com.windowhyun.health.ui.running
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.windowhyun.health.di.ApplicationScope
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Run
 import com.windowhyun.health.domain.repository.RunRepository
 import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +41,11 @@ class RunDetailViewModel @Inject constructor(
     private val runRepository: RunRepository,
     settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle,
+    /**
+     * 메모 저장은 화면을 벗어나는 순간에도 끝까지 가야 한다. viewModelScope 는
+     * 뒤로 가기와 함께 취소되므로, 쓰기는 앱 수명의 스코프에서 한다.
+     */
+    @ApplicationScope private val appScope: CoroutineScope,
 ) : ViewModel() {
 
     private val runId: Long = savedStateHandle[Routes.ARG_RUN_ID] ?: 0L
@@ -77,22 +84,26 @@ class RunDetailViewModel @Inject constructor(
     fun saveMemo() {
         val state = local.value
         val run = state.run ?: return
-        if (!state.memoDirty) {
-            local.update { it.copy(editingMemo = false) }
-            return
-        }
-        viewModelScope.launch {
-            val memo = state.memo.takeIf { it.isNotBlank() }
+        // 먼저 "저장함"으로 표시해 둔다. 화면을 벗어날 때 onDispose 와 onCleared 가
+        // 연달아 불려도 두 번 쓰지 않는다.
+        local.update { it.copy(memoDirty = false, editingMemo = false) }
+        if (!state.memoDirty) return
+
+        val memo = state.memo.takeIf { it.isNotBlank() }
+        appScope.launch {
             runRepository.updateMemo(run.id, memo)
-            local.update {
-                it.copy(run = run.copy(memo = memo), memoDirty = false, editingMemo = false)
-            }
+            local.update { it.copy(run = it.run?.copy(memo = memo)) }
         }
     }
 
     /** 화면을 벗어날 때 쓰던 메모를 잃지 않도록 조용히 저장한다. */
     fun saveMemoIfNeeded() {
         if (local.value.memoDirty) saveMemo()
+    }
+
+    /** 뒤로 가기로 화면이 사라질 때의 마지막 기회. */
+    override fun onCleared() {
+        saveMemoIfNeeded()
     }
 
     fun delete() {

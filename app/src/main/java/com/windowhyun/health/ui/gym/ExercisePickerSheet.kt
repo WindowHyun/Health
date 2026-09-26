@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
+import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.domain.model.Exercise
 
 /**
@@ -43,7 +44,7 @@ import com.windowhyun.health.domain.model.Exercise
 fun ExercisePickerSheet(
     exercises: List<Exercise>,
     onPick: (Exercise) -> Unit,
-    onCreate: (String, ExerciseCategory, BodyPart) -> Unit,
+    onCreate: (String, ExerciseCategory, BodyPart, ExerciseTrackingType) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -53,6 +54,7 @@ fun ExercisePickerSheet(
     var newName by remember { mutableStateOf("") }
     var newCategory by remember { mutableStateOf(ExerciseCategory.BARBELL) }
     var newBodyPart by remember { mutableStateOf(BodyPart.CHEST) }
+    var newTrackingType by remember { mutableStateOf(ExerciseTrackingType.WEIGHT_REPS) }
 
     val filtered = exercises.filter { exercise ->
         (bodyPartFilter == null || exercise.bodyPart == bodyPartFilter) &&
@@ -123,10 +125,21 @@ fun ExercisePickerSheet(
                             )
                         }
                     }
+                    // 플랭크·월싯 같은 시간 운동, 맨몸 운동을 직접 만들 수 있게 한다.
+                    Text("기록 방식", style = MaterialTheme.typography.labelLarge)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(ExerciseTrackingType.entries) { type ->
+                            FilterChip(
+                                selected = newTrackingType == type,
+                                onClick = { newTrackingType = type },
+                                label = { Text(type.label) },
+                            )
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
-                                onCreate(newName, newCategory, newBodyPart)
+                                onCreate(newName, newCategory, newBodyPart, newTrackingType)
                                 newName = ""
                                 creating = false
                             },

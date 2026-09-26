@@ -154,4 +154,28 @@ class RoutineTemplateTest {
         val ids = RoutineTemplates.all.map { it.id }
         assertThat(ids).containsNoDuplicates()
     }
+
+    /** 카드를 빠르게 두 번 눌러도 루틴은 한 벌만 생긴다. */
+    @Test
+    fun `a double tap creates the routines only once`() = runTest(dispatcher) {
+        val template = RoutineTemplates.all.first { it.id == "5x5" }
+
+        viewModel.applyTemplate(template)
+        viewModel.applyTemplate(template)
+        viewModel.applied.first()
+
+        val names = routines.observeRoutines().first().map { it.name }
+        assertThat(names).containsExactly("5x5 A", "5x5 B")
+    }
+
+    /** 적용이 끝나면 다른 템플릿을 다시 고를 수 있어야 한다(가드가 풀린다). */
+    @Test
+    fun `can apply another template after the first finishes`() = runTest(dispatcher) {
+        viewModel.applyTemplate(RoutineTemplates.all.first { it.id == "5x5" })
+        viewModel.applied.first()
+        viewModel.applyTemplate(RoutineTemplates.all.first { it.id == "upper_lower" })
+        viewModel.applied.first()
+
+        assertThat(routines.observeRoutines().first()).hasSize(4)
+    }
 }

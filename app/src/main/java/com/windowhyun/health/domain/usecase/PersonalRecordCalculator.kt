@@ -69,6 +69,38 @@ object PersonalRecordCalculator {
         )
     }
 
+    /**
+     * 한 종목의 이력 전체를 처음부터 다시 훑어, 각 운동 기록이 그 시점에 세운 PR 을 구한다.
+     *
+     * 끝난 기록을 고치면(워밍업으로 바꾸기, 중량 수정, 세트 삭제) 그 기록의 PR 만 틀리는
+     * 게 아니다. 잘못된 값이 기준이 되어 뒤에 세운 PR 이 막혔을 수도 있다. 그래서 한
+     * 기록만 고치지 않고 종목 전체를 다시 계산한다.
+     *
+     * [history] 는 시작 시각 순이어야 한다([com.windowhyun.health.data.local.dao.WorkoutDao.getCompletedSetHistory]).
+     * 반환: 운동 기록 id -> 그 기록에서 새로 세운 PR (PR 이 없는 기록은 빠진다).
+     */
+    fun replay(
+        history: List<ExerciseSetHistory>,
+        exerciseId: Long,
+        exerciseName: String,
+        trackingType: ExerciseTrackingType,
+    ): List<Pair<Long, List<PersonalRecord>>> {
+        val result = mutableListOf<Pair<Long, List<PersonalRecord>>>()
+        val before = mutableListOf<ExerciseSetHistory>()
+        history.groupBy { it.workoutId }.forEach { (workoutId, rows) ->
+            val records = newRecords(
+                exerciseId = exerciseId,
+                exerciseName = exerciseName,
+                previous = fromHistory(before),
+                session = fromHistory(rows),
+                trackingType = trackingType,
+            )
+            if (records.isNotEmpty()) result += workoutId to records
+            before += rows
+        }
+        return result
+    }
+
     /** 이번 세션에서 그 종목으로 세운 기록을 계산한다. */
     fun fromSession(sets: List<WorkoutSet>): Bests {
         // 워밍업은 집계에서 뺀다(WorkoutSet.counts).
@@ -170,20 +202,48 @@ object PersonalRecordCalculator {
         exerciseId: Long,
         exerciseName: String,
         bests: Bests,
+        trackingType: ExerciseTrackingType = ExerciseTrackingType.WEIGHT_REPS,
     ): List<PersonalRecord> {
         if (bests.isEmpty) return emptyList()
-        return listOf(
-            PersonalRecord(exerciseId, exerciseName, PersonalRecordType.MAX_WEIGHT, bests.maxWeightKg, null),
-            PersonalRecord(exerciseId, exerciseName, PersonalRecordType.MAX_VOLUME, bests.maxSessionVolumeKg, null),
-            PersonalRecord(
-                exerciseId = exerciseId,
-                exerciseName = exerciseName,
-                type = PersonalRecordType.MAX_ESTIMATED_ONE_RM,
-                value = bests.maxOneRepMaxKg,
-                previousValue = null,
-                reps = bests.bestReps,
-                weightKg = bests.bestWeightKg,
-            ),
-        )
+        // newRecords 와 같은 규칙: 기록 방식마다 의미 있는 지표만 보여 준다.
+        return when (trackingType) {
+            ExerciseTrackingType.TIME -> listOfNotNull(
+                bests.maxDurationSeconds.takeIf { it > 0 }?.let {
+                    PersonalRecord(exerciseId, exerciseName, PersonalRecordType.MAX_DURATION, it.toDouble(), null)
+                },
+            )
+
+            ExerciseTrackingType.REPS_ONLY -> listOfNotNull(
+                bests.maxReps.takeIf { it > 0 }?.let {
+                    PersonalRecord(
+                        exerciseId = exerciseId,
+                        exerciseName = exerciseName,
+                        type = PersonalRecordType.MAX_REPS,
+                        value = it.toDouble(),
+                        previousValue = null,
+                        reps = it,
+                    )
+                },
+            )
+
+            ExerciseTrackingType.WEIGHT_REPS -> {
+                if (bests.maxWeightKg <= 0.0) return emptyList()
+                listOf(
+                    PersonalRecord(exerciseId, exerciseName, PersonalRecordType.MAX_WEIGHT, bests.maxWeightKg, null),
+                    PersonalRecord(
+                        exerciseId, exerciseName, PersonalRecordType.MAX_VOLUME, bests.maxSessionVolumeKg, null,
+                    ),
+                    PersonalRecord(
+                        exerciseId = exerciseId,
+                        exerciseName = exerciseName,
+                        type = PersonalRecordType.MAX_ESTIMATED_ONE_RM,
+                        value = bests.maxOneRepMaxKg,
+                        previousValue = null,
+                        reps = bests.bestReps,
+                        weightKg = bests.bestWeightKg,
+                    ),
+                )
+            }
+        }
     }
 }

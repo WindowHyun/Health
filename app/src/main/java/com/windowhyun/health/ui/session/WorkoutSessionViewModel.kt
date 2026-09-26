@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
+import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.core.notification.RestTimerNotifier
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Exercise
@@ -175,7 +176,12 @@ class WorkoutSessionViewModel @Inject constructor(
     }
 
     /** 사전에 없는 종목을 즉석에서 만들어 이번 세션에 바로 넣는다. */
-    fun createAndAddExercise(name: String, category: ExerciseCategory, bodyPart: BodyPart) {
+    fun createAndAddExercise(
+        name: String,
+        category: ExerciseCategory,
+        bodyPart: BodyPart,
+        trackingType: ExerciseTrackingType,
+    ) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
@@ -185,6 +191,7 @@ class WorkoutSessionViewModel @Inject constructor(
                     name = trimmed,
                     category = category,
                     bodyPart = bodyPart,
+                    trackingType = trackingType,
                 ),
             )
             workoutRepository.addExerciseToWorkout(workoutId, exerciseId)

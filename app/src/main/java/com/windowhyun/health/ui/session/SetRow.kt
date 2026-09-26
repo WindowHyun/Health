@@ -65,13 +65,17 @@ fun SetRow(
         mutableStateOf(formatWeightValue(weightUnit.fromKg(set.weightKg)))
     }
     var repsText by remember(set.id) { mutableStateOf(if (set.reps > 0) set.reps.toString() else "") }
-    var durationText by remember(set.id) {
-        mutableStateOf(if (set.durationSeconds > 0) set.durationSeconds.toString() else "")
+    // 시간은 분과 초를 따로 받는다. 숫자 키패드에는 ':' 이 없어서 "1:30" 을 칠 수 없다.
+    var minutesText by remember(set.id) {
+        mutableStateOf(if (set.durationSeconds >= 60) (set.durationSeconds / 60).toString() else "")
+    }
+    var secondsText by remember(set.id) {
+        mutableStateOf(if (set.durationSeconds > 0) (set.durationSeconds % 60).toString() else "")
     }
 
     fun weightKg() = weightText.toDoubleOrNull()?.let { weightUnit.toKg(it) } ?: 0.0
     fun reps() = repsText.toIntOrNull() ?: 0
-    fun duration() = durationText.toIntOrNull() ?: 0
+    fun duration() = durationSecondsOf(minutesText, secondsText)
 
     val isWarmup = set.setType == SetType.WARMUP
     val background = when {
@@ -130,16 +134,28 @@ fun SetRow(
                 modifier = Modifier.weight(2f),
             )
 
-            ExerciseTrackingType.TIME -> NumberField(
-                value = durationText,
-                onValueChange = {
-                    durationText = it.filter { ch -> ch.isDigit() }
-                    onValuesChange(weightKg(), reps(), duration())
-                },
-                suffix = "초",
-                label = "${set.setNumber}세트 시간",
-                modifier = Modifier.weight(2f),
-            )
+            ExerciseTrackingType.TIME -> {
+                NumberField(
+                    value = minutesText,
+                    onValueChange = {
+                        minutesText = it.filter { ch -> ch.isDigit() }.take(3)
+                        onValuesChange(weightKg(), reps(), duration())
+                    },
+                    suffix = "분",
+                    label = "${set.setNumber}세트 시간(분)",
+                    modifier = Modifier.weight(1f),
+                )
+                NumberField(
+                    value = secondsText,
+                    onValueChange = {
+                        secondsText = it.filter { ch -> ch.isDigit() }.take(4)
+                        onValuesChange(weightKg(), reps(), duration())
+                    },
+                    suffix = "초",
+                    label = "${set.setNumber}세트 시간(초)",
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         FilledIconButton(
@@ -228,4 +244,14 @@ private fun NumberField(
         suffix = { Text(suffix, style = MaterialTheme.typography.labelMedium) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
+}
+
+/**
+ * 분·초 입력을 초로 바꾼다. 초 칸에 90 처럼 60 이상을 넣어도 그대로 더한다
+ * (1분 30초로 읽는 편이 되묻는 것보다 운동 중에 덜 번거롭다).
+ */
+internal fun durationSecondsOf(minutesText: String, secondsText: String): Int {
+    val minutes = minutesText.toIntOrNull() ?: 0
+    val seconds = secondsText.toIntOrNull() ?: 0
+    return minutes * 60 + seconds
 }

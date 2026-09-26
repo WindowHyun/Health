@@ -165,8 +165,8 @@ fun RoutineEditScreen(
                 viewModel.addExercise(it)
                 showPicker = false
             },
-            onCreate = { name, category, bodyPart ->
-                viewModel.createAndAddExercise(name, category, bodyPart)
+            onCreate = { name, category, bodyPart, trackingType ->
+                viewModel.createAndAddExercise(name, category, bodyPart, trackingType)
                 showPicker = false
             },
             onDismiss = { showPicker = false },
