@@ -8,6 +8,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.windowhyun.health.ui.exercise.ExerciseDetailScreen
 import com.windowhyun.health.ui.gym.RoutineEditScreen
 import com.windowhyun.health.ui.gym.RoutineListScreen
 import com.windowhyun.health.ui.history.HistoryScreen
@@ -89,6 +90,7 @@ fun HealthNavHost(
             HistoryScreen(
                 onOpenWorkout = { workoutId -> navController.navigate(Routes.workoutDetail(workoutId)) },
                 onOpenRun = { runId -> navController.navigate(Routes.runDetail(runId)) },
+                onOpenExercise = { exerciseId -> navController.navigate(Routes.exerciseDetail(exerciseId)) },
             )
         }
 
@@ -132,7 +134,20 @@ fun HealthNavHost(
             route = "${Routes.WORKOUT_DETAIL}/{${Routes.ARG_WORKOUT_ID}}",
             arguments = listOf(navArgument(Routes.ARG_WORKOUT_ID) { type = NavType.LongType }),
         ) {
-            WorkoutDetailScreen(onBack = { navController.popBackStack() })
+            WorkoutDetailScreen(
+                onBack = { navController.popBackStack() },
+                onOpenExercise = { exerciseId -> navController.navigate(Routes.exerciseDetail(exerciseId)) },
+            )
+        }
+
+        composable(
+            route = "${Routes.EXERCISE_DETAIL}/{${Routes.ARG_EXERCISE_ID}}",
+            arguments = listOf(navArgument(Routes.ARG_EXERCISE_ID) { type = NavType.LongType }),
+        ) {
+            ExerciseDetailScreen(
+                onBack = { navController.popBackStack() },
+                onOpenWorkout = { workoutId -> navController.navigate(Routes.workoutDetail(workoutId)) },
+            )
         }
 
         composable(

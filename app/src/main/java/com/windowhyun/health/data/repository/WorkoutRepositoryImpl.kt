@@ -1,9 +1,9 @@
 package com.windowhyun.health.data.repository
 
-import com.windowhyun.health.core.model.PersonalRecord
 import com.windowhyun.health.core.model.ExerciseTrackingType
-import com.windowhyun.health.core.model.SetType
+import com.windowhyun.health.core.model.PersonalRecord
 import com.windowhyun.health.core.model.PersonalRecordType
+import com.windowhyun.health.core.model.SetType
 import com.windowhyun.health.data.local.dao.ExerciseDao
 import com.windowhyun.health.data.local.dao.PersonalRecordDao
 import com.windowhyun.health.data.local.dao.RoutineDao
@@ -14,15 +14,18 @@ import com.windowhyun.health.data.local.entity.WorkoutEntity
 import com.windowhyun.health.data.local.entity.WorkoutExerciseEntity
 import com.windowhyun.health.data.local.entity.WorkoutSetEntity
 import com.windowhyun.health.data.mapper.toDomain
+import com.windowhyun.health.domain.model.ExerciseHistorySummary
+import com.windowhyun.health.domain.model.ExerciseSession
 import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.domain.model.WorkoutSummary
 import com.windowhyun.health.domain.repository.WorkoutRepository
 import com.windowhyun.health.domain.usecase.PersonalRecordCalculator
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.flow.map
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
@@ -360,6 +363,45 @@ class WorkoutRepositoryImpl @Inject constructor(
                     previousValue = row.previousValue,
                     reps = row.reps,
                     weightKg = row.weightKg,
+                )
+            }
+        }
+
+    override fun observeExerciseHistory(exerciseId: Long): Flow<List<ExerciseSession>> =
+        workoutDao.observeExerciseHistory(exerciseId).map { rows ->
+            // 쿼리가 최신순으로 주므로 groupBy 의 순서(처음 나온 순)가 곧 최신순이다.
+            rows.groupBy { it.workoutId }.map { (workoutId, sets) ->
+                val first = sets.first()
+                ExerciseSession(
+                    workoutId = workoutId,
+                    date = LocalDate.ofEpochDay(first.date),
+                    startTime = first.startTime,
+                    routineName = first.routineName,
+                    sets = sets.map { row ->
+                        WorkoutSet(
+                            id = row.setId,
+                            setNumber = row.setNumber,
+                            weightKg = row.weightKg,
+                            reps = row.reps,
+                            completed = true,
+                            durationSeconds = row.durationSeconds,
+                            setType = row.setType,
+                        )
+                    },
+                )
+            }
+        }
+
+    override fun observeExercisesWithHistory(): Flow<List<ExerciseHistorySummary>> =
+        workoutDao.observeExercisesWithHistory().map { rows ->
+            rows.map { row ->
+                ExerciseHistorySummary(
+                    exerciseId = row.exerciseId,
+                    name = row.name,
+                    bodyPart = row.bodyPart,
+                    trackingType = row.trackingType,
+                    sessionCount = row.sessionCount,
+                    lastDate = Instant.ofEpochMilli(row.lastStartTime).atZone(zone).toLocalDate(),
                 )
             }
         }

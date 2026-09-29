@@ -39,6 +39,11 @@ object Routes {
     const val RUN_DETAIL = "run_detail"
     const val ARG_RUN_ID = "runId"
     fun runDetail(runId: Long) = "$RUN_DETAIL/$runId"
+
+    /** 종목 하나의 성장 그래프 · 전체 기록. */
+    const val EXERCISE_DETAIL = "exercise_detail"
+    const val ARG_EXERCISE_ID = "exerciseId"
+    fun exerciseDetail(exerciseId: Long) = "$EXERCISE_DETAIL/$exerciseId"
 }
 
 /** 하단 네비게이션 탭. 설정은 홈 우측 상단 버튼으로만 접근한다. */

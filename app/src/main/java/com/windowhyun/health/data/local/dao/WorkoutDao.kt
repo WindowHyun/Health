@@ -1,16 +1,18 @@
 package com.windowhyun.health.data.local.dao
 
 import androidx.room.Dao
-import com.windowhyun.health.core.model.ExerciseTrackingType
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.data.local.entity.WorkoutEntity
 import com.windowhyun.health.data.local.entity.WorkoutExerciseEntity
 import com.windowhyun.health.data.local.entity.WorkoutSetEntity
+import com.windowhyun.health.data.local.relation.ExerciseHistorySetRow
+import com.windowhyun.health.data.local.relation.ExerciseHistorySummaryRow
 import com.windowhyun.health.data.local.relation.ExerciseSetHistory
 import com.windowhyun.health.data.local.relation.WorkoutWithDetail
 import kotlinx.coroutines.flow.Flow
@@ -184,6 +186,39 @@ interface WorkoutDao {
         """,
     )
     suspend fun getCompletedSetHistory(exerciseId: Long): List<ExerciseSetHistory>
+
+    /** 종목별 전체 이력. 워밍업도 함께 가져와 화면에서 구분해 보여 준다. */
+    @Query(
+        """
+        SELECT w.id AS workoutId, w.date AS date, w.startTime AS startTime,
+               w.routineName AS routineName, s.id AS setId, s.setNumber AS setNumber,
+               s.weightKg AS weightKg, s.reps AS reps, s.durationSeconds AS durationSeconds,
+               s.setType AS setType
+        FROM workout_set s
+        JOIN workout_exercise we ON we.id = s.workoutExerciseId
+        JOIN workout w ON w.id = we.workoutId
+        WHERE we.exerciseId = :exerciseId AND s.completed = 1 AND w.endTime IS NOT NULL
+        ORDER BY w.startTime DESC, we.orderIndex, s.setNumber
+        """,
+    )
+    fun observeExerciseHistory(exerciseId: Long): Flow<List<ExerciseHistorySetRow>>
+
+    /** 끝난 운동에서 한 세트라도 완료한 종목. 최근에 한 종목이 위로 온다. */
+    @Query(
+        """
+        SELECT e.id AS exerciseId, e.name AS name, e.bodyPart AS bodyPart,
+               e.trackingType AS trackingType,
+               COUNT(DISTINCT w.id) AS sessionCount, MAX(w.startTime) AS lastStartTime
+        FROM exercise e
+        JOIN workout_exercise we ON we.exerciseId = e.id
+        JOIN workout w ON w.id = we.workoutId
+        JOIN workout_set s ON s.workoutExerciseId = we.id
+        WHERE s.completed = 1 AND w.endTime IS NOT NULL
+        GROUP BY e.id
+        ORDER BY lastStartTime DESC
+        """,
+    )
+    fun observeExercisesWithHistory(): Flow<List<ExerciseHistorySummaryRow>>
 
     @Query("SELECT DISTINCT we.exerciseId FROM workout_exercise we WHERE we.workoutId = :workoutId")
     suspend fun getExerciseIdsInWorkout(workoutId: Long): List<Long>

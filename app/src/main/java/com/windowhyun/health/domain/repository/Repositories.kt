@@ -5,6 +5,8 @@ import com.windowhyun.health.core.model.PersonalRecord
 import com.windowhyun.health.core.model.SetType
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Exercise
+import com.windowhyun.health.domain.model.ExerciseHistorySummary
+import com.windowhyun.health.domain.model.ExerciseSession
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.Run
 import com.windowhyun.health.domain.model.RunGoalType
@@ -89,6 +91,12 @@ interface WorkoutRepository {
 
     /** 특정 세션에서 새로 달성한 PR. */
     fun observeWorkoutRecords(workoutId: Long): Flow<List<PersonalRecord>>
+
+    /** 한 종목의 전체 이력(최신순). 끝난 운동의 완료한 세트만. */
+    fun observeExerciseHistory(exerciseId: Long): Flow<List<ExerciseSession>>
+
+    /** 기록이 있는 종목 목록(최근에 한 순). */
+    fun observeExercisesWithHistory(): Flow<List<ExerciseHistorySummary>>
 }
 
 /** 러닝 개인 기록 비교 결과. */

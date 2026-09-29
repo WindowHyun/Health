@@ -1,6 +1,9 @@
 package com.windowhyun.health.data.local.relation
 
 import androidx.room.Embedded
+import com.windowhyun.health.core.model.BodyPart
+import com.windowhyun.health.core.model.ExerciseTrackingType
+import com.windowhyun.health.core.model.SetType
 import androidx.room.Relation
 import com.windowhyun.health.data.local.entity.ExerciseEntity
 import com.windowhyun.health.data.local.entity.WorkoutEntity
@@ -31,6 +34,30 @@ data class ExerciseSetHistory(
     val reps: Int,
     val durationSeconds: Int,
     val startTime: Long,
+)
+
+/** 종목별 전체 이력용 세트 한 줄. 끝난 운동의 완료한 세트만 담는다. */
+data class ExerciseHistorySetRow(
+    val workoutId: Long,
+    val date: Long,
+    val startTime: Long,
+    val routineName: String?,
+    val setId: Long,
+    val setNumber: Int,
+    val weightKg: Double,
+    val reps: Int,
+    val durationSeconds: Int,
+    val setType: SetType,
+)
+
+/** 기록이 있는 종목 한 줄(종목 목록 화면). */
+data class ExerciseHistorySummaryRow(
+    val exerciseId: Long,
+    val name: String,
+    val bodyPart: BodyPart,
+    val trackingType: ExerciseTrackingType,
+    val sessionCount: Int,
+    val lastStartTime: Long,
 )
 
 /** personal_record + 종목 이름. */

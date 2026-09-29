@@ -23,6 +23,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -42,83 +45,162 @@ import com.windowhyun.health.core.util.formatKoreanFull
 import com.windowhyun.health.core.util.formatPace
 import com.windowhyun.health.core.util.formatTimeOfDay
 import com.windowhyun.health.core.util.formatVolume
+import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Run
 import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.ui.components.EmptyMessage
 
-/** 기록 탭. 헬스와 러닝을 하나의 목록에 날짜 역순으로 보여 준다. */
+/**
+ * 기록 탭. 목록 · 캘린더 · 종목 세 가지로 본다.
+ *
+ * - 목록: 헬스와 러닝을 날짜 역순으로.
+ * - 캘린더: 한 달을 한눈에. 날짜를 누르면 그날 기록.
+ * - 종목: 기록이 있는 종목. 누르면 성장 그래프와 전체 기록.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     onOpenWorkout: (Long) -> Unit,
     onOpenRun: (Long) -> Unit,
+    onOpenExercise: (Long) -> Unit,
     viewModel: HistoryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val entries = state.visibleEntries
+    val mode by viewModel.mode.collectAsStateWithLifecycle()
 
     Scaffold(topBar = { TopAppBar(title = { Text("기록") }) }) { padding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // 기록이 둘 다 없으면 필터를 보여 줄 이유가 없다.
-            if (state.entries.isNotEmpty()) {
-                item {
-                    FilterChips(
-                        selected = state.filter,
-                        gymCount = state.gymCount,
-                        runCount = state.runCount,
-                        total = state.entries.size,
-                        onSelect = viewModel::setFilter,
-                    )
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                HistoryMode.entries.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        selected = mode == option,
+                        onClick = { viewModel.setMode(option) },
+                        shape = SegmentedButtonDefaults.itemShape(index, HistoryMode.entries.size),
+                    ) { Text(option.label) }
                 }
             }
 
-            if (!state.loading && entries.isEmpty()) {
-                item {
-                    EmptyMessage(
-                        icon = Icons.Filled.CalendarMonth,
-                        title = if (state.entries.isEmpty()) {
-                            "저장된 기록이 없습니다"
-                        } else {
-                            "이 종류의 기록이 없습니다"
-                        },
-                        description = "운동을 완료하면 여기에 날짜별로 쌓입니다.",
+            when (mode) {
+                HistoryMode.LIST -> HistoryList(
+                    state = state,
+                    onFilter = viewModel::setFilter,
+                    onOpenWorkout = onOpenWorkout,
+                    onOpenRun = onOpenRun,
+                )
+
+                HistoryMode.CALENDAR -> {
+                    val calendar by viewModel.calendar.collectAsStateWithLifecycle()
+                    HistoryCalendar(
+                        state = calendar,
+                        settings = state.settings,
+                        onPreviousMonth = viewModel::showPreviousMonth,
+                        onNextMonth = viewModel::showNextMonth,
+                        onThisMonth = viewModel::showThisMonth,
+                        onSelectDate = viewModel::selectDate,
+                        onOpenWorkout = onOpenWorkout,
+                        onOpenRun = onOpenRun,
                     )
                 }
-            }
 
-            itemsIndexed(entries, key = { _, entry -> entry.key }) { index, entry ->
-                // 날짜가 바뀌는 지점에만 머리글을 둔다.
-                val isFirstOfDay = index == 0 || entries[index - 1].date != entry.date
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (isFirstOfDay) {
-                        Text(
-                            text = entry.date.formatKoreanFull(),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    when (entry) {
-                        is HistoryEntry.Gym -> GymEntryCard(
-                            workout = entry.workout,
-                            weightUnit = state.settings.weightUnit,
-                            onClick = { onOpenWorkout(entry.workout.id) },
-                        )
-
-                        is HistoryEntry.Running -> RunEntryCard(
-                            run = entry.run,
-                            distanceUnit = state.settings.distanceUnit,
-                            onClick = { onOpenRun(entry.run.id) },
-                        )
-                    }
+                HistoryMode.EXERCISES -> {
+                    val exercises by viewModel.exercises.collectAsStateWithLifecycle()
+                    HistoryExerciseList(exercises = exercises, onOpenExercise = onOpenExercise)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HistoryList(
+    state: HistoryUiState,
+    onFilter: (HistoryFilter) -> Unit,
+    onOpenWorkout: (Long) -> Unit,
+    onOpenRun: (Long) -> Unit,
+) {
+    val entries = state.visibleEntries
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // 기록이 둘 다 없으면 필터를 보여 줄 이유가 없다.
+        if (state.entries.isNotEmpty()) {
+            item {
+                FilterChips(
+                    selected = state.filter,
+                    gymCount = state.gymCount,
+                    runCount = state.runCount,
+                    total = state.entries.size,
+                    onSelect = onFilter,
+                )
+            }
+        }
+
+        if (!state.loading && entries.isEmpty()) {
+            item {
+                EmptyMessage(
+                    icon = Icons.Filled.CalendarMonth,
+                    title = if (state.entries.isEmpty()) {
+                        "저장된 기록이 없습니다"
+                    } else {
+                        "이 종류의 기록이 없습니다"
+                    },
+                    description = "운동을 완료하면 여기에 날짜별로 쌓입니다.",
+                )
+            }
+        }
+
+        itemsIndexed(entries, key = { _, entry -> entry.key }) { index, entry ->
+            // 날짜가 바뀌는 지점에만 머리글을 둔다.
+            val isFirstOfDay = index == 0 || entries[index - 1].date != entry.date
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (isFirstOfDay) {
+                    Text(
+                        text = entry.date.formatKoreanFull(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                HistoryEntryCard(
+                    entry = entry,
+                    settings = state.settings,
+                    onOpenWorkout = onOpenWorkout,
+                    onOpenRun = onOpenRun,
+                )
+            }
+        }
+    }
+}
+
+/** 기록 한 건 카드. 목록과 캘린더가 같이 쓴다. */
+@Composable
+internal fun HistoryEntryCard(
+    entry: HistoryEntry,
+    settings: AppSettings,
+    onOpenWorkout: (Long) -> Unit,
+    onOpenRun: (Long) -> Unit,
+) {
+    when (entry) {
+        is HistoryEntry.Gym -> GymEntryCard(
+            workout = entry.workout,
+            weightUnit = settings.weightUnit,
+            onClick = { onOpenWorkout(entry.workout.id) },
+        )
+
+        is HistoryEntry.Running -> RunEntryCard(
+            run = entry.run,
+            distanceUnit = settings.distanceUnit,
+            onClick = { onOpenRun(entry.run.id) },
+        )
     }
 }
 

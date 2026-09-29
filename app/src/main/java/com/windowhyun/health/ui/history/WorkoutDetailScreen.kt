@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +50,7 @@ import com.windowhyun.health.ui.session.SetRow
 @Composable
 fun WorkoutDetailScreen(
     onBack: () -> Unit,
+    onOpenExercise: (Long) -> Unit,
     viewModel: WorkoutDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -132,11 +134,18 @@ fun WorkoutDetailScreen(
             items(workout?.exercises.orEmpty(), key = { it.id }) { record ->
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = record.exercise.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = record.exercise.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            // 이 종목의 지난 기록 전체와 성장 그래프로 간다.
+                            TextButton(onClick = { onOpenExercise(record.exercise.id) }) {
+                                Text("기록 · 그래프")
+                            }
+                        }
                         Text(
                             text = "${record.completedSets.size}세트 · " +
                                 formatVolume(record.totalVolume, state.settings.weightUnit),

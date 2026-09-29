@@ -36,8 +36,8 @@ android {
         applicationId = "com.windowhyun.health"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.5.0"
+        versionCode = 11
+        versionName = "0.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -166,6 +166,9 @@ dependencies {
     testImplementation(libs.androidx.arch.core.testing)
     testImplementation(libs.androidx.room.testing)
     testImplementation(libs.androidx.junit)
+    // 화면 스크린샷(Robolectric 네이티브 그래픽)으로 차트 · 캘린더를 눈으로 확인한다.
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

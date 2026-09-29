@@ -133,7 +133,7 @@ fun RoutineListScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Filled.Star, contentDescription = null)
-                    Text("템플릿 · 맞춤 추천으로 추가", modifier = Modifier.padding(start = 8.dp))
+                    Text("유명한 루틴 템플릿에서 추가", modifier = Modifier.padding(start = 8.dp))
                 }
             }
 
@@ -160,11 +160,8 @@ fun RoutineListScreen(
     }
 
     if (showTemplateSheet) {
-        val availableExerciseNames by templateViewModel.availableExerciseNames.collectAsStateWithLifecycle()
         RoutineTemplateSheet(
-            availableExerciseNames = availableExerciseNames,
             onPick = { template -> templateViewModel.applyTemplate(template) },
-            onApplyRecommendation = { plan, days -> templateViewModel.applyRecommendation(plan, days) },
             onDismiss = { showTemplateSheet = false },
         )
     }
