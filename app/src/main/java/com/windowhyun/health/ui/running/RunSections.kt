@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -153,7 +153,8 @@ fun LazyListScope.runLapItems(
     val fastest = paces.minOrNull() ?: 0.0
     val slowest = paces.maxOrNull() ?: 0.0
 
-    items(laps, key = { it.lapNumber }) { lap ->
+    // Lap 번호는 기록이 복구되면 겹칠 수 있다. 키가 겹치면 앱이 죽으므로 순서로 구분한다.
+    itemsIndexed(laps, key = { index, _ -> "lap-$index" }) { _, lap ->
         // 느린 구간도 최소 35% 는 채워서 막대가 사라지지 않게 한다.
         val ratio = when {
             lap.paceSecPerKm <= 0.0 -> 0f

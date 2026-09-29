@@ -158,7 +158,9 @@ fun HomeScreen(
                     )
                 }
             } else {
-                items(state.recentWorkouts, key = { it.id }) { workout ->
+                // 헬스와 러닝은 id 가 따로 매겨져 같은 숫자가 나온다(헬스 1번, 러닝 1번).
+                // 한 목록에서 키가 겹치면 그리는 순간 앱이 죽으므로 종류를 붙인다.
+                items(state.recentWorkouts, key = { "workout-${it.id}" }) { workout ->
                     RecentWorkoutCard(
                         workout = workout,
                         weightUnitLabel = state.settings.weightUnit,
@@ -177,7 +179,7 @@ fun HomeScreen(
                     )
                 }
             } else {
-                items(state.recentRuns, key = { it.id }) { run ->
+                items(state.recentRuns, key = { "run-${it.id}" }) { run ->
                     RecentRunCard(
                         run = run,
                         distanceUnit = state.settings.distanceUnit,
