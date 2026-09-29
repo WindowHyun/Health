@@ -4,14 +4,17 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.data.local.HealthDatabase
 import com.windowhyun.health.data.repository.ExerciseRepositoryImpl
 import com.windowhyun.health.data.repository.RoutineRepositoryImpl
 import com.windowhyun.health.data.seed.ExerciseSeedCallback
+import com.windowhyun.health.domain.usecase.RoutineRecommender
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -177,5 +180,47 @@ class RoutineTemplateTest {
         viewModel.applied.first()
 
         assertThat(routines.observeRoutines().first()).hasSize(4)
+    }
+
+    /** 맞춤 추천 결과가 미리보기 그대로 루틴이 된다(이름·종목·순서·세트). */
+    @Test
+    fun `applying a recommendation saves exactly the previewed plan`() = runTest(dispatcher) {
+        val available = exercises.observeExercises().first().map { it.name }.toSet()
+        val plan = RoutineRecommender.recommend(
+            RoutineRecommender.Preferences(
+                focus = setOf(BodyPart.CHEST),
+                excluded = setOf(BodyPart.LEG),
+                daysPerWeek = 3,
+            ),
+            available,
+        )
+
+        viewModel.applyRecommendation(plan, daysPerWeek = 3)
+        val result = viewModel.applied.first()
+
+        assertThat(result.createdRoutineNames).containsExactlyElementsIn(plan.days.map { it.name }).inOrder()
+        assertThat(result.missingExerciseNames).isEmpty()
+        val saved = routines.observeRoutines().first().associateBy { it.name }
+        plan.days.forEach { day ->
+            val routine = saved.getValue(day.name)
+            assertThat(routine.items.map { it.exercise.name })
+                .containsExactlyElementsIn(day.exercises.map { it.name }).inOrder()
+            assertThat(routine.items.map { it.defaultSets })
+                .containsExactlyElementsIn(day.exercises.map { it.sets }).inOrder()
+        }
+    }
+
+    /** 만들 게 없는 추천은 아무것도 저장하지 않는다. */
+    @Test
+    fun `ignores an empty recommendation`() = runTest(dispatcher) {
+        val empty = RoutineRecommender.recommend(
+            RoutineRecommender.Preferences(excluded = RoutineRecommender.selectableParts.toSet()),
+            exercises.observeExercises().first().map { it.name }.toSet(),
+        )
+
+        viewModel.applyRecommendation(empty, daysPerWeek = 3)
+        advanceUntilIdle()
+
+        assertThat(routines.observeRoutines().first()).isEmpty()
     }
 }

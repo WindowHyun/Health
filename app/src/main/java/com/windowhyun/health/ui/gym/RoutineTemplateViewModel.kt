@@ -6,10 +6,15 @@ import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.RoutineItem
 import com.windowhyun.health.domain.repository.ExerciseRepository
 import com.windowhyun.health.domain.repository.RoutineRepository
+import com.windowhyun.health.domain.usecase.RoutineRecommender
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -36,6 +41,29 @@ class RoutineTemplateViewModel @Inject constructor(
 
     private val _applied = MutableSharedFlow<TemplateApplyResult>(extraBufferCapacity = 1)
     val applied = _applied.asSharedFlow()
+
+    /** 지금 있는 종목 이름. 맞춤 추천은 이 안에서만 고른다(지운 종목은 추천하지 않는다). */
+    val availableExerciseNames: StateFlow<Set<String>> = exerciseRepository.observeExercises()
+        .map { list -> list.map { it.name }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /** 맞춤 추천 결과를 루틴으로 만든다. 템플릿과 같은 경로를 탄다. */
+    fun applyRecommendation(plan: RoutineRecommender.Plan, daysPerWeek: Int) {
+        if (plan.isEmpty) return
+        applyTemplate(
+            RoutineTemplates.Template(
+                id = "recommended",
+                title = "맞춤 루틴 (주 ${daysPerWeek}회)",
+                description = plan.notes.joinToString("\n"),
+                days = plan.days.map { day ->
+                    RoutineTemplates.Day(
+                        routineName = day.name,
+                        exercises = day.exercises.map { it.name to it.sets },
+                    )
+                },
+            ),
+        )
+    }
 
     /**
      * 적용 중인지. 시트는 결과가 나와야 닫히므로, 그 사이 카드를 한 번 더 누르면
