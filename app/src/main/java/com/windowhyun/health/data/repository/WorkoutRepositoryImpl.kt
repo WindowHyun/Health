@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
@@ -401,7 +400,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                     bodyPart = row.bodyPart,
                     trackingType = row.trackingType,
                     sessionCount = row.sessionCount,
-                    lastDate = Instant.ofEpochMilli(row.lastStartTime).atZone(zone).toLocalDate(),
+                    lastDate = LocalDate.ofEpochDay(row.lastDate),
                 )
             }
         }

@@ -208,7 +208,8 @@ interface WorkoutDao {
         """
         SELECT e.id AS exerciseId, e.name AS name, e.bodyPart AS bodyPart,
                e.trackingType AS trackingType,
-               COUNT(DISTINCT w.id) AS sessionCount, MAX(w.startTime) AS lastStartTime
+               COUNT(DISTINCT w.id) AS sessionCount, MAX(w.startTime) AS lastStartTime,
+               MAX(w.date) AS lastDate
         FROM exercise e
         JOIN workout_exercise we ON we.exerciseId = e.id
         JOIN workout w ON w.id = we.workoutId

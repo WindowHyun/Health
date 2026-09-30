@@ -27,7 +27,8 @@ data class ExerciseSession(
     val routineName: String?,
     val sets: List<WorkoutSet>,
 ) {
-    private val counted: List<WorkoutSet> get() = sets.filter { it.counts }
+    // 한 번만 거른다. 최고 중량 · 1RM · 볼륨을 읽을 때마다 다시 거르지 않게.
+    private val counted: List<WorkoutSet> = sets.filter { it.counts }
 
     val maxWeightKg: Double get() = counted.maxOfOrNull { it.weightKg } ?: 0.0
     val bestOneRepMaxKg: Double get() = counted.maxOfOrNull { it.estimatedOneRepMax } ?: 0.0
@@ -47,7 +48,8 @@ enum class ProgressMetric(val label: String) {
     MAX_DURATION("최고 시간"),
     ;
 
-    fun valueOf(session: ExerciseSession): Double = when (this) {
+    /** 이 지표로 잰 세션의 값. (enum 의 valueOf(이름) 과 헷갈리지 않게 이름을 달리했다.) */
+    fun measure(session: ExerciseSession): Double = when (this) {
         ESTIMATED_ONE_RM -> session.bestOneRepMaxKg
         MAX_WEIGHT -> session.maxWeightKg
         VOLUME -> session.volumeKg
@@ -65,11 +67,21 @@ enum class ProgressMetric(val label: String) {
     }
 }
 
-/** 그래프의 점 하나. 값이 0 인 세션(워밍업만 한 날 등)은 그리지 않는다. */
-data class ProgressPoint(val workoutId: Long, val date: LocalDate, val value: Double)
+/**
+ * 그래프의 점 하나. 값이 0 인 세션(워밍업만 한 날 등)은 그리지 않는다.
+ *
+ * 순서와 가로 위치는 모두 [startTime] 으로 정한다. 날짜([date])는 라벨에만 쓴다.
+ * 둘을 섞으면 같은 날 두 기록이 겹치고, 시간대가 바뀐 기록에서 선이 거꾸로 간다.
+ */
+data class ProgressPoint(
+    val workoutId: Long,
+    val date: LocalDate,
+    val value: Double,
+    val startTime: Long = date.toEpochDay() * 86_400_000L,
+)
 
 /** 세션 목록(최신순)을 그래프 점(오래된 순)으로 바꾼다. */
 fun List<ExerciseSession>.progressPoints(metric: ProgressMetric): List<ProgressPoint> =
     sortedBy { it.startTime }
-        .map { ProgressPoint(it.workoutId, it.date, metric.valueOf(it)) }
+        .map { ProgressPoint(it.workoutId, it.date, metric.measure(it), it.startTime) }
         .filter { it.value > 0.0 }

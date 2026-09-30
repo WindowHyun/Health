@@ -58,6 +58,8 @@ data class ExerciseHistorySummaryRow(
     val trackingType: ExerciseTrackingType,
     val sessionCount: Int,
     val lastStartTime: Long,
+    /** 저장된 날짜(epoch day). 상세 · 캘린더와 같은 날짜를 보여 주려고 이것을 쓴다. */
+    val lastDate: Long,
 )
 
 /** personal_record + 종목 이름. */

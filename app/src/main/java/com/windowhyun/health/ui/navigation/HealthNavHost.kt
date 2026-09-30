@@ -131,22 +131,36 @@ fun HealthNavHost(
         }
 
         composable(
-            route = "${Routes.WORKOUT_DETAIL}/{${Routes.ARG_WORKOUT_ID}}",
+            route = WORKOUT_DETAIL_PATTERN,
             arguments = listOf(navArgument(Routes.ARG_WORKOUT_ID) { type = NavType.LongType }),
         ) {
             WorkoutDetailScreen(
                 onBack = { navController.popBackStack() },
-                onOpenExercise = { exerciseId -> navController.navigate(Routes.exerciseDetail(exerciseId)) },
+                onOpenExercise = { exerciseId ->
+                    navController.navigateOrReturn(
+                        routePattern = EXERCISE_DETAIL_PATTERN,
+                        argName = Routes.ARG_EXERCISE_ID,
+                        id = exerciseId,
+                        route = Routes.exerciseDetail(exerciseId),
+                    )
+                },
             )
         }
 
         composable(
-            route = "${Routes.EXERCISE_DETAIL}/{${Routes.ARG_EXERCISE_ID}}",
+            route = EXERCISE_DETAIL_PATTERN,
             arguments = listOf(navArgument(Routes.ARG_EXERCISE_ID) { type = NavType.LongType }),
         ) {
             ExerciseDetailScreen(
                 onBack = { navController.popBackStack() },
-                onOpenWorkout = { workoutId -> navController.navigate(Routes.workoutDetail(workoutId)) },
+                onOpenWorkout = { workoutId ->
+                    navController.navigateOrReturn(
+                        routePattern = WORKOUT_DETAIL_PATTERN,
+                        argName = Routes.ARG_WORKOUT_ID,
+                        id = workoutId,
+                        route = Routes.workoutDetail(workoutId),
+                    )
+                },
             )
         }
 
@@ -158,3 +172,7 @@ fun HealthNavHost(
         }
     }
 }
+
+/** 운동 기록 · 종목 상세의 경로 모양. 앞 화면이 같은 대상인지 비교할 때도 쓴다. */
+internal val WORKOUT_DETAIL_PATTERN = "${Routes.WORKOUT_DETAIL}/{${Routes.ARG_WORKOUT_ID}}"
+internal val EXERCISE_DETAIL_PATTERN = "${Routes.EXERCISE_DETAIL}/{${Routes.ARG_EXERCISE_ID}}"

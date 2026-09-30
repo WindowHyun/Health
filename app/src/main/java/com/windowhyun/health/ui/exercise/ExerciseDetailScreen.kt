@@ -264,7 +264,8 @@ internal fun ProgressMetric.toDisplay(value: Double, unit: WeightUnit): Double =
 internal fun ProgressMetric.format(displayValue: Double, unit: WeightUnit): String = when (this) {
     ProgressMetric.ESTIMATED_ONE_RM, ProgressMetric.MAX_WEIGHT ->
         formatWeightValue(displayValue) + unit.label
-    ProgressMetric.VOLUME -> String.format(Locale.US, "%,.0f", displayValue) + unit.label
+    // 기록 카드와 같은 표기를 쓴다(1,000 미만은 소수까지). 따로 만들면 값이 달라 보인다.
+    ProgressMetric.VOLUME -> formatVolume(unit.toKg(displayValue), unit)
     ProgressMetric.MAX_REPS, ProgressMetric.TOTAL_REPS -> "${displayValue.toInt()}회"
     ProgressMetric.MAX_DURATION -> formatDuration(displayValue.toLong())
 }

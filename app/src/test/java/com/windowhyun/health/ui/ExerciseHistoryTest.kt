@@ -9,8 +9,11 @@ import com.google.common.truth.Truth.assertThat
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
 import com.windowhyun.health.core.model.ExerciseTrackingType
+import com.windowhyun.health.core.model.PersonalRecord
 import com.windowhyun.health.core.model.PersonalRecordType
 import com.windowhyun.health.core.model.SetType
+import com.windowhyun.health.core.model.WeightUnit
+import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.data.datastore.SettingsRepositoryImpl
 import com.windowhyun.health.data.local.HealthDatabase
 import com.windowhyun.health.data.repository.ExerciseRepositoryImpl
@@ -20,13 +23,16 @@ import com.windowhyun.health.domain.model.Exercise
 import com.windowhyun.health.domain.model.ProgressMetric
 import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.progressPoints
+import com.windowhyun.health.domain.repository.WorkoutRepository
 import com.windowhyun.health.ui.exercise.ExerciseDetailViewModel
+import com.windowhyun.health.ui.exercise.format
 import com.windowhyun.health.ui.history.HistoryEntry
 import com.windowhyun.health.ui.history.HistoryViewModel
 import com.windowhyun.health.ui.navigation.Routes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -315,5 +321,103 @@ class ExerciseHistoryTest {
         viewModel.selectDate(day)
 
         assertThat(viewModel.calendar.first { it.selectedDate == null }.selectedDate).isNull()
+    }
+
+    // ----- 코드 리뷰 수정 -----
+
+    /** 앱을 켜 둔 채 월말 자정을 넘기면 캘린더가 새 달 · 오늘로 넘어간다. */
+    @Test
+    fun `calendar follows the date past midnight`() = runTest(dispatcher) {
+        val today = MutableStateFlow(LocalDate.of(2026, 9, 30))
+        val viewModel = HistoryViewModel(workouts, runs, settings, today)
+        assertThat(viewModel.calendar.first { !it.loading }.month).isEqualTo(YearMonth.of(2026, 9))
+
+        today.value = LocalDate.of(2026, 10, 1)
+
+        val next = viewModel.calendar.first { it.month == YearMonth.of(2026, 10) }
+        assertThat(next.selectedDate).isEqualTo(LocalDate.of(2026, 10, 1))
+    }
+
+    /** 사용자가 날짜를 골라 둔 뒤에는 자정이 지나도 그 자리에 머문다. */
+    @Test
+    fun `calendar stays where the user picked`() = runTest(dispatcher) {
+        val today = MutableStateFlow(LocalDate.of(2026, 9, 30))
+        val viewModel = HistoryViewModel(workouts, runs, settings, today)
+        viewModel.calendar.first { !it.loading }
+        viewModel.selectDate(LocalDate.of(2026, 9, 12))
+        viewModel.calendar.first { it.selectedDate == LocalDate.of(2026, 9, 12) }
+
+        today.value = LocalDate.of(2026, 10, 1)
+
+        val state = viewModel.calendar.first { !it.loading }
+        assertThat(state.month).isEqualTo(YearMonth.of(2026, 9))
+        assertThat(state.selectedDate).isEqualTo(LocalDate.of(2026, 9, 12))
+    }
+
+    /** 종목 목록의 최근 날짜는 상세 · 캘린더와 같은 "저장된 날짜"를 쓴다. */
+    @Test
+    fun `exercise list uses the stored date`() = runTest(dispatcher) {
+        val squat = addExercise("스쿼트")
+        val workoutId = session(squat, normal(100.0, 5))
+        // 시간대가 바뀐 경우처럼, 시작 시각은 그대로 두고 저장된 날짜만 다르게 한다.
+        val stored = db.workoutDao().getWorkout(workoutId)!!
+        db.workoutDao().updateWorkout(stored.copy(date = stored.date - 3))
+
+        val summary = workouts.observeExercisesWithHistory().first().single()
+        val session = workouts.observeExerciseHistory(squat).first().single()
+
+        assertThat(summary.lastDate).isEqualTo(LocalDate.now().minusDays(3))
+        assertThat(summary.lastDate).isEqualTo(session.date)
+    }
+
+    /** 그래프 지표 칩을 눌러도 PR 을 다시 계산하지 않는다(기록이 바뀔 때만). */
+    @Test
+    fun `switching the metric does not reload records`() = runTest(dispatcher) {
+        val squat = addExercise("스쿼트")
+        session(squat, normal(100.0, 5), daysAgo = 3)
+        session(squat, normal(110.0, 5))
+        var recordLoads = 0
+        val counting = object : WorkoutRepository by workouts {
+            override suspend fun getPersonalRecords(exerciseId: Long): List<PersonalRecord> {
+                recordLoads++
+                return workouts.getPersonalRecords(exerciseId)
+            }
+        }
+        val viewModel = ExerciseDetailViewModel(
+            workoutRepository = counting,
+            exerciseRepository = exercises,
+            settingsRepository = settings,
+            savedStateHandle = SavedStateHandle(mapOf(Routes.ARG_EXERCISE_ID to squat)),
+        )
+        viewModel.uiState.first { !it.loading }
+        val loadsAfterOpen = recordLoads
+
+        viewModel.selectMetric(ProgressMetric.MAX_WEIGHT)
+        viewModel.uiState.first { it.metric == ProgressMetric.MAX_WEIGHT }
+        viewModel.selectMetric(ProgressMetric.VOLUME)
+        viewModel.uiState.first { it.metric == ProgressMetric.VOLUME }
+
+        assertThat(recordLoads).isEqualTo(loadsAfterOpen)
+    }
+
+    /** 그래프의 볼륨 표기는 기록 카드와 같다(1,000 미만은 소수까지). */
+    @Test
+    fun `chart volume label matches the session card`() {
+        assertThat(ProgressMetric.VOLUME.format(850.5, WeightUnit.KG)).isEqualTo(formatVolume(850.5, WeightUnit.KG))
+        assertThat(ProgressMetric.VOLUME.format(12_345.0, WeightUnit.KG)).isEqualTo(formatVolume(12_345.0, WeightUnit.KG))
+    }
+
+    /** 같은 날 두 번 한 기록도 그래프 점이 따로 있고, 시작 시각 순서다. */
+    @Test
+    fun `keeps two sessions on the same day as separate points`() = runTest(dispatcher) {
+        val squat = addExercise("스쿼트")
+        session(squat, normal(100.0, 5))
+        session(squat, normal(105.0, 5))
+
+        val points = workouts.observeExerciseHistory(squat).first().progressPoints(ProgressMetric.MAX_WEIGHT)
+
+        assertThat(points.map { it.value }).containsExactly(100.0, 105.0).inOrder()
+        assertThat(points[0].startTime).isLessThan(points[1].startTime)
+        assertThat(points.map { it.date }.distinct()).hasSize(1)
     }
 }

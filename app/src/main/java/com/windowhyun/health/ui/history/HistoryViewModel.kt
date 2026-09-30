@@ -12,11 +12,13 @@ import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
@@ -112,16 +114,25 @@ data class HistoryUiState(
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class HistoryViewModel @Inject constructor(
+class HistoryViewModel internal constructor(
     private val workoutRepository: WorkoutRepository,
     private val runRepository: RunRepository,
     settingsRepository: SettingsRepository,
+    /** 오늘 날짜. 자정을 넘기면 새 날짜를 흘려보낸다. 테스트에서는 직접 넣는다. */
+    today: Flow<LocalDate>,
 ) : ViewModel() {
+
+    @Inject
+    constructor(
+        workoutRepository: WorkoutRepository,
+        runRepository: RunRepository,
+        settingsRepository: SettingsRepository,
+    ) : this(workoutRepository, runRepository, settingsRepository, currentDateFlow())
 
     private val filter = MutableStateFlow(HistoryFilter.ALL)
 
     // 날짜를 고정하면 자정을 넘겼을 때 오늘 기록이 조회 범위 밖으로 밀려난다.
-    val uiState: StateFlow<HistoryUiState> = currentDateFlow().flatMapLatest { today ->
+    val uiState: StateFlow<HistoryUiState> = today.flatMapLatest { today ->
         val from = today.minusYears(1)
         combine(
             workoutRepository.observeWorkoutsBetween(from = from, to = today),
@@ -157,15 +168,30 @@ class HistoryViewModel @Inject constructor(
 
     // ----- 캘린더 -----
 
-    private val month = MutableStateFlow(YearMonth.now())
-    private val selectedDate = MutableStateFlow<LocalDate?>(LocalDate.now())
+    /**
+     * 캘린더가 보여 줄 달과 고른 날.
+     *
+     * 사용자가 손대지 않았으면 "오늘"을 따라간다. 앱을 켜 둔 채 자정이나 월말을 넘겨도
+     * 어제에 머물지 않도록, 목록 보기처럼 날짜 변화를 받아 다시 계산한다.
+     * 다른 달로 넘기거나 날짜를 고르면 그때부터는 그 자리에 머문다.
+     */
+    private sealed interface CalendarView {
+        data object FollowToday : CalendarView
+        data class Pinned(val month: YearMonth, val selected: LocalDate?) : CalendarView
+    }
 
-    val calendar: StateFlow<CalendarUiState> = month.flatMapLatest { shown ->
+    private val calendarView = MutableStateFlow<CalendarView>(CalendarView.FollowToday)
+
+    val calendar: StateFlow<CalendarUiState> = combine(today, calendarView) { today, view ->
+        when (view) {
+            CalendarView.FollowToday -> YearMonth.from(today) to today
+            is CalendarView.Pinned -> view.month to view.selected
+        }
+    }.distinctUntilChanged().flatMapLatest { (shown, selected) ->
         combine(
             workoutRepository.observeWorkoutsBetween(shown.atDay(1), shown.atEndOfMonth()),
             runRepository.observeRunsBetween(shown.atDay(1), shown.atEndOfMonth()),
-            selectedDate,
-        ) { workouts, runs, selected ->
+        ) { workouts, runs ->
             CalendarUiState(
                 month = shown,
                 selectedDate = selected,
@@ -175,25 +201,33 @@ class HistoryViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CalendarUiState())
 
-    fun showPreviousMonth() = moveMonth(month.value.minusMonths(1))
+    fun showPreviousMonth() = moveMonth(calendar.value.month.minusMonths(1))
 
     fun showNextMonth() {
-        if (month.value < YearMonth.now()) moveMonth(month.value.plusMonths(1))
+        val shown = calendar.value.month
+        if (shown < YearMonth.now()) moveMonth(shown.plusMonths(1))
     }
 
     fun showThisMonth() {
-        moveMonth(YearMonth.now())
+        calendarView.value = CalendarView.FollowToday
     }
 
-    /** 달을 넘기면 그 달에 오늘이 있을 때만 오늘을 고른다. 아니면 고른 날 없이 시작한다. */
+    /** 이번 달로 돌아오면 다시 오늘을 따라가고, 다른 달이면 고른 날 없이 그 달에 머문다. */
     private fun moveMonth(target: YearMonth) {
-        val today = LocalDate.now()
-        selectedDate.value = if (YearMonth.from(today) == target) today else null
-        month.value = target
+        calendarView.value = if (target == YearMonth.now()) {
+            CalendarView.FollowToday
+        } else {
+            CalendarView.Pinned(target, selected = null)
+        }
     }
 
+    /** 날짜를 고르면 그 달에 머문다. 같은 날을 다시 누르면 선택을 푼다. */
     fun selectDate(date: LocalDate) {
-        selectedDate.value = if (selectedDate.value == date) null else date
+        val current = calendar.value
+        calendarView.value = CalendarView.Pinned(
+            month = YearMonth.from(date),
+            selected = if (current.selectedDate == date) null else date,
+        )
     }
 
     // ----- 종목 -----

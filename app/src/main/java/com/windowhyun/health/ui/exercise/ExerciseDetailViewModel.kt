@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -45,7 +46,7 @@ data class ExerciseDetailUiState(
  */
 @HiltViewModel
 class ExerciseDetailViewModel @Inject constructor(
-    workoutRepository: WorkoutRepository,
+    private val workoutRepository: WorkoutRepository,
     exerciseRepository: ExerciseRepository,
     settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle,
@@ -56,18 +57,24 @@ class ExerciseDetailViewModel @Inject constructor(
     /** 사용자가 고른 지표. null 이면 기록 방식의 첫 지표를 쓴다. */
     private val chosenMetric = MutableStateFlow<ProgressMetric?>(null)
 
+    /**
+     * 기록과 PR 을 함께 받는다. PR 은 기록이 바뀔 때만 다시 계산한다(끝난 기록을 고치면
+     * PR 도 다시 계산되기 때문). 그래프 지표 칩이나 설정이 바뀔 때는 다시 읽지 않는다.
+     */
+    private val sessionsWithRecords = workoutRepository.observeExerciseHistory(exerciseId)
+        .map { sessions -> sessions to workoutRepository.getPersonalRecords(exerciseId) }
+
     val uiState: StateFlow<ExerciseDetailUiState> = combine(
         flow { emit(exerciseRepository.getExercise(exerciseId)) },
-        workoutRepository.observeExerciseHistory(exerciseId),
+        sessionsWithRecords,
         settingsRepository.settings,
         chosenMetric,
-    ) { exercise, sessions, settings, chosen ->
+    ) { exercise, (sessions, records), settings, chosen ->
         val metrics = exercise?.let { ProgressMetric.forTrackingType(it.trackingType) }.orEmpty()
         ExerciseDetailUiState(
             exercise = exercise,
             sessions = sessions,
-            // 기록이 바뀔 때마다 다시 읽는다. 끝난 기록을 고치면 PR 도 다시 계산되기 때문이다.
-            records = if (exercise == null) emptyList() else workoutRepository.getPersonalRecords(exerciseId),
+            records = if (exercise == null) emptyList() else records,
             metrics = metrics,
             metric = chosen?.takeIf { it in metrics } ?: metrics.firstOrNull(),
             settings = settings,

@@ -26,6 +26,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.windowhyun.health.core.designsystem.theme.chartColors
+import com.windowhyun.health.core.util.chartXPositions
 import com.windowhyun.health.core.util.niceTicks
 import com.windowhyun.health.domain.model.ProgressPoint
 import java.time.format.DateTimeFormatter
@@ -49,6 +50,8 @@ fun ProgressChart(
     formatTick: (Double) -> String,
     contentDescription: String,
     modifier: Modifier = Modifier,
+    /** 눈금 라벨이 구분할 수 있는 가장 작은 차이. 정수로 적는 지표면 1. */
+    minTickStep: Double = 1.0,
 ) {
     val lineColor = chartColors().gym
     val gridColor = MaterialTheme.colorScheme.outlineVariant
@@ -82,7 +85,7 @@ fun ProgressChart(
         if (points.isEmpty()) return@Canvas
 
         val values = points.map { it.value }
-        val ticks = niceTicks(values.min(), values.max())
+        val ticks = niceTicks(values.min(), values.max(), minStep = minTickStep)
         val yMin = ticks.first()
         val yMax = ticks.last()
 
@@ -96,17 +99,8 @@ fun ProgressChart(
         fun y(value: Double): Float =
             (bottom - (value - yMin) / (yMax - yMin) * (bottom - top)).toFloat()
 
-        // 가로축: 날짜 간격대로. 모두 같은 날이면 순서대로 고르게.
-        val firstDay = points.first().date.toEpochDay()
-        val span = points.last().date.toEpochDay() - firstDay
-        val xs = points.mapIndexed { index, point ->
-            val fraction = when {
-                points.size == 1 -> 0.5
-                span == 0L -> index.toDouble() / (points.size - 1)
-                else -> (point.date.toEpochDay() - firstDay).toDouble() / span
-            }
-            (left + fraction * (right - left)).toFloat()
-        }
+        // 가로축: 시각 간격대로, 이웃한 점은 최소 12dp 벌린다(같은 날 두 기록도 따로 눌리게).
+        val xs = chartXPositions(points.map { it.startTime }, left, right, minGap = 12.dp.toPx())
         pointXs.clear()
         pointXs.addAll(xs)
 
