@@ -24,10 +24,10 @@ import com.windowhyun.health.domain.model.RunPoint
 import com.windowhyun.health.domain.repository.BackupFormatException
 import com.windowhyun.health.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.first
-import kotlinx.serialization.json.Json
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -434,5 +434,33 @@ class BackupRepositoryTest {
         // 메모는 헬스 CSV 에 없지만 루틴 이름 등 다른 값에도 같은 규칙이 적용된다.
         val dataLine = text.lines().first { it.contains("내가 만든 운동") }
         assertThat(dataLine.split(",")).hasSize(11)
+    }
+
+    /** 운동이나 러닝이 진행 중이면 복원하지 않는다. 기록 중인 데이터가 꼬인다. */
+    @Test
+    fun `refuses to restore while a workout is in progress`() = runTest(dispatcher) {
+        seedRecords()
+        val bytes = exportBytes()
+        val inProgress = workouts.startWorkout(null)
+
+        val error = runCatching { backup.restoreBackup(ByteArrayInputStream(bytes)) }.exceptionOrNull()
+
+        assertThat(error).isInstanceOf(BackupFormatException::class.java)
+        assertThat(error).hasMessageThat().contains("진행 중")
+        // 아무것도 바뀌지 않았다.
+        assertThat(db.workoutDao().getWorkout(inProgress)).isNotNull()
+        assertThat(db.backupDao().allWorkouts()).hasSize(2)
+    }
+
+    @Test
+    fun `refuses to restore while a run is being recorded`() = runTest(dispatcher) {
+        seedRecords()
+        val bytes = exportBytes()
+        runs.startRun(RunGoalType.FREE, 0.0)
+
+        val error = runCatching { backup.restoreBackup(ByteArrayInputStream(bytes)) }.exceptionOrNull()
+
+        assertThat(error).isInstanceOf(BackupFormatException::class.java)
+        assertThat(db.backupDao().allRuns()).hasSize(2)
     }
 }

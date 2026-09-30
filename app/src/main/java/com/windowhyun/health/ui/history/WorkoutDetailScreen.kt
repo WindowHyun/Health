@@ -147,7 +147,8 @@ fun WorkoutDetailScreen(
                             }
                         }
                         Text(
-                            text = "${record.completedSets.size}세트 · " +
+                            // 위쪽 합계처럼 워밍업은 세지 않는다.
+                            text = "${record.countedSets.size}세트 · " +
                                 formatVolume(record.totalVolume, state.settings.weightUnit),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

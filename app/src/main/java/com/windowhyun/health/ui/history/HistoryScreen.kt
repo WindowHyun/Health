@@ -261,7 +261,7 @@ private fun RunEntryCard(
         title = formatDistance(run.distanceMeters, distanceUnit),
         subtitle = "${run.startTime.formatTimeOfDay()} 시작 · " +
             formatDurationKorean(run.durationSeconds),
-        detail = "평균 ${formatPace(run.averagePaceSecPerKm)} · ${run.calories}kcal",
+        detail = "평균 ${formatPace(run.averagePaceSecPerKm, distanceUnit)} · ${run.calories}kcal",
         memo = run.memo,
         onClick = onClick,
     )

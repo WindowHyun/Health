@@ -45,6 +45,14 @@ interface RunDao {
     @Query("SELECT * FROM run WHERE endTime IS NULL ORDER BY startTime DESC LIMIT 1")
     suspend fun getActiveRun(): RunEntity?
 
+    /** 끝나지 않은 러닝 전부. 앱이 강제로 종료되면 여기에 남는다. */
+    @Query("SELECT * FROM run WHERE endTime IS NULL")
+    suspend fun getUnfinishedRuns(): List<RunEntity>
+
+    /** 마지막으로 저장된 GPS 시각. 끊긴 러닝의 끝난 시각으로 쓴다. */
+    @Query("SELECT MAX(timestamp) FROM run_location WHERE runId = :runId")
+    suspend fun getLastLocationTime(runId: Long): Long?
+
     @Query("SELECT * FROM run WHERE endTime IS NULL ORDER BY startTime DESC LIMIT 1")
     fun observeActiveRun(): Flow<RunEntity?>
 

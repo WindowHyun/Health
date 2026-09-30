@@ -26,6 +26,13 @@ import com.windowhyun.health.data.local.entity.WorkoutSetEntity
 @Dao
 interface BackupDao {
 
+    /** 진행 중인 운동 · 러닝 수. 이 중에 복원하면 기록 중인 데이터가 꼬인다. */
+    @Query(
+        "SELECT (SELECT COUNT(*) FROM workout WHERE endTime IS NULL) + " +
+            "(SELECT COUNT(*) FROM run WHERE endTime IS NULL)",
+    )
+    suspend fun countInProgress(): Int
+
     @Query("SELECT * FROM exercise ORDER BY id")
     suspend fun allExercises(): List<ExerciseEntity>
 

@@ -128,6 +128,12 @@ interface RunRepository {
     /** 아직 끝나지 않은 러닝(복구용). */
     suspend fun getActiveRun(): Run?
 
+    /**
+     * 기록 중이 아닌데 끝나지 않은 채 남은 러닝을 마감한다([excludeRunId] 는 지금 기록 중인 러닝).
+     * 마감한 러닝 수를 돌려준다.
+     */
+    suspend fun closeUnfinishedRuns(excludeRunId: Long): Int
+
     suspend fun appendRoutePoints(runId: Long, points: List<RunPoint>)
 
     suspend fun appendLap(runId: Long, lap: RunLap)

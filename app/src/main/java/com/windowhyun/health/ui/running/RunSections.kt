@@ -51,14 +51,14 @@ fun RunStatGrid(
             )
             StatCard(
                 label = "평균 페이스",
-                value = formatPace(run.averagePaceSecPerKm),
+                value = formatPace(run.averagePaceSecPerKm, distanceUnit),
                 modifier = Modifier.weight(1f),
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard(
                 label = "최고 페이스",
-                value = formatPace(run.bestPaceSecPerKm),
+                value = formatPace(run.bestPaceSecPerKm, distanceUnit),
                 modifier = Modifier.weight(1f),
             )
             StatCard(
@@ -189,7 +189,7 @@ private fun LapRow(
                 modifier = Modifier.width(24.dp),
             )
             Text(
-                text = formatPace(lap.paceSecPerKm),
+                text = formatPace(lap.paceSecPerKm, distanceUnit),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = if (isFastest) FontWeight.Bold else FontWeight.Medium,
                 color = if (isFastest) {

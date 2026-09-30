@@ -69,8 +69,14 @@ class RunTrackingService : LifecycleService() {
                 startTracking(RunGoal(goalType, goalValue))
             }
 
-            ACTION_PAUSE -> lifecycleScope.launch { runTracker.pause() }
-            ACTION_RESUME -> lifecycleScope.launch { runTracker.resume() }
+            // 기록 중이 아닐 때 온 명령(목표 달성으로 막 끝난 직후 등)은 할 일이 없다.
+            ACTION_PAUSE, ACTION_RESUME -> if (locationJob == null) {
+                stopSelf()
+            } else if (intent.action == ACTION_PAUSE) {
+                lifecycleScope.launch { runTracker.pause() }
+            } else {
+                lifecycleScope.launch { runTracker.resume() }
+            }
             // 기록을 마감한 뒤에 서비스를 내린다. 순서가 바뀌면 endTime 과
             // 마지막 Lap 이 기록되지 않는다.
             ACTION_STOP -> lifecycleScope.launch {
@@ -236,11 +242,18 @@ class RunTrackingService : LifecycleService() {
             ContextCompat.startForegroundService(context, intent)
         }
 
+        /**
+         * 일시정지 · 재개 · 종료. 앱 화면에서만 누르므로(앱이 앞에 있음) 일반 시작으로 보낸다.
+         *
+         * 예전에는 포그라운드 시작으로 보냈는데, 서비스가 막 내려간 뒤(목표 달성 직후 등)에
+         * 도착하면 새 서비스가 포그라운드 선언을 하지 않아 안드로이드가 앱을 종료했다.
+         */
         fun sendAction(context: Context, action: String) {
             val intent = Intent(context, RunTrackingService::class.java).apply {
                 this.action = action
             }
-            ContextCompat.startForegroundService(context, intent)
+            // 앱이 뒤에 있으면 일반 시작이 막힌다. 그때는 누를 화면도 없으니 무시한다.
+            runCatching { context.startService(intent) }
         }
     }
 }

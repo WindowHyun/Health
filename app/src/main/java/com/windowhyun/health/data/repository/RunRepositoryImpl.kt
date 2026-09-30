@@ -119,6 +119,35 @@ class RunRepositoryImpl @Inject constructor(
         )
     }
 
+    /**
+     * 앱이 강제로 종료되면 러닝이 "끝나지 않음"으로 남는다. 모든 목록 · 통계 · 기록이 끝난
+     * 러닝만 보므로 그대로 두면 어디에도 나오지 않는다. 달린 거리와 경로는 기록 중에
+     * 계속 저장해 두었으니, 마지막 GPS 시각을 끝난 시각으로 마감해 살린다.
+     *
+     * 아무것도 기록되지 않은 러닝(시작하자마자 끊김)은 남길 이유가 없어 지운다.
+     */
+    override suspend fun closeUnfinishedRuns(excludeRunId: Long): Int {
+        var closed = 0
+        runDao.getUnfinishedRuns()
+            .filter { it.id != excludeRunId }
+            .forEach { run ->
+                val lastPoint = runDao.getLastLocationTime(run.id)
+                if (run.distanceMeters <= 0.0 && run.durationSeconds <= 0L && lastPoint == null) {
+                    runDao.deleteRun(run.id)
+                } else {
+                    val end = lastPoint ?: (run.startTime + run.durationSeconds * 1_000)
+                    runDao.updateRun(
+                        run.copy(
+                            endTime = maxOf(end, run.startTime),
+                            memo = run.memo ?: RECOVERED_MEMO,
+                        ),
+                    )
+                    closed++
+                }
+            }
+        return closed
+    }
+
     override suspend fun getActiveRun(): Run? {
         val run = runDao.getActiveRun() ?: return null
         return run.toDomain(laps = runDao.getLaps(run.id), locations = runDao.getLocations(run.id))
@@ -214,3 +243,6 @@ class RunRepositoryImpl @Inject constructor(
         const val MIN_PACE_RECORD_METERS = 1_000.0
     }
 }
+
+/** 자동으로 마감한 러닝에 붙이는 메모. 사용자가 왜 끝났는지 알 수 있게 한다. */
+internal const val RECOVERED_MEMO = "앱이 종료되어 마지막 기록 지점에서 자동으로 마감한 러닝입니다."

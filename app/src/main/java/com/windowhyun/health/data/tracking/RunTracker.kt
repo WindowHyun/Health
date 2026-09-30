@@ -153,6 +153,15 @@ class RunTracker @Inject constructor(
     }
 
     /** 결과 화면에서 "삭제"를 고른 경우. */
+    /**
+     * 앱을 켤 때 부른다. 기록 중이 아닌데 끝나지 않은 러닝(앱이 강제로 종료된 흔적)을 마감한다.
+     *
+     * 러닝 시작과 같은 잠금 안에서 하므로, 방금 시작한 러닝을 마감해 버리는 일은 없다.
+     */
+    suspend fun recoverUnfinishedRuns(): Int = mutex.withLock {
+        runRepository.closeUnfinishedRuns(excludeRunId = _state.value.runId)
+    }
+
     suspend fun discard() {
         mutex.withLock {
             val runId = _state.value.runId

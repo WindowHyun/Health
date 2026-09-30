@@ -251,7 +251,12 @@ class WorkoutSessionViewModel @Inject constructor(
 
     // ---------- 세션 종료 ----------
 
+    /** 종료 처리 중인지. 두 번 눌러 결과 화면이 두 번 열리지 않게 한다. */
+    private var finishing = false
+
     fun finishWorkout() {
+        if (finishing) return
+        finishing = true
         viewModelScope.launch {
             stopRestTimer()
             workoutRepository.finishWorkout(workoutId)

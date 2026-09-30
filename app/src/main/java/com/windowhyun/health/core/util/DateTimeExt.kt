@@ -4,11 +4,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.temporal.WeekFields
 import java.util.Locale
 
 private val koreanDateFormatter = DateTimeFormatter.ofPattern("M월 d일 (E)", Locale.KOREAN)
@@ -29,17 +29,23 @@ fun LocalDate.formatKoreanFull(): String = format(koreanFullDateFormatter)
 fun Long.formatTimeOfDay(zone: ZoneId = ZoneId.systemDefault()): String =
     Instant.ofEpochMilli(this).atZone(zone).format(timeFormatter)
 
-/** 해당 날짜가 속한 주의 시작(월요일). */
+/**
+ * 한 주의 첫 요일: 일요일(한국 달력과 같다). 주간 요약과 캘린더가 함께 쓴다.
+ *
+ * 기기 언어 설정에서 읽으면 설정에 따라 요일이 바뀔 수 있어 고정해 둔다.
+ */
+val FIRST_DAY_OF_WEEK: DayOfWeek = DayOfWeek.SUNDAY
+
+/** 해당 날짜가 속한 주의 시작(일요일). */
 fun LocalDate.startOfWeek(): LocalDate {
-    val firstDayOfWeek = WeekFields.of(Locale.KOREAN).firstDayOfWeek
     var date = this
-    while (date.dayOfWeek != firstDayOfWeek) {
+    while (date.dayOfWeek != FIRST_DAY_OF_WEEK) {
         date = date.minusDays(1)
     }
     return date
 }
 
-/** 해당 날짜가 속한 주의 끝(일요일). */
+/** 해당 날짜가 속한 주의 끝(토요일). */
 fun LocalDate.endOfWeek(): LocalDate = startOfWeek().plusDays(6)
 
 /**

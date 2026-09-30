@@ -102,10 +102,13 @@ fun HomeScreen(
         ) {
             item { WeeklySummaryRow(state) }
 
-            if (state.activeWorkout != null) {
+            // 값을 먼저 꺼내 둔다. 카드 안에서 state 를 다시 읽으면, 운동이 끝나 값이 비는 순간
+            // 목록이 카드를 빼기 전에 카드가 먼저 다시 그려져 빈 값을 만날 수 있다.
+            val activeWorkout = state.activeWorkout
+            if (activeWorkout != null) {
                 item {
                     ResumeWorkoutCard(
-                        workout = state.activeWorkout!!,
+                        workout = activeWorkout,
                         onResume = { viewModel.startWorkout(null) },
                     )
                 }
@@ -403,7 +406,7 @@ private fun RecentRunCard(
             )
             Text(
                 text = "${formatDurationKorean(run.durationSeconds)} · " +
-                    "평균 ${formatPace(run.averagePaceSecPerKm)}",
+                    "평균 ${formatPace(run.averagePaceSecPerKm, distanceUnit)}",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 4.dp),
             )

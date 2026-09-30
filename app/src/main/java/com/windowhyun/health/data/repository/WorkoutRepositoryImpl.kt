@@ -22,6 +22,7 @@ import com.windowhyun.health.domain.model.WorkoutSummary
 import com.windowhyun.health.domain.repository.WorkoutRepository
 import com.windowhyun.health.domain.usecase.PersonalRecordCalculator
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -69,7 +70,20 @@ class WorkoutRepositoryImpl @Inject constructor(
     override suspend fun getWorkout(workoutId: Long): Workout? =
         workoutDao.getWorkoutDetail(workoutId)?.toDomain()
 
-    override suspend fun startWorkout(routineId: Long?): Long {
+    /**
+     * 운동 시작 · 종료는 한 번에 하나씩 한다.
+     *
+     * 시작 버튼을 빠르게 두 번 누르면 진행 중인 운동이 두 개 생겨 하나가 어디에도 보이지 않게
+     * 되고, 종료를 두 번 누르면 PR 이 두 번 저장됐다.
+     */
+    private val sessionLock = Mutex()
+
+    /** 이미 진행 중인 운동이 있으면 새로 만들지 않고 그 운동을 돌려준다. */
+    override suspend fun startWorkout(routineId: Long?): Long = sessionLock.withLock {
+        workoutDao.getActiveWorkout()?.id ?: startWorkoutLocked(routineId)
+    }
+
+    private suspend fun startWorkoutLocked(routineId: Long?): Long {
         val now = System.currentTimeMillis()
         val routine = routineId?.let { routineDao.getRoutine(it) }
         val workoutId = workoutDao.insertWorkout(
@@ -258,10 +272,30 @@ class WorkoutRepositoryImpl @Inject constructor(
     override suspend fun getLastPerformance(exerciseId: Long, excludeWorkoutId: Long): List<WorkoutSet> =
         workoutDao.getLastPerformedSets(exerciseId, excludeWorkoutId).map { it.toDomain() }
 
-    override suspend fun finishWorkout(workoutId: Long): WorkoutSummary {
+    override suspend fun finishWorkout(workoutId: Long): WorkoutSummary = sessionLock.withLock {
+        finishWorkoutLocked(workoutId)
+    }
+
+    private suspend fun finishWorkoutLocked(workoutId: Long): WorkoutSummary {
         val detail = workoutDao.getWorkoutDetail(workoutId)
             ?: return WorkoutSummary(workoutId, "", 0, 0, 0, 0, 0.0)
         val workout = detail.toDomain()
+
+        // 이미 끝난 운동이면 아무것도 바꾸지 않는다. 다시 계산하면 끝난 시각이 늦춰지고
+        // PR 이 한 번 더 저장된다.
+        if (detail.workout.endTime != null) {
+            return WorkoutSummary(
+                workoutId = workoutId,
+                routineName = workout.displayName,
+                durationSeconds = detail.workout.durationSeconds,
+                exerciseCount = workout.performedExerciseCount,
+                totalSets = workout.totalCompletedSets,
+                totalReps = workout.totalReps,
+                totalVolumeKg = workout.totalVolume,
+                personalRecords = observeWorkoutRecords(workoutId).first(),
+                memo = workout.memo,
+            )
+        }
 
         // PR 은 endTime 을 채우기 전에 계산한다.
         // 이력 조회가 endTime IS NOT NULL 조건을 쓰므로 진행 중인 세션이 자동으로 제외된다.
@@ -298,6 +332,8 @@ class WorkoutRepositoryImpl @Inject constructor(
         }
 
         // 새로 세운 기록을 저장해 둔다. 화면이 다시 만들어져도 PR 표시가 유지된다.
+        // 앞선 종료가 PR 만 저장하고 끊겼을 수 있다. 지우고 다시 넣어 두 벌이 되지 않게 한다.
+        personalRecordDao.deleteByWorkout(workoutId)
         if (personalRecords.isNotEmpty()) {
             val achievedAt = System.currentTimeMillis()
             personalRecordDao.insertAll(

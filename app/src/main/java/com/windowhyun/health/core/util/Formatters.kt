@@ -62,7 +62,16 @@ fun formatVolume(volumeKg: Double, unit: WeightUnit): String {
 fun formatDistance(meters: Double, unit: DistanceUnit): String =
     String.format(Locale.US, "%.2f", unit.fromMeters(meters)) + unit.label
 
-/** 초/킬로미터(또는 마일) 페이스 -> "5'42\"". */
+/**
+ * 1km 당 초로 저장된 페이스를 사용자의 거리 단위로 바꿔 적는다.
+ *
+ * 거리는 마일로 바꾸면서 페이스는 km 그대로 두면, 3.11mile 옆에 km 페이스가 붙어 틀린 값이
+ * 된다(5'00"/km 는 8'03"/mile).
+ */
+fun formatPace(secondsPerKm: Double, unit: DistanceUnit): String =
+    formatPace(secondsPerKm / (1_000 * unit.perMeter))
+
+/** 초/단위 페이스 -> "5'42\"". 단위 변환은 하지 않는다. */
 fun formatPace(secondsPerUnit: Double): String {
     if (secondsPerUnit <= 0 || secondsPerUnit.isNaN() || secondsPerUnit.isInfinite()) return "--'--\""
     val total = secondsPerUnit.roundToLong()

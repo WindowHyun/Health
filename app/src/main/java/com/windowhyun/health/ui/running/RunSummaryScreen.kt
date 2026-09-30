@@ -110,7 +110,7 @@ fun RunSummaryScreen(
                                 Text(
                                     text = "최고 평균 페이스" + (
                                         state.personalBests.previousBestPaceSecPerKm
-                                            ?.let { " (이전 ${formatPace(it)})" } ?: ""
+                                            ?.let { " (이전 ${formatPace(it, state.settings.distanceUnit)})" } ?: ""
                                         ),
                                     style = MaterialTheme.typography.bodyMedium,
                                 )

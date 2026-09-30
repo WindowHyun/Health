@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.model.WeightUnit
 import org.junit.Test
+import java.time.LocalDate
 
 class FormattersTest {
 
@@ -52,5 +53,22 @@ class FormattersTest {
         val meters = 5_000.0
         assertThat(DistanceUnit.MILE.toMeters(DistanceUnit.MILE.fromMeters(meters)))
             .isWithin(1e-6).of(meters)
+    }
+
+    /** 거리를 마일로 보면 페이스도 마일 기준이어야 한다(5'00"/km = 8'03"/mile). */
+    @Test
+    fun `pace follows the distance unit`() {
+        assertThat(formatPace(300.0, DistanceUnit.KM)).isEqualTo("5'00\"")
+        assertThat(formatPace(300.0, DistanceUnit.MILE)).isEqualTo("8'03\"")
+    }
+
+    /** 한 주는 일요일에 시작한다. 기기 언어 설정과 상관없이. */
+    @Test
+    fun `week starts on sunday`() {
+        val wednesday = LocalDate.of(2026, 9, 30)
+        assertThat(wednesday.startOfWeek()).isEqualTo(LocalDate.of(2026, 9, 27))
+        assertThat(wednesday.endOfWeek()).isEqualTo(LocalDate.of(2026, 10, 3))
+        val sunday = LocalDate.of(2026, 9, 27)
+        assertThat(sunday.startOfWeek()).isEqualTo(sunday)
     }
 }

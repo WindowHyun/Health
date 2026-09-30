@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.windowhyun.health.core.designsystem.theme.chartColors
+import com.windowhyun.health.core.util.FIRST_DAY_OF_WEEK
 import com.windowhyun.health.core.util.formatDistance
 import com.windowhyun.health.core.util.formatKorean
 import com.windowhyun.health.domain.model.AppSettings
@@ -44,7 +45,6 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
-import java.time.temporal.WeekFields
 import java.util.Locale
 
 /**
@@ -182,8 +182,8 @@ private fun MonthGrid(
     runColor: Color,
     onSelect: (LocalDate) -> Unit,
 ) {
-    // 주의 첫 요일은 앱의 주간 요약과 같은 기준(한국: 일요일)을 쓴다.
-    val firstDayOfWeek = WeekFields.of(Locale.KOREAN).firstDayOfWeek
+    // 주의 첫 요일은 앱의 주간 요약과 같은 기준(일요일)을 쓴다.
+    val firstDayOfWeek = FIRST_DAY_OF_WEEK
     val weekDays = List(7) { firstDayOfWeek.plus(it.toLong()) }
     val cells = calendarCells(month, firstDayOfWeek)
     val today = LocalDate.now()

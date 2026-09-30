@@ -215,7 +215,7 @@ private fun MetricsPane(state: RunActiveUiState, modifier: Modifier = Modifier) 
             modifier = Modifier.padding(top = 8.dp),
         )
         Text(
-            text = formatPace(tracking.currentPaceSecPerKm),
+            text = formatPace(tracking.currentPaceSecPerKm, state.settings.distanceUnit),
             style = HugeMetricTextStyle,
             color = MaterialTheme.colorScheme.primary,
         )
@@ -227,7 +227,7 @@ private fun MetricsPane(state: RunActiveUiState, modifier: Modifier = Modifier) 
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             MetricColumn(label = "시간", value = formatDuration(tracking.durationSeconds))
-            MetricColumn(label = "평균 페이스", value = formatPace(tracking.averagePaceSecPerKm))
+            MetricColumn(label = "평균 페이스", value = formatPace(tracking.averagePaceSecPerKm, state.settings.distanceUnit))
         }
 
         if (tracking.stepCountAvailable) {
@@ -259,7 +259,7 @@ private fun MetricsPane(state: RunActiveUiState, modifier: Modifier = Modifier) 
                 tracking.laps.reversed().take(3).forEach { lap ->
                     Text(
                         text = "${lap.lapNumber}. ${formatDistance(lap.distanceMeters, state.settings.distanceUnit)}" +
-                            "  ${formatPace(lap.paceSecPerKm)}",
+                            "  ${formatPace(lap.paceSecPerKm, state.settings.distanceUnit)}",
                         style = MaterialTheme.typography.bodyLarge,
                     )
                 }
@@ -290,7 +290,7 @@ private fun MapPane(state: RunActiveUiState, modifier: Modifier = Modifier) {
                 label = "거리",
                 value = formatDistance(tracking.distanceMeters, state.settings.distanceUnit),
             )
-            MetricColumn(label = "페이스", value = formatPace(tracking.currentPaceSecPerKm))
+            MetricColumn(label = "페이스", value = formatPace(tracking.currentPaceSecPerKm, state.settings.distanceUnit))
             if (tracking.stepCountAvailable) {
                 MetricColumn(label = "걸음", value = String.format(Locale.US, "%,d", tracking.steps))
             } else {
