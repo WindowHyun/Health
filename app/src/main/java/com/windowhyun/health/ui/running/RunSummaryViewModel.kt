@@ -85,12 +85,13 @@ class RunSummaryViewModel @Inject constructor(
     /** 기록을 버린다. */
     fun discard() {
         viewModelScope.launch {
-            // 추적기가 들고 있지 않은 러닝(복구로 불러온 것)도 확실히 지운다.
+            // 화면에 보이는 러닝만 지운다. 추적기가 다른 러닝을 들고 있으면 그건 건드리지 않는다.
             val loadedId = loaded.value.run?.id
-            if (loadedId != null && loadedId != runTracker.state.value.runId) {
+            if (loadedId == null || loadedId == runTracker.state.value.runId) {
+                runTracker.discard()
+            } else {
                 runRepository.deleteRun(loadedId)
             }
-            runTracker.discard()
             loaded.update { it.copy(closed = true) }
         }
     }

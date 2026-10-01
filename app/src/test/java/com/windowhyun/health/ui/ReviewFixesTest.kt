@@ -25,6 +25,7 @@ import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.RunPoint
 import com.windowhyun.health.ui.history.WorkoutDetailViewModel
 import com.windowhyun.health.ui.navigation.Routes
+import com.windowhyun.health.ui.running.RunSummaryViewModel
 import com.windowhyun.health.ui.session.WorkoutSummaryViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -240,15 +241,17 @@ class ReviewFixesTest {
     /** 경로가 남은 러닝은 마지막 지점 시각으로 마감하고, 아무것도 없는 러닝은 지운다. */
     @Test
     fun `closes runs left open by a killed app`() = runTest(dispatcher) {
-        val start = runs.getRun(abandonedRun(emptyList()))!!.startTime
-        val withRoute = abandonedRun(listOf(start + 60_000, start + 420_000))
+        val now = System.currentTimeMillis()
+        // 위치 시각(GPS 시계)은 기기 시계보다 80초 앞서 있다.
+        val withRoute = abandonedRun(listOf(now + 60_000, now + 500_000))
+        val start = runs.getRun(withRoute)!!.startTime
         val empty = abandonedRun(emptyList())
-        runs.deleteRun(1) // 위에서 시각만 얻으려고 만든 러닝
 
         val closed = runs.closeUnfinishedRuns(excludeRunId = 0)
 
         assertThat(closed).isEqualTo(1)
         val recovered = runs.getRun(withRoute)!!
+        // 끝난 시각은 시작 시각과 같은 기기 시계로: 시작 + 저장된 운동 시간(420초).
         assertThat(recovered.endTime).isEqualTo(start + 420_000)
         assertThat(recovered.memo).isEqualTo(RECOVERED_MEMO)
         assertThat(recovered.distanceMeters).isWithin(0.001).of(1_200.0)
@@ -269,6 +272,25 @@ class ReviewFixesTest {
 
         assertThat(runs.getRun(current)!!.endTime).isNull()
         assertThat(runs.getRun(old)!!.endTime).isNotNull()
+        tracker.discard()
+    }
+
+    /** 복구한 러닝을 버려도, 그 사이 추적기가 새로 시작한 러닝은 지우지 않는다. */
+    @Test
+    fun `discarding a recovered run keeps the run being recorded`() = runTest(dispatcher) {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val tracker = RunTracker(runs, settings, SensorStepCounter(context))
+        val recovered = abandonedRun(listOf(System.currentTimeMillis()))
+        val viewModel = RunSummaryViewModel(runs, tracker, settings)
+        assertThat(viewModel.uiState.first { it.run != null }.run!!.id).isEqualTo(recovered)
+        tracker.start(RunGoal(RunGoalType.FREE, 0.0))
+        val current = tracker.state.value.runId
+
+        viewModel.discard()
+        settle()
+
+        assertThat(runs.getRun(recovered)).isNull()
+        assertThat(runs.getRun(current)).isNotNull()
         tracker.discard()
     }
 }

@@ -111,17 +111,18 @@ class BackupRepositoryImpl @Inject constructor(
                 throw BackupFormatException("백업 파일에 기록이 하나도 없습니다. 복원하지 않았습니다.")
             }
 
-            // 진행 중인 러닝은 몇 초마다 위치를 저장한다. 그 사이 기록을 갈아 끼우면 없는 러닝에
-            // 위치를 붙이려다 앱이 죽거나, 같은 번호의 옛 러닝을 지금 러닝 값으로 덮어쓴다.
-            if (backupDao.countInProgress() > 0) {
-                throw BackupFormatException(
-                    "진행 중인 운동이나 러닝이 있어 복원할 수 없습니다. 끝낸 뒤 다시 시도해 주세요.",
-                )
-            }
-
             val clean = file.dropOrphans()
 
             database.withTransaction {
+                // 진행 중인 러닝은 몇 초마다 위치를 저장한다. 그 사이 기록을 갈아 끼우면 없는 러닝에
+                // 위치를 붙이려다 앱이 죽거나, 같은 번호의 옛 러닝을 지금 러닝 값으로 덮어쓴다.
+                // 확인과 교체를 한 트랜잭션에서 해야 그 사이에 시작한 기록도 막는다.
+                if (backupDao.countInProgress() > 0) {
+                    throw BackupFormatException(
+                        "진행 중인 운동이나 러닝이 있어 복원할 수 없습니다. 끝낸 뒤 다시 시도해 주세요.",
+                    )
+                }
+
                 // 자식부터 지운다. 중간에 실패하면 트랜잭션이 통째로 되돌아간다.
                 backupDao.deleteAllRunLocations()
                 backupDao.deleteAllRunLaps()

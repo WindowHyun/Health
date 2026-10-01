@@ -122,7 +122,7 @@ class RunRepositoryImpl @Inject constructor(
     /**
      * 앱이 강제로 종료되면 러닝이 "끝나지 않음"으로 남는다. 모든 목록 · 통계 · 기록이 끝난
      * 러닝만 보므로 그대로 두면 어디에도 나오지 않는다. 달린 거리와 경로는 기록 중에
-     * 계속 저장해 두었으니, 마지막 GPS 시각을 끝난 시각으로 마감해 살린다.
+     * 계속 저장해 두었으니, 마지막으로 저장된 운동 시간만큼 지난 시각으로 마감해 살린다.
      *
      * 아무것도 기록되지 않은 러닝(시작하자마자 끊김)은 남길 이유가 없어 지운다.
      */
@@ -135,7 +135,13 @@ class RunRepositoryImpl @Inject constructor(
                 if (run.distanceMeters <= 0.0 && run.durationSeconds <= 0L && lastPoint == null) {
                     runDao.deleteRun(run.id)
                 } else {
-                    val end = lastPoint ?: (run.startTime + run.durationSeconds * 1_000)
+                    // 시작 시각과 같은 기기 시계로 맞춘다. 위치 시각은 GPS 시계라서 기기 시계가
+                    // 틀려 있으면 몇 분씩 어긋난다. 운동 시간이 아직 저장되지 않았을 때만 쓴다.
+                    val end = if (run.durationSeconds > 0) {
+                        run.startTime + run.durationSeconds * 1_000
+                    } else {
+                        lastPoint ?: run.startTime
+                    }
                     runDao.updateRun(
                         run.copy(
                             endTime = maxOf(end, run.startTime),

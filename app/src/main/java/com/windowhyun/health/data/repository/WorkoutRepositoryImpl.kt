@@ -284,16 +284,9 @@ class WorkoutRepositoryImpl @Inject constructor(
         // 이미 끝난 운동이면 아무것도 바꾸지 않는다. 다시 계산하면 끝난 시각이 늦춰지고
         // PR 이 한 번 더 저장된다.
         if (detail.workout.endTime != null) {
-            return WorkoutSummary(
-                workoutId = workoutId,
-                routineName = workout.displayName,
+            return workout.toSummary(
                 durationSeconds = detail.workout.durationSeconds,
-                exerciseCount = workout.performedExerciseCount,
-                totalSets = workout.totalCompletedSets,
-                totalReps = workout.totalReps,
-                totalVolumeKg = workout.totalVolume,
                 personalRecords = observeWorkoutRecords(workoutId).first(),
-                memo = workout.memo,
             )
         }
 
@@ -358,18 +351,21 @@ class WorkoutRepositoryImpl @Inject constructor(
             detail.workout.copy(endTime = end, durationSeconds = duration),
         )
 
-        return WorkoutSummary(
-            workoutId = workoutId,
-            routineName = workout.displayName,
-            durationSeconds = duration,
-            exerciseCount = workout.performedExerciseCount,
-            totalSets = workout.totalCompletedSets,
-            totalReps = workout.totalReps,
-            totalVolumeKg = workout.totalVolume,
-            personalRecords = personalRecords,
-            memo = workout.memo,
-        )
+        return workout.toSummary(durationSeconds = duration, personalRecords = personalRecords)
     }
+
+    private fun Workout.toSummary(durationSeconds: Long, personalRecords: List<PersonalRecord>) =
+        WorkoutSummary(
+            workoutId = id,
+            routineName = displayName,
+            durationSeconds = durationSeconds,
+            exerciseCount = performedExerciseCount,
+            totalSets = totalCompletedSets,
+            totalReps = totalReps,
+            totalVolumeKg = totalVolume,
+            personalRecords = personalRecords,
+            memo = memo,
+        )
 
     override suspend fun discardWorkout(workoutId: Long) = workoutDao.deleteWorkout(workoutId)
 

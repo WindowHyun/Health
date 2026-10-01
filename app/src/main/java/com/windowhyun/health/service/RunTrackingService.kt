@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -222,6 +223,7 @@ class RunTrackingService : LifecycleService() {
     }
 
     companion object {
+        private const val TAG = "RunTrackingService"
         private const val NOTIFICATION_ID = 2001
         private const val LOCATION_INTERVAL_MILLIS = 2_000L
 
@@ -252,8 +254,10 @@ class RunTrackingService : LifecycleService() {
             val intent = Intent(context, RunTrackingService::class.java).apply {
                 this.action = action
             }
-            // 앱이 뒤에 있으면 일반 시작이 막힌다. 그때는 누를 화면도 없으니 무시한다.
+            // 기록 중이면 포그라운드 서비스가 떠 있어 앱이 뒤에 있어도 시작이 막히지 않는다.
+            // 막히는 것은 기록 중이 아니면서 앱이 뒤에 있을 때뿐이라 할 일이 없다. 기록만 남긴다.
             runCatching { context.startService(intent) }
+                .onFailure { Log.w(TAG, "Run command $action was not delivered", it) }
         }
     }
 }

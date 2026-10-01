@@ -71,8 +71,12 @@ fun formatDistance(meters: Double, unit: DistanceUnit): String =
 fun formatPace(secondsPerKm: Double, unit: DistanceUnit): String =
     formatPace(secondsPerKm / (1_000 * unit.perMeter))
 
-/** 초/단위 페이스 -> "5'42\"". 단위 변환은 하지 않는다. */
-fun formatPace(secondsPerUnit: Double): String {
+/**
+ * 초/단위 페이스 -> "5'42\"". 단위 변환은 하지 않는다.
+ *
+ * 밖에서 쓰면 km 페이스를 그대로 넘기는 실수를 하기 쉬워서 감춰 둔다. 단위를 받는 쪽을 쓴다.
+ */
+private fun formatPace(secondsPerUnit: Double): String {
     if (secondsPerUnit <= 0 || secondsPerUnit.isNaN() || secondsPerUnit.isInfinite()) return "--'--\""
     val total = secondsPerUnit.roundToLong()
     return String.format(Locale.US, "%d'%02d\"", total / 60, total % 60)

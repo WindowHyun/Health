@@ -41,8 +41,8 @@ class FormattersTest {
     @Test
     /** 페이스 표기 */
     fun `formats pace as minutes and seconds`() {
-        assertThat(formatPace(352.0)).isEqualTo("5'52\"")
-        assertThat(formatPace(0.0)).isEqualTo("--'--\"")
+        assertThat(formatPace(352.0, DistanceUnit.KM)).isEqualTo("5'52\"")
+        assertThat(formatPace(0.0, DistanceUnit.KM)).isEqualTo("--'--\"")
     }
 
     @Test
