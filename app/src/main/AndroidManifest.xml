@@ -5,6 +5,15 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+        휴식 타이머 알람: 화면이 꺼져 있어도 정해진 시각에 알려야 한다.
+        Android 13+ 는 타이머 앱이 쓰는 USE_EXACT_ALARM, 12 이하는 SCHEDULE_EXACT_ALARM.
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+
     <!-- 러닝 GPS 기록 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -54,6 +63,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 휴식 타이머 알람이 울리면 알림 · 진동을 낸다. -->
+        <receiver
+            android:name=".core.notification.RestTimerReceiver"
+            android:exported="false" />
 
         <!--
             러닝 기록용 Foreground Service.

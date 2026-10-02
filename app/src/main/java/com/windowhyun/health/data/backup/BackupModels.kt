@@ -58,7 +58,6 @@ data class BackupSettings(
     val autoLapMeters: Int = 1000,
     val bodyWeightKg: Double = 70.0,
     val themeMode: String = "SYSTEM",
-    val healthConnectEnabled: Boolean = false,
     val keepScreenOnDuringWorkout: Boolean = true,
 )
 

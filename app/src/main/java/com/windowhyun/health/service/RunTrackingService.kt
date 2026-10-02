@@ -127,6 +127,7 @@ class RunTrackingService : LifecycleService() {
                     distanceText = formatDistance(state.distanceMeters, distanceUnit),
                     durationText = formatDuration(state.durationSeconds),
                     paused = state.status == RunStatus.PAUSED,
+                    signalLost = state.signalLost,
                 )
             }
         }
@@ -178,7 +179,12 @@ class RunTrackingService : LifecycleService() {
      * 알림 권한이 없어도 기록 자체는 계속되어야 하므로 조용히 건너뛴다.
      * (Foreground Service 자체는 권한 없이도 동작한다.)
      */
-    private fun updateNotification(distanceText: String, durationText: String, paused: Boolean) {
+    private fun updateNotification(
+        distanceText: String,
+        durationText: String,
+        paused: Boolean,
+        signalLost: Boolean,
+    ) {
         // 권한 확인은 lint 가 알아볼 수 있도록 이 함수 안에서 직접 한다.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -191,7 +197,7 @@ class RunTrackingService : LifecycleService() {
         runCatching {
             manager.notify(
                 NOTIFICATION_ID,
-                buildNotification(distanceText, durationText, paused),
+                buildNotification(distanceText, durationText, paused, signalLost),
             )
         }
     }
@@ -200,6 +206,7 @@ class RunTrackingService : LifecycleService() {
         distanceText: String,
         durationText: String,
         paused: Boolean = false,
+        signalLost: Boolean = false,
     ): Notification {
         val openApp = PendingIntent.getActivity(
             this,
@@ -213,7 +220,10 @@ class RunTrackingService : LifecycleService() {
         return NotificationCompat.Builder(this, HealthApplication.CHANNEL_RUN_TRACKING)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(if (paused) getString(R.string.run_paused) else getString(R.string.run_in_progress))
-            .setContentText("$distanceText · $durationText")
+            .setContentText(
+                "$distanceText · $durationText" +
+                    if (signalLost) " · ${getString(R.string.run_signal_lost)}" else "",
+            )
             .setContentIntent(openApp)
             .setOngoing(true)
             .setSilent(true)

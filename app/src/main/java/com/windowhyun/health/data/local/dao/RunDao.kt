@@ -127,4 +127,8 @@ interface RunDao {
     @Transaction
     @Query("SELECT * FROM run WHERE endTime IS NOT NULL AND date BETWEEN :fromEpochDay AND :toEpochDay ORDER BY startTime DESC")
     fun observeRunsBetween(fromEpochDay: Long, toEpochDay: Long): Flow<List<RunEntity>>
+
+    /** 이 날짜 이전에 끝난 러닝 수. 목록이 보여 주지 않은 옛 기록이 있는지 알려 준다. */
+    @Query("SELECT COUNT(*) FROM run WHERE endTime IS NOT NULL AND date < :beforeEpochDay")
+    fun observeRunCountBefore(beforeEpochDay: Long): Flow<Int>
 }

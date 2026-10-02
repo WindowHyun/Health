@@ -1,5 +1,6 @@
 package com.windowhyun.health.ui.session
 
+import android.os.SystemClock
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -52,13 +53,34 @@ sealed interface WorkoutSessionEvent {
  * 모든 변경은 즉시 DB 에 반영된다. 화면은 DB Flow 만 보고 그린다.
  */
 @HiltViewModel
-class WorkoutSessionViewModel @Inject constructor(
+class WorkoutSessionViewModel internal constructor(
     private val workoutRepository: WorkoutRepository,
     private val exerciseRepository: ExerciseRepository,
     private val settingsRepository: SettingsRepository,
     private val restTimerNotifier: RestTimerNotifier,
     savedStateHandle: SavedStateHandle,
+    /**
+     * 휴식 타이머가 쓰는 시계(밀리초). 기기가 잠든 시간도 세는 시계여야 한다.
+     * 테스트에서는 직접 넣는다.
+     */
+    private val clock: () -> Long,
 ) : ViewModel() {
+
+    @Inject
+    constructor(
+        workoutRepository: WorkoutRepository,
+        exerciseRepository: ExerciseRepository,
+        settingsRepository: SettingsRepository,
+        restTimerNotifier: RestTimerNotifier,
+        savedStateHandle: SavedStateHandle,
+    ) : this(
+        workoutRepository,
+        exerciseRepository,
+        settingsRepository,
+        restTimerNotifier,
+        savedStateHandle,
+        SystemClock::elapsedRealtime,
+    )
 
     private val workoutId: Long = savedStateHandle[Routes.ARG_WORKOUT_ID] ?: 0L
 
@@ -207,40 +229,102 @@ class WorkoutSessionViewModel @Inject constructor(
 
     // ---------- 휴식 타이머 ----------
 
+    // 남은 시간을 1초씩 빼며 세면 화면이 꺼져 기기가 잠든 동안 멈춘다. 끝나는 시각을 정해 두고
+    // 남은 시간을 시계에서 매번 다시 계산한다. 알림은 시스템 알람이 시각에 맞춰 울린다.
+    private var restEndsAt = 0L
+    private var restPausedLeftMillis = 0L
+    private var restDoneSince: Long? = null
+
     fun startRestTimer(seconds: Int) {
         val total = seconds.coerceAtLeast(1)
-        restTimerJob?.cancel()
         restTimerNotifier.cancel()
+        restEndsAt = clock() + total * 1_000L
+        restDoneSince = null
         _restTimer.value = RestTimerState(visible = true, totalSeconds = total, remainingSeconds = total)
+        scheduleRestAlarm()
+        runRestLoop()
+    }
+
+    /** 화면에 보이는 숫자만 갱신한다. 알림과 진동은 알람이 맡는다. */
+    private fun runRestLoop() {
+        restTimerJob?.cancel()
         restTimerJob = viewModelScope.launch {
             while (true) {
-                delay(1000)
+                delay(REST_TICK_MILLIS)
                 val state = _restTimer.value
                 if (!state.visible) return@launch
                 if (state.paused) continue
-                val remaining = state.remainingSeconds - 1
-                if (remaining <= 0) {
-                    _restTimer.value = state.copy(remainingSeconds = 0)
-                    restTimerNotifier.notifyRestFinished(settingsRepository.current().vibrationEnabled)
-                    delay(2000)
-                    _restTimer.update { if (it.remainingSeconds <= 0) it.copy(visible = false) else it }
-                    return@launch
+                val now = clock()
+                val leftMillis = restEndsAt - now
+                if (leftMillis > 0) {
+                    restDoneSince = null
+                    _restTimer.update { it.copy(remainingSeconds = ceilSeconds(leftMillis)) }
+                } else {
+                    // 끝난 뒤에도 잠깐 0 을 보여 준다. 그사이 +15초를 누르면 다시 센다.
+                    val since = restDoneSince ?: now.also { restDoneSince = it }
+                    _restTimer.update { it.copy(remainingSeconds = 0) }
+                    if (now - since >= REST_AFTERGLOW_MILLIS) {
+                        _restTimer.update { it.copy(visible = false) }
+                        return@launch
+                    }
                 }
-                _restTimer.value = state.copy(remainingSeconds = remaining)
             }
         }
     }
 
-    fun adjustRestTimer(deltaSeconds: Int) = _restTimer.update { state ->
-        if (!state.visible) return@update state
-        val remaining = (state.remainingSeconds + deltaSeconds).coerceAtLeast(0)
-        state.copy(
-            remainingSeconds = remaining,
-            totalSeconds = maxOf(state.totalSeconds, remaining),
-        )
+    /** 끝나는 시각에 알림이 울리도록 알람을 맞춘다(이미 맞춘 것은 바뀐다). */
+    private fun scheduleRestAlarm() {
+        viewModelScope.launch {
+            val vibrate = settingsRepository.current().vibrationEnabled
+            val state = _restTimer.value
+            // 그사이 건너뛰거나 멈췄다면 맞추지 않는다.
+            if (!state.visible || state.paused) return@launch
+            restTimerNotifier.scheduleFinish(restEndsAt - clock(), vibrate)
+        }
     }
 
-    fun toggleRestPause() = _restTimer.update { it.copy(paused = !it.paused) }
+    fun adjustRestTimer(deltaSeconds: Int) {
+        val state = _restTimer.value
+        if (!state.visible) return
+        val deltaMillis = deltaSeconds * 1_000L
+        val now = clock()
+        val remainingSeconds: Int
+        if (state.paused) {
+            restPausedLeftMillis = (restPausedLeftMillis + deltaMillis).coerceAtLeast(0)
+            remainingSeconds = ceilSeconds(restPausedLeftMillis)
+        } else {
+            // 이미 끝난 뒤라면 지금부터 센다. 끝난 시각에 더하면 곧바로 끝나 버린다.
+            restEndsAt = (maxOf(restEndsAt, now) + deltaMillis).coerceAtLeast(now)
+            restDoneSince = null
+            remainingSeconds = ceilSeconds(restEndsAt - now)
+            // 이미 뜬 "휴식 끝" 알림은 치우고, 알람은 새 시각으로 다시 맞춘다.
+            restTimerNotifier.cancel()
+            scheduleRestAlarm()
+        }
+        _restTimer.update {
+            it.copy(
+                remainingSeconds = remainingSeconds,
+                totalSeconds = maxOf(it.totalSeconds, remainingSeconds),
+            )
+        }
+    }
+
+    fun toggleRestPause() {
+        val state = _restTimer.value
+        // 이미 끝난 타이머는 멈출 것이 없다.
+        if (!state.visible || state.remainingSeconds <= 0) return
+        val now = clock()
+        if (!state.paused) {
+            restPausedLeftMillis = (restEndsAt - now).coerceAtLeast(0)
+            restTimerNotifier.cancel()
+            _restTimer.update { it.copy(paused = true) }
+        } else {
+            restEndsAt = now + restPausedLeftMillis
+            restDoneSince = null
+            _restTimer.update { it.copy(paused = false) }
+            scheduleRestAlarm()
+        }
+    }
 
     fun stopRestTimer() {
         restTimerJob?.cancel()
@@ -248,6 +332,8 @@ class WorkoutSessionViewModel @Inject constructor(
         restTimerNotifier.cancel()
         _restTimer.value = RestTimerState()
     }
+
+    private fun ceilSeconds(millis: Long): Int = ((millis + 999) / 1_000).toInt()
 
     // ---------- 세션 종료 ----------
 
@@ -276,5 +362,10 @@ class WorkoutSessionViewModel @Inject constructor(
         super.onCleared()
         restTimerJob?.cancel()
         tickerJob?.cancel()
+    }
+
+    private companion object {
+        const val REST_TICK_MILLIS = 250L
+        const val REST_AFTERGLOW_MILLIS = 2_000L
     }
 }

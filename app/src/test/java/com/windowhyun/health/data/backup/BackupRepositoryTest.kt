@@ -28,6 +28,9 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -462,5 +465,20 @@ class BackupRepositoryTest {
 
         assertThat(error).isInstanceOf(BackupFormatException::class.java)
         assertThat(db.backupDao().allRuns()).hasSize(2)
+    }
+
+    /** 예전 앱이 쓴 백업에는 지금은 없는 설정(Health Connect)이 들어 있다. 그래도 복원된다. */
+    @Test
+    fun `restores a backup that still carries the removed health connect setting`() = runTest(dispatcher) {
+        seedRecords()
+        val file = Json.parseToJsonElement(String(exportBytes())).jsonObject
+        val settings = file.getValue("settings").jsonObject
+        val old = JsonObject(
+            file + ("settings" to JsonObject(settings + ("healthConnectEnabled" to JsonPrimitive(true)))),
+        )
+
+        backup.restoreBackup(ByteArrayInputStream(old.toString().toByteArray()))
+
+        assertThat(db.backupDao().allWorkouts()).hasSize(1)
     }
 }

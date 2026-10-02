@@ -35,6 +35,9 @@ class RunRepositoryImpl @Inject constructor(
         runDao.observeRunsBetween(from.toEpochDay(), to.toEpochDay())
             .map { list -> list.map { it.toDomain() } }
 
+    override fun observeRunCountBefore(date: LocalDate): Flow<Int> =
+        runDao.observeRunCountBefore(date.toEpochDay())
+
     override fun observeDistanceBetween(from: LocalDate, to: LocalDate): Flow<Double> =
         runDao.observeDistanceBetween(from.toEpochDay(), to.toEpochDay())
 

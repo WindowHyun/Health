@@ -68,6 +68,10 @@ interface WorkoutDao {
     )
     fun observeWorkoutCountBetween(fromEpochDay: Long, toEpochDay: Long): Flow<Int>
 
+    /** 이 날짜 이전에 끝난 운동 수. 목록이 보여 주지 않은 옛 기록이 있는지 알려 준다. */
+    @Query("SELECT COUNT(*) FROM workout WHERE endTime IS NOT NULL AND date < :beforeEpochDay")
+    fun observeWorkoutCountBefore(beforeEpochDay: Long): Flow<Int>
+
     @Query(
         "SELECT COALESCE(SUM(durationSeconds), 0) FROM workout " +
             "WHERE endTime IS NOT NULL AND date BETWEEN :fromEpochDay AND :toEpochDay",

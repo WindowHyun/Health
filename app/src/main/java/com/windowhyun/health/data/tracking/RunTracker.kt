@@ -1,5 +1,6 @@
 package com.windowhyun.health.data.tracking
 
+import android.os.SystemClock
 import com.windowhyun.health.core.util.estimateRunCalories
 import com.windowhyun.health.domain.model.LocationSample
 import com.windowhyun.health.domain.model.RunGoal
@@ -27,11 +28,23 @@ import javax.inject.Singleton
  * 누적값은 주기적으로 DB 에 기록되므로 기록 도중 앱이 죽어도 남는다.
  */
 @Singleton
-class RunTracker @Inject constructor(
+class RunTracker internal constructor(
     private val runRepository: RunRepository,
     private val settingsRepository: SettingsRepository,
     private val stepCounter: StepCounter,
+    /**
+     * 경과 시간을 재는 시계(밀리초). 기기가 잠든 시간도 세는 시계여야 한다.
+     * 테스트에서는 직접 넣는다.
+     */
+    private val clock: () -> Long,
 ) {
+
+    @Inject
+    constructor(
+        runRepository: RunRepository,
+        settingsRepository: SettingsRepository,
+        stepCounter: StepCounter,
+    ) : this(runRepository, settingsRepository, stepCounter, SystemClock::elapsedRealtime)
 
     private val _state = MutableStateFlow(RunTrackingState())
     val state: StateFlow<RunTrackingState> = _state.asStateFlow()
@@ -41,6 +54,12 @@ class RunTracker @Inject constructor(
     private var bodyWeightKg: Double = DEFAULT_BODY_WEIGHT_KG
     private var ticksSinceFlush = 0
 
+    // 1초 타이머가 올 때마다 1 을 더하면, 화면이 꺼져 기기가 잠든 사이 빠진 타이머만큼 시간이
+    // 짧게 기록된다(거리는 GPS 로 그대로 쌓여 페이스만 빨라진다). 시계에서 지난 시간을 읽어 센다.
+    private var lastClockAt = 0L
+    private var carryMillis = 0L
+    private var lastLocationAt = 0L
+
     /** 러닝을 시작한다. 이미 진행 중이면 아무것도 하지 않는다. */
     suspend fun start(goal: RunGoal) {
         mutex.withLock {
@@ -49,6 +68,9 @@ class RunTracker @Inject constructor(
             bodyWeightKg = settings.bodyWeightKg
             accumulator = RunMetricsAccumulator(autoLapMeters = settings.autoLapMeters)
             ticksSinceFlush = 0
+            lastClockAt = clock()
+            carryMillis = 0
+            lastLocationAt = lastClockAt
 
             val runId = runRepository.startRun(goal.type, goal.value)
             _state.value = RunTrackingState(
@@ -71,10 +93,15 @@ class RunTracker @Inject constructor(
                 return
             }
 
+            // 위치가 들어온 시점의 경과 시간으로 페이스 · Lap 을 계산한다. 타이머가 밀려 있으면
+            // 거리만 먼저 늘어 구간 시간이 모자라게 잡힌다.
+            syncClock(accumulator)
+            lastLocationAt = clock()
             accumulator.onLocation(sample).forEach { lap ->
                 runRepository.appendLap(_state.value.runId, lap)
             }
             publish(accumulator, lastAccuracy = sample.accuracyMeters)
+            _state.update { it.copy(signalLost = false) }
         }
     }
 
@@ -97,7 +124,9 @@ class RunTracker @Inject constructor(
             val accumulator = accumulator ?: return
             if (_state.value.status != RunStatus.TRACKING) return
 
-            accumulator.advanceTime()
+            syncClock(accumulator)
+            val signalLost = clock() - lastLocationAt > SIGNAL_LOST_MILLIS
+            _state.update { it.copy(signalLost = signalLost) }
             publish(accumulator, lastAccuracy = _state.value.lastAccuracyMeters)
 
             if (++ticksSinceFlush >= FLUSH_INTERVAL_SECONDS) {
@@ -111,6 +140,7 @@ class RunTracker @Inject constructor(
         mutex.withLock {
             if (_state.value.status != RunStatus.TRACKING) return
             val accumulator = accumulator ?: return
+            syncClock(accumulator)
             // 정지한 사이의 이동은 거리에 넣지 않는다.
             accumulator.breakSegment()
             flush(accumulator)
@@ -121,7 +151,10 @@ class RunTracker @Inject constructor(
     suspend fun resume() {
         mutex.withLock {
             if (_state.value.status != RunStatus.PAUSED) return
-            _state.update { it.copy(status = RunStatus.TRACKING) }
+            // 멈춰 있던 시간은 세지 않는다. 위치도 새로 기다리므로 바로 "신호 없음"이 되지 않게 한다.
+            lastClockAt = clock()
+            lastLocationAt = lastClockAt
+            _state.update { it.copy(status = RunStatus.TRACKING, signalLost = false) }
         }
     }
 
@@ -131,6 +164,7 @@ class RunTracker @Inject constructor(
             val accumulator = accumulator ?: return
             if (!_state.value.isActive) return
 
+            if (_state.value.status == RunStatus.TRACKING) syncClock(accumulator)
             accumulator.finalizePartialLap()?.let { lap ->
                 runRepository.appendLap(_state.value.runId, lap)
             }
@@ -185,6 +219,16 @@ class RunTracker @Inject constructor(
         }
     }
 
+    /** 마지막으로 센 뒤 지난 시간을 더한다. 호출이 늦어도 실제로 흐른 만큼 센다. */
+    private fun syncClock(accumulator: RunMetricsAccumulator) {
+        val now = clock()
+        val total = carryMillis + (now - lastClockAt).coerceAtLeast(0)
+        lastClockAt = now
+        carryMillis = total % 1_000
+        val seconds = total / 1_000
+        if (seconds > 0) accumulator.advanceTime(seconds)
+    }
+
     private fun publish(accumulator: RunMetricsAccumulator, lastAccuracy: Float?) {
         _state.update { current ->
             current.copy(
@@ -222,6 +266,9 @@ class RunTracker @Inject constructor(
     private companion object {
         /** 몇 초마다 DB 에 반영할지. */
         const val FLUSH_INTERVAL_SECONDS = 5
+
+        /** 위치를 이만큼 못 받으면 신호가 끊긴 것으로 본다. 위치는 2초마다 온다. */
+        const val SIGNAL_LOST_MILLIS = 15_000L
 
         const val DEFAULT_BODY_WEIGHT_KG = 70.0
     }

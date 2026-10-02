@@ -46,6 +46,9 @@ interface WorkoutRepository {
     fun observeRecentWorkouts(limit: Int): Flow<List<Workout>>
     fun observeWorkoutsBetween(from: LocalDate, to: LocalDate): Flow<List<Workout>>
     fun observeWorkoutCountBetween(from: LocalDate, to: LocalDate): Flow<Int>
+
+    /** [date] 이전에 끝난 운동 수. */
+    fun observeWorkoutCountBefore(date: LocalDate): Flow<Int>
     fun observeWorkoutDurationBetween(from: LocalDate, to: LocalDate): Flow<Long>
 
     suspend fun getWorkout(workoutId: Long): Workout?
@@ -111,6 +114,9 @@ interface RunRepository {
     fun observeRecentRuns(limit: Int): Flow<List<Run>>
     fun observeRunsBetween(from: LocalDate, to: LocalDate): Flow<List<Run>>
     fun observeDistanceBetween(from: LocalDate, to: LocalDate): Flow<Double>
+
+    /** [date] 이전에 끝난 러닝 수. */
+    fun observeRunCountBefore(date: LocalDate): Flow<Int>
     fun observeDurationBetween(from: LocalDate, to: LocalDate): Flow<Long>
     suspend fun getRun(id: Long): Run?
     suspend fun saveRun(run: Run): Long

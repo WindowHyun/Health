@@ -64,6 +64,9 @@ class WorkoutRepositoryImpl @Inject constructor(
     override fun observeWorkoutCountBetween(from: LocalDate, to: LocalDate): Flow<Int> =
         workoutDao.observeWorkoutCountBetween(from.toEpochDay(), to.toEpochDay())
 
+    override fun observeWorkoutCountBefore(date: LocalDate): Flow<Int> =
+        workoutDao.observeWorkoutCountBefore(date.toEpochDay())
+
     override fun observeWorkoutDurationBetween(from: LocalDate, to: LocalDate): Flow<Long> =
         workoutDao.observeWorkoutDurationBetween(from.toEpochDay(), to.toEpochDay())
 

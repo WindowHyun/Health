@@ -34,7 +34,6 @@ class SettingsRepositoryImpl @Inject constructor(
         val AUTO_LAP_METERS = intPreferencesKey("auto_lap_meters")
         val BODY_WEIGHT_KG = doublePreferencesKey("body_weight_kg")
         val THEME_MODE = stringPreferencesKey("theme_mode")
-        val HEALTH_CONNECT = booleanPreferencesKey("health_connect_enabled")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
     }
 
@@ -58,7 +57,6 @@ class SettingsRepositoryImpl @Inject constructor(
             themeMode = prefs[Keys.THEME_MODE]?.let { name ->
                 runCatching { ThemeMode.valueOf(name) }.getOrNull()
             } ?: defaults.themeMode,
-            healthConnectEnabled = prefs[Keys.HEALTH_CONNECT] ?: defaults.healthConnectEnabled,
             keepScreenOnDuringWorkout = prefs[Keys.KEEP_SCREEN_ON] ?: defaults.keepScreenOnDuringWorkout,
         )
     }
@@ -83,7 +81,6 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.AUTO_LAP_METERS] = updated.autoLapMeters
             prefs[Keys.BODY_WEIGHT_KG] = updated.bodyWeightKg
             prefs[Keys.THEME_MODE] = updated.themeMode.name
-            prefs[Keys.HEALTH_CONNECT] = updated.healthConnectEnabled
             prefs[Keys.KEEP_SCREEN_ON] = updated.keepScreenOnDuringWorkout
         }
     }

@@ -27,6 +27,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -92,6 +93,7 @@ fun HistoryScreen(
                 HistoryMode.LIST -> HistoryList(
                     state = state,
                     onFilter = viewModel::setFilter,
+                    onLoadOlder = viewModel::loadOlder,
                     onOpenWorkout = onOpenWorkout,
                     onOpenRun = onOpenRun,
                 )
@@ -123,6 +125,7 @@ fun HistoryScreen(
 private fun HistoryList(
     state: HistoryUiState,
     onFilter: (HistoryFilter) -> Unit,
+    onLoadOlder: () -> Unit,
     onOpenWorkout: (Long) -> Unit,
     onOpenRun: (Long) -> Unit,
 ) {
@@ -133,23 +136,23 @@ private fun HistoryList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // 기록이 둘 다 없으면 필터를 보여 줄 이유가 없다.
-        if (state.entries.isNotEmpty()) {
+        if (state.totalCount > 0) {
             item {
                 FilterChips(
                     selected = state.filter,
                     gymCount = state.gymCount,
                     runCount = state.runCount,
-                    total = state.entries.size,
+                    total = state.totalCount,
                     onSelect = onFilter,
                 )
             }
         }
 
-        if (!state.loading && entries.isEmpty()) {
+        if (!state.loading && entries.isEmpty() && state.olderCount == 0) {
             item {
                 EmptyMessage(
                     icon = Icons.Filled.CalendarMonth,
-                    title = if (state.entries.isEmpty()) {
+                    title = if (state.totalCount == 0) {
                         "저장된 기록이 없습니다"
                     } else {
                         "이 종류의 기록이 없습니다"
@@ -176,6 +179,14 @@ private fun HistoryList(
                     onOpenWorkout = onOpenWorkout,
                     onOpenRun = onOpenRun,
                 )
+            }
+        }
+
+        if (state.olderCount > 0) {
+            item(key = "load-older") {
+                TextButton(onClick = onLoadOlder, modifier = Modifier.fillMaxWidth()) {
+                    Text("이전 기록 ${state.olderCount}개 더 보기")
+                }
             }
         }
     }

@@ -73,6 +73,11 @@ data class RunTrackingState(
     val route: List<RunPoint> = emptyList(),
     /** 마지막으로 받은 GPS 정확도. null 이면 아직 첫 수신 전. */
     val lastAccuracyMeters: Float? = null,
+    /**
+     * 한동안 위치를 하나도 받지 못했다(GPS 를 껐거나 권한이 사라졌거나 신호가 막힘).
+     * 이 동안은 시간만 흐르고 거리는 쌓이지 않는다.
+     */
+    val signalLost: Boolean = false,
     val startTime: Long = 0,
 ) {
     val isActive: Boolean get() = status == RunStatus.TRACKING || status == RunStatus.PAUSED

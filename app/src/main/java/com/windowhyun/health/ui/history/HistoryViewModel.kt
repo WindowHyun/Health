@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import java.time.LocalDate
 import java.time.YearMonth
 import javax.inject.Inject
@@ -94,11 +95,25 @@ enum class HistoryFilter(val label: String) {
 data class HistoryUiState(
     val entries: List<HistoryEntry> = emptyList(),
     val filter: HistoryFilter = HistoryFilter.ALL,
+    /** 종류별 전체 기록 수(목록에 아직 불러오지 않은 옛 기록 포함). */
     val gymCount: Int = 0,
     val runCount: Int = 0,
+    /** 불러온 기간보다 오래된 기록 수. */
+    val olderGymCount: Int = 0,
+    val olderRunCount: Int = 0,
     val settings: AppSettings = AppSettings(),
     val loading: Boolean = true,
 ) {
+    val totalCount: Int get() = gymCount + runCount
+
+    /** 선택한 필터에서 아직 불러오지 않은 옛 기록 수. */
+    val olderCount: Int
+        get() = when (filter) {
+            HistoryFilter.ALL -> olderGymCount + olderRunCount
+            HistoryFilter.GYM -> olderGymCount
+            HistoryFilter.RUNNING -> olderRunCount
+        }
+
     /** 필터를 적용한 목록. 화면은 이것만 그린다. */
     val visibleEntries: List<HistoryEntry>
         get() = when (filter) {
@@ -132,29 +147,45 @@ class HistoryViewModel internal constructor(
     private val filter = MutableStateFlow(HistoryFilter.ALL)
 
     // 날짜를 고정하면 자정을 넘겼을 때 오늘 기록이 조회 범위 밖으로 밀려난다.
-    val uiState: StateFlow<HistoryUiState> = today.flatMapLatest { today ->
-        val from = today.minusYears(1)
-        combine(
-            workoutRepository.observeWorkoutsBetween(from = from, to = today),
-            runRepository.observeRunsBetween(from = from, to = today),
-            settingsRepository.settings,
-            filter,
-        ) { workouts, runs, settings, selected ->
-            val entries = mergeEntries(workouts, runs)
+    //
+    // 기록을 전부 읽어 오면 쌓일수록 느려지고, 기간을 잘라 버리면 옛 기록이 목록에서 사라진다.
+    // 최근 1년만 읽고, 그보다 오래된 기록은 개수를 알려 주며 "더 보기"로 1년씩 늘린다.
+    private val windowYears = MutableStateFlow(1)
 
-            HistoryUiState(
-                entries = entries,
-                filter = selected,
-                gymCount = workouts.size,
-                runCount = runs.size,
-                settings = settings,
-                loading = false,
-            )
+    val uiState: StateFlow<HistoryUiState> = today.flatMapLatest { today ->
+        windowYears.flatMapLatest { years ->
+            val from = today.minusYears(years.toLong())
+            combine(
+                workoutRepository.observeWorkoutsBetween(from = from, to = today),
+                runRepository.observeRunsBetween(from = from, to = today),
+                combine(
+                    workoutRepository.observeWorkoutCountBefore(from),
+                    runRepository.observeRunCountBefore(from),
+                ) { gym, run -> gym to run },
+                settingsRepository.settings,
+                filter,
+            ) { workouts, runs, older, settings, selected ->
+                HistoryUiState(
+                    entries = mergeEntries(workouts, runs),
+                    filter = selected,
+                    gymCount = workouts.size + older.first,
+                    runCount = runs.size + older.second,
+                    olderGymCount = older.first,
+                    olderRunCount = older.second,
+                    settings = settings,
+                    loading = false,
+                )
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryUiState())
 
     fun setFilter(value: HistoryFilter) {
         filter.value = value
+    }
+
+    /** 목록이 보여 주는 기간을 1년 늘린다. */
+    fun loadOlder() {
+        windowYears.update { it + 1 }
     }
 
     // ----- 보기 전환 -----

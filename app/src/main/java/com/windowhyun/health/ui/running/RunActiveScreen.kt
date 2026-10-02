@@ -97,7 +97,7 @@ fun RunActiveScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                GpsIndicator(accuracyMeters = tracking.lastAccuracyMeters)
+                GpsIndicator(accuracyMeters = tracking.lastAccuracyMeters, signalLost = tracking.signalLost)
                 FilledTonalButton(onClick = { showMap = !showMap }) {
                     Icon(
                         imageVector = if (showMap) Icons.Filled.Numbers else Icons.Filled.Map,
@@ -313,7 +313,20 @@ private fun MetricColumn(label: String, value: String) {
 }
 
 @Composable
-private fun GpsIndicator(accuracyMeters: Float?) {
+private fun GpsIndicator(accuracyMeters: Float?, signalLost: Boolean) {
+    if (signalLost) {
+        // 거리가 쌓이지 않는 것을 모르고 계속 달리지 않도록 눈에 띄게 알린다.
+        Text(
+            text = "위치를 받지 못하고 있어요 · 거리가 기록되지 않습니다",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        )
+        return
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()

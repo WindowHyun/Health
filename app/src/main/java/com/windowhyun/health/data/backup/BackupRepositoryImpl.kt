@@ -273,7 +273,6 @@ private fun AppSettings.toBackup() = BackupSettings(
     autoLapMeters = autoLapMeters,
     bodyWeightKg = bodyWeightKg,
     themeMode = themeMode.name,
-    healthConnectEnabled = healthConnectEnabled,
     keepScreenOnDuringWorkout = keepScreenOnDuringWorkout,
 )
 
@@ -290,7 +289,6 @@ private fun BackupSettings.toSettings(current: AppSettings) = current.copy(
     autoLapMeters = autoLapMeters,
     bodyWeightKg = bodyWeightKg,
     themeMode = enumOrNull<ThemeMode>(themeMode) ?: current.themeMode,
-    healthConnectEnabled = healthConnectEnabled,
     keepScreenOnDuringWorkout = keepScreenOnDuringWorkout,
 )
 
