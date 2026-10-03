@@ -1,6 +1,8 @@
 package com.windowhyun.health.core
 
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -47,7 +49,7 @@ class ColorSchemeTest {
         return (hi + 0.05) / (lo + 0.05)
     }
 
-    /** 표면(중립) 계열 역할. 이 팔레트에서는 초록 쪽으로 기울어 있어야 한다. */
+    /** 표면(중립) 계열 역할. 모두 이 앱의 팔레트로 직접 지정해야 한다. */
     private fun neutralRoles(s: ColorScheme) = listOf(
         "background" to s.background,
         "surface" to s.surface,
@@ -68,17 +70,21 @@ class ColorSchemeTest {
     )
 
     /**
-     * 중립 계열은 초록 쪽으로 기울어 있어 파랑이 초록을 넘지 않는다.
-     * Material 3 기본값은 보라 계열이라 파랑이 초록보다 크다. 그것으로 누락을 잡는다.
+     * 중립 계열 역할이 Material 3 기본값(보라 기운이 도는 색) 그대로면 실패한다.
+     * 일부 역할만 지정하면 나머지가 기본값으로 남는데, 이 팔레트는 중립색이 곧 정체성이라
+     * 한 칸이라도 새면 화면에서 바로 어색해진다. 순백(#FFFFFF)은 어느 팔레트에서나 같은 값이라 뺀다.
      */
     @Test
-    fun `neutral roles stay in the green palette`() {
+    fun `neutral roles are never the library defaults`() {
+        val defaults = mapOf("light" to lightColorScheme(), "dark" to darkColorScheme())
         for ((schemeName, scheme) in listOf("light" to LightColors, "dark" to DarkColors)) {
+            val library = neutralRoles(defaults.getValue(schemeName)).toMap()
             for ((role, color) in neutralRoles(scheme)) {
-                val (_, g, b) = rgb(color)
-                assertWithMessage("$schemeName.$role=${hex(color)} (파랑 $b > 초록 $g)")
-                    .that(b <= g)
-                    .isTrue()
+                val fallback = library.getValue(role)
+                if (fallback == Color.White) continue
+                assertWithMessage("$schemeName.$role=${hex(color)} 가 라이브러리 기본값 그대로다")
+                    .that(color)
+                    .isNotEqualTo(fallback)
             }
         }
     }

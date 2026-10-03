@@ -4,11 +4,19 @@ import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -91,6 +99,50 @@ internal val DarkColors = darkColorScheme(
 )
 
 /**
+ * Material 색 역할에 딱 맞지 않는 색들. 강조(라임) 면과 어두운 패널은 화면 곳곳에 쓰이는데
+ * 라이트 · 다크에서 같은 자리에 같은 뜻으로 있어야 한다.
+ */
+@Immutable
+class HealthColors(
+    /** 가장 눈에 띄어야 하는 면(시작 버튼 · 진행 표시). 라임. */
+    val accent: Color,
+    val onAccent: Color,
+    /** 화면에서 한 덩어리만 어둡게 눌러 주는 패널(오늘의 루틴 같은 것). */
+    val panel: Color,
+    val onPanel: Color,
+)
+
+private val LightHealthColors = HealthColors(
+    accent = HealthLime,
+    onAccent = Color(0xFF0A0A0A),
+    panel = Color(0xFF0A0A0A),
+    onPanel = Color(0xFFFFFFFF),
+)
+
+private val DarkHealthColors = HealthColors(
+    accent = HealthLime,
+    onAccent = Color(0xFF0B0B0C),
+    panel = Color(0xFF1D1D20),
+    onPanel = Color(0xFFF4F4F2),
+)
+
+private val LocalHealthColors = staticCompositionLocalOf { LightHealthColors }
+
+val MaterialTheme.healthColors: HealthColors
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalHealthColors.current
+
+/** 모서리는 거의 각지게. 둥근 카드와 알약 모양이 "기본 템플릿" 인상의 큰 부분이다. */
+val HealthShapes = Shapes(
+    extraSmall = RoundedCornerShape(2.dp),
+    small = RoundedCornerShape(4.dp),
+    medium = RoundedCornerShape(4.dp),
+    large = RoundedCornerShape(6.dp),
+    extraLarge = RoundedCornerShape(8.dp),
+)
+
+/**
  * 앱 테마. Light/Dark 를 지원하고 Android 12+ 에서는 다이내믹 컬러를 쓸 수 있다.
  */
 @Composable
@@ -120,9 +172,12 @@ fun HealthTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = HealthTypography,
-        content = content,
-    )
+    CompositionLocalProvider(LocalHealthColors provides if (darkTheme) DarkHealthColors else LightHealthColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = HealthTypography,
+            shapes = HealthShapes,
+            content = content,
+        )
+    }
 }

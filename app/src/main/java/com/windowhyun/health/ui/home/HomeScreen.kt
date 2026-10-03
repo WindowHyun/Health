@@ -1,61 +1,75 @@
 package com.windowhyun.health.ui.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.DirectionsRun
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.windowhyun.health.core.util.formatDistance
+import com.windowhyun.health.core.designsystem.theme.healthColors
+import com.windowhyun.health.core.model.DistanceUnit
+import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatDurationKorean
-import com.windowhyun.health.core.util.formatKorean
 import com.windowhyun.health.core.util.formatPace
 import com.windowhyun.health.core.util.formatVolume
+import com.windowhyun.health.core.util.startOfWeek
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.Run
+import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.model.Workout
-import com.windowhyun.health.ui.components.EmptyMessage
-import com.windowhyun.health.ui.components.SectionHeader
-import com.windowhyun.health.ui.components.StatCard
+import com.windowhyun.health.ui.components.AccentButton
+import com.windowhyun.health.ui.components.Hairline
+import com.windowhyun.health.ui.components.MetricValue
+import com.windowhyun.health.ui.components.OutlineBlockButton
+import com.windowhyun.health.ui.components.PanelButton
+import com.windowhyun.health.ui.components.SectionLabel
 import kotlinx.coroutines.flow.collectLatest
+import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
  * 홈. 목표는 "앱을 켜고 두 번 안에 운동을 시작하는 것"이다.
- * 그래서 시작 버튼을 화면 위쪽 큰 영역에 둔다.
+ * 그래서 시작할 수 있는 것(오늘의 루틴 · 헬스 · 러닝)을 화면 위쪽에 크게 둔다.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onOpenSettings: () -> Unit,
@@ -68,348 +82,452 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    androidx.compose.runtime.LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {
         viewModel.startedWorkoutId.collectLatest { onStartWorkout(it) }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(text = state.today.formatKorean(), style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = "오늘도 기록해 봅시다",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "설정")
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    val recent = remember(state.recentWorkouts, state.recentRuns, state.settings) {
+        recentRecords(state.recentWorkouts, state.recentRuns, state.settings.weightUnit, state.settings.distanceUnit)
+    }
+
+    Scaffold { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 32.dp),
         ) {
-            item { WeeklySummaryRow(state) }
+            item { Header(state.today, onOpenSettings) }
+
+            item {
+                Spacer(Modifier.height(28.dp))
+                WeekSummary(state)
+            }
 
             // 값을 먼저 꺼내 둔다. 카드 안에서 state 를 다시 읽으면, 운동이 끝나 값이 비는 순간
             // 목록이 카드를 빼기 전에 카드가 먼저 다시 그려져 빈 값을 만날 수 있다.
             val activeWorkout = state.activeWorkout
             if (activeWorkout != null) {
                 item {
-                    ResumeWorkoutCard(
-                        workout = activeWorkout,
-                        onResume = { viewModel.startWorkout(null) },
+                    Spacer(Modifier.height(32.dp))
+                    StatusStrip(
+                        label = "진행 중인 운동",
+                        title = activeWorkout.displayName,
+                        action = "이어하기",
+                        onClick = { viewModel.startWorkout(null) },
                     )
                 }
             }
 
             if (state.activeRun.isActive) {
                 item {
-                    ActiveRunCard(
-                        distanceText = formatDistance(
-                            state.activeRun.distanceMeters,
-                            state.settings.distanceUnit,
-                        ),
-                        durationText = formatDurationKorean(state.activeRun.durationSeconds),
-                        paused = state.activeRun.status == RunStatus.PAUSED,
-                        onOpen = onOpenRunning,
+                    Spacer(Modifier.height(if (activeWorkout != null) 12.dp else 32.dp))
+                    StatusStrip(
+                        label = if (state.activeRun.status == RunStatus.PAUSED) "러닝 일시정지" else "러닝 기록 중",
+                        title = distanceParts(state.activeRun.distanceMeters, state.settings.distanceUnit).let { (n, u) ->
+                            "$n$u · ${formatDurationKorean(state.activeRun.durationSeconds)}"
+                        },
+                        action = "돌아가기",
+                        onClick = onOpenRunning,
                     )
                 }
             }
 
-            item {
-                StartButtons(
-                    todayRoutines = state.todayRoutines,
-                    hasActiveWorkout = state.activeWorkout != null,
-                    onStartRoutine = { routineId -> viewModel.startWorkout(routineId) },
-                    onOpenGym = onOpenGym,
-                    onOpenRunning = onOpenRunning,
+            items(state.todayRoutines, key = { "routine-${it.id}" }) { routine ->
+                Spacer(Modifier.height(if (routine == state.todayRoutines.first()) 32.dp else 12.dp))
+                TodayRoutine(
+                    routine = routine,
+                    enabled = state.activeWorkout == null,
+                    onStart = { viewModel.startWorkout(routine.id) },
                 )
             }
 
             item {
-                SectionHeader(
-                    title = "최근 헬스 기록",
-                    trailing = {
-                        if (state.recentWorkouts.isNotEmpty()) {
-                            Text(
-                                text = "${state.recentWorkouts.size}건",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    },
-                )
+                Spacer(Modifier.height(if (state.todayRoutines.isEmpty()) 32.dp else 12.dp))
+                StartTiles(onOpenGym = onOpenGym, onOpenRunning = onOpenRunning)
             }
-            if (state.recentWorkouts.isEmpty()) {
+
+            item {
+                Spacer(Modifier.height(40.dp))
+                SectionLabel("최근 기록")
+                Spacer(Modifier.height(10.dp))
+                Hairline()
+            }
+
+            if (recent.isEmpty()) {
                 item {
-                    EmptyMessage(
-                        icon = Icons.Filled.FitnessCenter,
-                        title = "아직 헬스 기록이 없습니다",
-                        description = "루틴을 만들고 첫 운동을 시작해 보세요.",
+                    Text(
+                        text = "아직 기록이 없습니다. 루틴을 만들고 첫 운동을 시작해 보세요.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 20.dp),
                     )
                 }
             } else {
                 // 헬스와 러닝은 id 가 따로 매겨져 같은 숫자가 나온다(헬스 1번, 러닝 1번).
                 // 한 목록에서 키가 겹치면 그리는 순간 앱이 죽으므로 종류를 붙인다.
-                items(state.recentWorkouts, key = { "workout-${it.id}" }) { workout ->
-                    RecentWorkoutCard(
-                        workout = workout,
-                        weightUnitLabel = state.settings.weightUnit,
-                        onClick = { onOpenWorkout(workout.id) },
+                items(recent, key = { it.key }) { record ->
+                    RecentRow(
+                        record = record,
+                        onClick = {
+                            when (record) {
+                                is RecentRecord.Gym -> onOpenWorkout(record.id)
+                                is RecentRecord.Running -> onOpenRun(record.id)
+                            }
+                        },
                     )
+                    Hairline()
                 }
             }
-
-            item { SectionHeader(title = "최근 러닝 기록") }
-            if (state.recentRuns.isEmpty()) {
-                item {
-                    EmptyMessage(
-                        icon = Icons.AutoMirrored.Filled.DirectionsRun,
-                        title = "아직 러닝 기록이 없습니다",
-                        description = "러닝 탭에서 GPS 기록을 시작할 수 있습니다.",
-                    )
-                }
-            } else {
-                items(state.recentRuns, key = { "run-${it.id}" }) { run ->
-                    RecentRunCard(
-                        run = run,
-                        distanceUnit = state.settings.distanceUnit,
-                        onClick = { onOpenRun(run.id) },
-                    )
-                }
-            }
-
-            item { androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp)) }
         }
     }
 }
 
 @Composable
-private fun WeeklySummaryRow(state: HomeUiState) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        StatCard(
-            label = "이번 주 헬스",
-            value = "${state.weekly.workoutCount}회",
-            modifier = Modifier.weight(1f),
-        )
-        StatCard(
-            label = "이번 주 러닝",
-            value = formatDistance(state.weekly.runDistanceMeters, state.settings.distanceUnit),
-            modifier = Modifier.weight(1f),
-        )
-        StatCard(
-            label = "총 운동시간",
-            value = formatDurationKorean(state.weekly.totalDurationSeconds),
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun ResumeWorkoutCard(workout: Workout, onResume: () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+private fun Header(today: LocalDate, onOpenSettings: () -> Unit) {
+    Row(
         modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("진행 중인 운동", style = MaterialTheme.typography.labelMedium)
-                Text(
-                    text = workout.displayName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Button(onClick = onResume) { Text("이어하기") }
-        }
-    }
-}
-
-@Composable
-private fun ActiveRunCard(
-    distanceText: String,
-    durationText: String,
-    paused: Boolean,
-    onOpen: () -> Unit,
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (paused) "러닝 일시정지" else "러닝 기록 중",
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Text(
-                    text = "$distanceText · $durationText",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Button(onClick = onOpen) { Text("돌아가기") }
-        }
-    }
-}
-
-@Composable
-private fun StartButtons(
-    todayRoutines: List<Routine>,
-    hasActiveWorkout: Boolean,
-    onStartRoutine: (Long?) -> Unit,
-    onOpenGym: () -> Unit,
-    onOpenRunning: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (todayRoutines.isNotEmpty()) {
-            Text("오늘 예정된 루틴", style = MaterialTheme.typography.titleMedium)
-            todayRoutines.forEach { routine ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = routine.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                text = "운동 ${routine.exerciseCount}개 · ${routine.totalSets}세트",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        Button(
-                            onClick = { onStartRoutine(routine.id) },
-                            enabled = !hasActiveWorkout,
-                        ) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                            Text("시작", modifier = Modifier.padding(start = 4.dp))
-                        }
-                    }
-                }
-            }
-        }
-
-        Button(
-            onClick = onOpenGym,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp),
-        ) {
-            Icon(Icons.Filled.FitnessCenter, contentDescription = null, modifier = Modifier.size(24.dp))
+        Column(modifier = Modifier.padding(top = 12.dp)) {
             Text(
-                text = "헬스 운동 시작",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
-
-        OutlinedButton(
-            onClick = onOpenRunning,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp),
-            colors = ButtonDefaults.outlinedButtonColors(),
-        ) {
-            Icon(Icons.AutoMirrored.Filled.DirectionsRun, contentDescription = null, modifier = Modifier.size(24.dp))
-            Text(
-                text = "러닝 시작",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun RecentWorkoutCard(
-    workout: Workout,
-    weightUnitLabel: com.windowhyun.health.core.model.WeightUnit,
-    onClick: () -> Unit,
-) {
-    Card(modifier = Modifier
-        .fillMaxWidth()
-        .clickable(onClick = onClick)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = workout.displayName, style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = workout.date.formatKorean(),
-                style = MaterialTheme.typography.bodySmall,
+                text = "${today.year}년 ${today.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.KOREAN)}",
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "${formatDurationKorean(workout.durationSeconds)} · " +
-                    "${workout.totalCompletedSets}세트 · " +
-                    formatVolume(workout.totalVolume, weightUnitLabel),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 4.dp),
+                text = String.format(Locale.US, "%02d.%02d", today.monthValue, today.dayOfMonth),
+                style = MaterialTheme.typography.displayMedium,
+                // 큰 글자는 왼쪽 여백이 있어 위의 작은 글자보다 안쪽에서 시작해 보인다. 눈으로 맞춘다.
+                modifier = Modifier.offset(x = (-2).dp),
             )
+        }
+        IconButton(onClick = onOpenSettings) {
+            Icon(Icons.Outlined.Settings, contentDescription = "설정")
         }
     }
 }
 
+/** 이번 주 요약: 세 값을 가는 세로선으로 나누고, 그 아래에 요일별로 운동한 날을 막대로 보여 준다. */
 @Composable
-private fun RecentRunCard(
-    run: Run,
-    distanceUnit: com.windowhyun.health.core.model.DistanceUnit,
-    onClick: () -> Unit,
-) {
-    Card(
+private fun WeekSummary(state: HomeUiState) {
+    val weekly = state.weekly
+    val (distance, distanceUnit) = distanceParts(weekly.runDistanceMeters, state.settings.distanceUnit)
+    val hours = weekly.totalDurationSeconds / 3600
+    val minutes = (weekly.totalDurationSeconds % 3600) / 60
+
+    Column {
+        SectionLabel("이번 주")
+        Spacer(Modifier.height(10.dp))
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            WeekMetric("헬스", Modifier.weight(1f)) { MetricValue("${weekly.workoutCount}", "회") }
+            VerticalHairline()
+            WeekMetric("러닝", Modifier.weight(1.2f).padding(start = 14.dp)) { MetricValue(distance, distanceUnit) }
+            VerticalHairline()
+            WeekMetric("운동 시간", Modifier.weight(1.4f).padding(start = 14.dp)) {
+                Row {
+                    if (hours > 0) {
+                        MetricValue("$hours", "시간")
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    MetricValue("$minutes", "분")
+                }
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        WeekStrip(today = state.today, activeDays = weekly.activeDays)
+    }
+}
+
+@Composable
+private fun WeekMetric(label: String, modifier: Modifier, value: @Composable () -> Unit) {
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        value()
+    }
+}
+
+@Composable
+private fun VerticalHairline() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.outlineVariant),
+    )
+}
+
+/** 일주일을 칸 일곱으로. 운동한 날은 라임, 오늘은 테두리로 표시한다(색만으로 구분하지 않는다). */
+@Composable
+private fun WeekStrip(today: LocalDate, activeDays: Set<LocalDate>) {
+    val start = today.startOfWeek()
+    val days = remember(start) { List(7) { start.plusDays(it.toLong()) } }
+    val doneNames = days.filter { it in activeDays }
+        .joinToString(", ") { it.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.KOREAN) }
+    val description = if (doneNames.isEmpty()) "이번 주 운동한 날 없음" else "이번 주 운동한 날: $doneNames"
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clearAndSetSemantics { contentDescription = description },
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = formatDistance(run.distanceMeters, distanceUnit),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = run.date.formatKorean(),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "${formatDurationKorean(run.durationSeconds)} · " +
-                    "평균 ${formatPace(run.averagePaceSecPerKm, distanceUnit)}",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+        val colors = MaterialTheme.healthColors
+        days.forEach { day ->
+            val isToday = day == today
+            val done = day in activeDays
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = day.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.KOREAN),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Medium,
+                    color = if (isToday) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(MaterialTheme.shapes.extraSmall)
+                        .background(if (done) colors.accent else MaterialTheme.colorScheme.outlineVariant)
+                        .then(
+                            if (isToday) {
+                                Modifier.border(1.dp, MaterialTheme.colorScheme.onSurface, MaterialTheme.shapes.extraSmall)
+                            } else {
+                                Modifier
+                            },
+                        ),
+                )
+            }
         }
     }
 }
+
+/** 진행 중인 운동 · 러닝으로 돌아가는 띠. 라임 면이라 다른 어떤 것보다 눈에 띈다. */
+@Composable
+private fun StatusStrip(label: String, title: String, action: String, onClick: () -> Unit) {
+    val colors = MaterialTheme.healthColors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .background(colors.accent)
+            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onAccent.copy(alpha = 0.7f))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = colors.onAccent)
+        }
+        PanelButton(text = action, onClick = onClick)
+    }
+}
+
+/** 오늘 예정된 루틴. 화면에서 유일하게 어두운 덩어리라 "지금 할 것"이 먼저 보인다. */
+@Composable
+private fun TodayRoutine(routine: Routine, enabled: Boolean, onStart: () -> Unit) {
+    val colors = MaterialTheme.healthColors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .background(colors.panel)
+            .padding(20.dp),
+    ) {
+        Text("오늘의 루틴", style = MaterialTheme.typography.labelMedium, color = colors.onPanel.copy(alpha = 0.6f))
+        Spacer(Modifier.height(4.dp))
+        Text(routine.name, style = MaterialTheme.typography.headlineMedium, color = colors.onPanel)
+        Text(
+            text = "운동 ${routine.exerciseCount}개 · ${routine.totalSets}세트",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onPanel.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.height(20.dp))
+        AccentButton(text = "시작", onClick = onStart, enabled = enabled, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+/** 헬스 · 러닝을 바로 시작하는 큰 두 칸. 헬스는 라임 면, 러닝은 테두리. */
+@Composable
+private fun StartTiles(onOpenGym: () -> Unit, onOpenRunning: () -> Unit) {
+    val colors = MaterialTheme.healthColors
+    val ink = MaterialTheme.colorScheme.onSurface
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        StartTile(
+            title = "헬스",
+            caption = "운동 시작",
+            container = colors.accent,
+            content = colors.onAccent,
+            borderColor = null,
+            onClick = onOpenGym,
+            modifier = Modifier.weight(1f),
+        )
+        StartTile(
+            title = "러닝",
+            caption = "기록 시작",
+            container = Color.Transparent,
+            content = ink,
+            borderColor = ink,
+            onClick = onOpenRunning,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun StartTile(
+    title: String,
+    caption: String,
+    container: Color,
+    content: Color,
+    borderColor: Color?,
+    onClick: () -> Unit,
+    modifier: Modifier,
+) {
+    val shape = MaterialTheme.shapes.small
+    Column(
+        modifier = modifier
+            .height(116.dp)
+            .clip(shape)
+            .background(container)
+            .then(if (borderColor != null) Modifier.border(1.dp, borderColor, shape) else Modifier)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(title, style = MaterialTheme.typography.headlineLarge, color = content)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(caption, style = MaterialTheme.typography.labelLarge, color = content)
+            Text("→", style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp), color = content)
+        }
+    }
+}
+
+/** 최근 기록 한 줄. 헬스와 러닝을 한 목록에 섞어 시간 순으로 보여 준다. */
+private sealed interface RecentRecord {
+    val key: String
+    val startTime: Long
+    val kind: String
+    val date: LocalDate
+    val title: String
+    val detail: String
+    val number: String
+    val unit: String
+
+    data class Gym(
+        val id: Long,
+        override val startTime: Long,
+        override val date: LocalDate,
+        override val title: String,
+        override val detail: String,
+        override val number: String,
+        override val unit: String,
+    ) : RecentRecord {
+        override val key get() = "workout-$id"
+        override val kind get() = "헬스"
+    }
+
+    data class Running(
+        val id: Long,
+        override val startTime: Long,
+        override val date: LocalDate,
+        override val title: String,
+        override val detail: String,
+        override val number: String,
+        override val unit: String,
+    ) : RecentRecord {
+        override val key get() = "run-$id"
+        override val kind get() = "러닝"
+    }
+}
+
+private const val RECENT_ROWS = 5
+
+private fun recentRecords(
+    workouts: List<Workout>,
+    runs: List<Run>,
+    weightUnit: WeightUnit,
+    distanceUnit: DistanceUnit,
+): List<RecentRecord> {
+    val gym = workouts.map { workout ->
+        val volume = formatVolume(workout.totalVolume, weightUnit)
+        RecentRecord.Gym(
+            id = workout.id,
+            startTime = workout.startTime,
+            date = workout.date,
+            title = workout.displayName,
+            detail = "${formatDurationKorean(workout.durationSeconds)} · ${workout.totalCompletedSets}세트",
+            number = volume.removeSuffix(weightUnit.label),
+            unit = weightUnit.label,
+        )
+    }
+    val running = runs.map { run ->
+        val (number, unit) = distanceParts(run.distanceMeters, distanceUnit)
+        RecentRecord.Running(
+            id = run.id,
+            startTime = run.startTime,
+            date = run.date,
+            title = when (run.goalType) {
+                RunGoalType.FREE -> "자유 달리기"
+                RunGoalType.DISTANCE -> "거리 목표 달리기"
+                RunGoalType.DURATION -> "시간 목표 달리기"
+            },
+            detail = "${formatDurationKorean(run.durationSeconds)} · 평균 ${formatPace(run.averagePaceSecPerKm, distanceUnit)}",
+            number = number,
+            unit = unit,
+        )
+    }
+    return (gym + running).sortedByDescending { it.startTime }.take(RECENT_ROWS)
+}
+
+@Composable
+private fun RecentRow(record: RecentRecord, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(record.kind, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "  ${recentDate(record.date)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(record.title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = record.detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.size(12.dp))
+        MetricValue(
+            number = record.number,
+            unit = record.unit,
+            numberStyle = MaterialTheme.typography.displaySmall.copy(fontSize = 24.sp, lineHeight = 28.sp),
+        )
+    }
+}
+
+private fun recentDate(date: LocalDate): String =
+    String.format(Locale.US, "%02d.%02d", date.monthValue, date.dayOfMonth) + " " +
+        date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.KOREAN)
+
+/** 거리를 숫자와 단위로 나눈다. 큰 숫자에 작은 단위를 붙여 보여 주기 위해서다. */
+private fun distanceParts(meters: Double, unit: DistanceUnit): Pair<String, String> =
+    String.format(Locale.US, "%.1f", unit.fromMeters(meters)) to unit.label

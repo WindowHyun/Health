@@ -34,6 +34,8 @@ data class WeeklySummary(
     val workoutCount: Int = 0,
     val runDistanceMeters: Double = 0.0,
     val totalDurationSeconds: Long = 0,
+    /** 이번 주에 운동(헬스 · 러닝)한 날. 홈의 요일 막대에 쓴다. */
+    val activeDays: Set<LocalDate> = emptySet(),
 )
 
 /** 홈 화면 상태. 상세 통계는 기록 탭에 두고 홈에는 최소한만 보여 준다. */
@@ -70,16 +72,22 @@ class HomeViewModel @Inject constructor(
     private fun weeklyFlow(today: LocalDate): Flow<WeeklySummary> {
         val weekStart = today.startOfWeek()
         val weekEnd = today.endOfWeek()
+        val activeDays = combine(
+            workoutRepository.observeWorkoutsBetween(weekStart, weekEnd),
+            runRepository.observeRunsBetween(weekStart, weekEnd),
+        ) { workouts, runs -> (workouts.map { it.date } + runs.map { it.date }).toSet() }
         return combine(
             workoutRepository.observeWorkoutCountBetween(weekStart, weekEnd),
             runRepository.observeDistanceBetween(weekStart, weekEnd),
             workoutRepository.observeWorkoutDurationBetween(weekStart, weekEnd),
             runRepository.observeDurationBetween(weekStart, weekEnd),
-        ) { count, distance, gymSeconds, runSeconds ->
+            activeDays,
+        ) { count, distance, gymSeconds, runSeconds, days ->
             WeeklySummary(
                 workoutCount = count,
                 runDistanceMeters = distance,
                 totalDurationSeconds = gymSeconds + runSeconds,
+                activeDays = days,
             )
         }
     }
