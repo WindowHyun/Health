@@ -88,6 +88,12 @@ interface WorkoutRepository {
     suspend fun addExerciseToWorkout(workoutId: Long, exerciseId: Long): Long
     suspend fun removeWorkoutExercise(workoutExerciseId: Long)
 
+    /** [workoutExerciseId] 운동을 바로 앞 운동과 슈퍼셋으로 묶는다(이미 묶여 있으면 그대로). */
+    suspend fun linkSupersetWithPrevious(workoutExerciseId: Long)
+
+    /** [workoutExerciseId] 운동을 슈퍼셋에서 뺀다. */
+    suspend fun unlinkSuperset(workoutExerciseId: Long)
+
     suspend fun addSet(workoutExerciseId: Long): Long
     suspend fun removeSet(setId: Long)
     suspend fun updateSet(set: WorkoutSet, workoutExerciseId: Long)

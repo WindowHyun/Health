@@ -154,7 +154,7 @@ class MigrationTest {
         val db = openCurrentDatabase()
         try {
             // 열리기만 하면 스키마 검증을 통과한 것이다.
-            assertThat(db.openHelper.readableDatabase.version).isEqualTo(3)
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(4)
         } finally {
             db.close()
         }
@@ -234,9 +234,9 @@ class MigrationTest {
         }
     }
 
-    /** v1 에서 v3 까지 한 번에 올라가야 한다. 두 버전을 건너뛴 사용자가 있기 때문이다. */
+    /** v1 에서 최신까지 한 번에 올라가야 한다. 여러 버전을 건너뛴 사용자가 있기 때문이다. */
     @Test
-    fun `migrates all the way from version 1 to 3`() = runTest {
+    fun `migrates all the way from version 1 to 4`() = runTest {
         createOldDatabase(1) { db ->
             db.execSQL(
                 "INSERT INTO exercise (name, category, bodyPart, isBuiltIn, defaultRestSeconds) " +
@@ -246,9 +246,49 @@ class MigrationTest {
 
         val db = openCurrentDatabase()
         try {
-            assertThat(db.openHelper.readableDatabase.version).isEqualTo(3)
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(4)
             assertThat(db.exerciseDao().getByName("플랭크")!!.trackingType)
                 .isEqualTo(ExerciseTrackingType.TIME)
+        } finally {
+            db.close()
+        }
+    }
+
+    /** v3 에 저장된 운동은 v4 로 올린 뒤에도 남고, 슈퍼셋은 묶음 없음(0)이 된다. */
+    @Test
+    fun `migrates supersets from version 3 to 4`() = runTest {
+        createOldDatabase(3) { db ->
+            db.execSQL(
+                "INSERT INTO exercise (name, category, bodyPart, isBuiltIn, defaultRestSeconds, trackingType) " +
+                    "VALUES ('벤치프레스', 'BARBELL', 'CHEST', 1, NULL, 'WEIGHT_REPS')",
+            )
+            db.execSQL(
+                "INSERT INTO routine (name, scheduledDayMask, createdAt, sortOrder) VALUES ('상체', 0, 1000, 0)",
+            )
+            db.execSQL(
+                "INSERT INTO routine_exercise (routineId, exerciseId, orderIndex, defaultSets, restSeconds) " +
+                    "VALUES (1, 1, 0, 3, NULL)",
+            )
+            db.execSQL(
+                "INSERT INTO workout (routineId, routineName, date, startTime, endTime, " +
+                    "durationSeconds, memo) VALUES (NULL, '상체', 20000, 1000, 5000, 4000, NULL)",
+            )
+            db.execSQL(
+                "INSERT INTO workout_exercise (workoutId, exerciseId, orderIndex, restSeconds) " +
+                    "VALUES (1, 1, 0, NULL)",
+            )
+        }
+
+        val db = openCurrentDatabase()
+        try {
+            val workout = WorkoutRepositoryImpl(
+                workoutDao = db.workoutDao(),
+                routineDao = db.routineDao(),
+                exerciseDao = db.exerciseDao(),
+                personalRecordDao = db.personalRecordDao(),
+            ).getWorkout(1)!!
+            assertThat(workout.exercises.single().supersetGroup).isEqualTo(0)
+            assertThat(db.routineDao().getRoutine(1)!!.items.single().routineExercise.supersetGroup).isEqualTo(0)
         } finally {
             db.close()
         }

@@ -60,6 +60,7 @@ fun RoutineExerciseWithExercise.toDomain(): RoutineItem = RoutineItem(
     orderIndex = routineExercise.orderIndex,
     defaultSets = routineExercise.defaultSets,
     restSeconds = routineExercise.restSeconds,
+    supersetGroup = routineExercise.supersetGroup,
 )
 
 fun RoutineWithItems.toDomain(): Routine = Routine(
@@ -83,6 +84,7 @@ fun RoutineItem.toEntity(routineId: Long): RoutineExerciseEntity = RoutineExerci
     orderIndex = orderIndex,
     defaultSets = defaultSets,
     restSeconds = restSeconds,
+    supersetGroup = supersetGroup,
 )
 
 // ---------- Workout ----------
@@ -102,6 +104,7 @@ fun WorkoutExerciseWithSets.toDomain(): WorkoutExerciseRecord = WorkoutExerciseR
     exercise = exercise.toDomain(),
     orderIndex = workoutExercise.orderIndex,
     restSeconds = workoutExercise.restSeconds,
+    supersetGroup = workoutExercise.supersetGroup,
     sets = sets.sortedBy { it.setNumber }.map { it.toDomain() },
 )
 

@@ -27,6 +27,8 @@ data class RoutineItem(
     val orderIndex: Int,
     val defaultSets: Int,
     val restSeconds: Int? = null,
+    /** 슈퍼셋 묶음 번호. 0 이면 묶음 없음. */
+    val supersetGroup: Int = 0,
 )
 
 /** 운동 루틴. */
@@ -65,6 +67,7 @@ data class WorkoutExerciseRecord(
     val exercise: Exercise,
     val orderIndex: Int,
     val restSeconds: Int? = null,
+    val supersetGroup: Int = 0,
     val sets: List<WorkoutSet> = emptyList(),
 ) {
     val completedSets: List<WorkoutSet> get() = sets.filter { it.completed }

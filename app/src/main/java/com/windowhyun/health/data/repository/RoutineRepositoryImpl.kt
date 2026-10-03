@@ -6,6 +6,7 @@ import com.windowhyun.health.data.mapper.toDomain
 import com.windowhyun.health.data.mapper.toEntity
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.repository.RoutineRepository
+import com.windowhyun.health.domain.usecase.SupersetGroups
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.DayOfWeek
@@ -30,7 +31,11 @@ class RoutineRepositoryImpl @Inject constructor(
 
     override suspend fun saveRoutine(routine: Routine): Long = routineDao.upsertRoutineWithItems(
         routine = routine.toEntity(),
-        items = routine.items.mapIndexed { index, item -> item.toEntity(routine.id).copy(orderIndex = index) },
+        items = SupersetGroups.normalize(routine.items.map { it.supersetGroup }).let { groups ->
+            routine.items.mapIndexed { index, item ->
+                item.toEntity(routine.id).copy(orderIndex = index, supersetGroup = groups[index])
+            }
+        },
     )
 
     override suspend fun deleteRoutine(id: Long) = routineDao.deleteRoutine(id)

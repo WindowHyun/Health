@@ -8,6 +8,7 @@ import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
 import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.core.notification.RestTimerNotifier
+import com.windowhyun.health.domain.usecase.SupersetGroups
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Exercise
 import com.windowhyun.health.domain.model.Workout
@@ -179,10 +180,29 @@ class WorkoutSessionViewModel internal constructor(
             val nowCompleted = !set.completed
             workoutRepository.setCompleted(set.id, weightKg, reps, nowCompleted, durationSeconds)
             val settings = settingsRepository.current()
-            if (nowCompleted && settings.restTimerAutoStart) {
+            if (nowCompleted && settings.restTimerAutoStart && restsAfter(set.id)) {
                 startRestTimer(restSeconds ?: settings.defaultRestSeconds)
             }
         }
+    }
+
+    /**
+     * 이 세트를 마친 뒤 쉬어야 하는가. 슈퍼셋 묶음 중간 운동이면 쉬지 않고 바로 다음 운동으로 간다.
+     * 묶음의 마지막 운동(또는 묶음이 아닌 운동)에서만 휴식 타이머가 돈다.
+     */
+    private suspend fun restsAfter(setId: Long): Boolean {
+        val exercises = workoutRepository.getWorkout(workoutId)?.exercises ?: return true
+        val index = exercises.indexOfFirst { record -> record.sets.any { it.id == setId } }
+        if (index < 0) return true
+        return SupersetGroups.restAfter(exercises.map { it.supersetGroup }, index)
+    }
+
+    fun linkSuperset(workoutExerciseId: Long) {
+        viewModelScope.launch { workoutRepository.linkSupersetWithPrevious(workoutExerciseId) }
+    }
+
+    fun unlinkSuperset(workoutExerciseId: Long) {
+        viewModelScope.launch { workoutRepository.unlinkSuperset(workoutExerciseId) }
     }
 
     fun addSet(workoutExerciseId: Long) {

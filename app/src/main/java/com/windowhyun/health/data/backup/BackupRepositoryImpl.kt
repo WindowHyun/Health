@@ -321,10 +321,10 @@ private fun BackupRoutine.toEntity() =
     RoutineEntity(id, name, scheduledDayMask, createdAt, sortOrder)
 
 private fun RoutineExerciseEntity.toBackup() =
-    BackupRoutineExercise(id, routineId, exerciseId, orderIndex, defaultSets, restSeconds)
+    BackupRoutineExercise(id, routineId, exerciseId, orderIndex, defaultSets, restSeconds, supersetGroup)
 
 private fun BackupRoutineExercise.toEntity() =
-    RoutineExerciseEntity(id, routineId, exerciseId, orderIndex, defaultSets, restSeconds)
+    RoutineExerciseEntity(id, routineId, exerciseId, orderIndex, defaultSets, restSeconds, supersetGroup)
 
 private fun WorkoutEntity.toBackup() =
     BackupWorkout(id, routineId, routineName, date, startTime, endTime, durationSeconds, memo)
@@ -333,10 +333,10 @@ private fun BackupWorkout.toEntity() =
     WorkoutEntity(id, routineId, routineName, date, startTime, endTime, durationSeconds, memo)
 
 private fun WorkoutExerciseEntity.toBackup() =
-    BackupWorkoutExercise(id, workoutId, exerciseId, orderIndex, restSeconds)
+    BackupWorkoutExercise(id, workoutId, exerciseId, orderIndex, restSeconds, supersetGroup)
 
 private fun BackupWorkoutExercise.toEntity() =
-    WorkoutExerciseEntity(id, workoutId, exerciseId, orderIndex, restSeconds)
+    WorkoutExerciseEntity(id, workoutId, exerciseId, orderIndex, restSeconds, supersetGroup)
 
 private fun WorkoutSetEntity.toBackup() = BackupWorkoutSet(
     id, workoutExerciseId, setNumber, weightKg, reps, completed, completedAt,

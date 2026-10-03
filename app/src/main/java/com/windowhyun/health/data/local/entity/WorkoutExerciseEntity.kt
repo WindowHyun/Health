@@ -31,4 +31,6 @@ data class WorkoutExerciseEntity(
     val exerciseId: Long,
     val orderIndex: Int,
     val restSeconds: Int? = null,
+    /** 슈퍼셋 묶음 번호. 0 이면 묶음 없음. 같은 번호가 연속된 운동끼리 한 묶음이다. */
+    val supersetGroup: Int = 0,
 )

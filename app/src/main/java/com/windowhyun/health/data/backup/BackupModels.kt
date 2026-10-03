@@ -91,6 +91,7 @@ data class BackupRoutineExercise(
     val orderIndex: Int = 0,
     val defaultSets: Int = 3,
     val restSeconds: Int? = null,
+    val supersetGroup: Int = 0,
 )
 
 @Serializable
@@ -112,6 +113,7 @@ data class BackupWorkoutExercise(
     val exerciseId: Long = 0,
     val orderIndex: Int = 0,
     val restSeconds: Int? = null,
+    val supersetGroup: Int = 0,
 )
 
 @Serializable

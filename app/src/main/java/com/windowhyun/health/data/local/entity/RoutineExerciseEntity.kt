@@ -35,4 +35,6 @@ data class RoutineExerciseEntity(
     val defaultSets: Int = 3,
     /** 운동별 휴식시간(초). null 이면 종목 기본값 -> 앱 설정값 순으로 사용. */
     val restSeconds: Int? = null,
+    /** 슈퍼셋 묶음 번호. 0 이면 묶음 없음. */
+    val supersetGroup: Int = 0,
 )

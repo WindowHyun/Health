@@ -21,6 +21,7 @@ import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.domain.model.WorkoutSummary
 import com.windowhyun.health.domain.repository.WorkoutRepository
 import com.windowhyun.health.domain.usecase.PersonalRecordCalculator
+import com.windowhyun.health.domain.usecase.SupersetGroups
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -99,13 +100,18 @@ class WorkoutRepositoryImpl @Inject constructor(
             ),
         )
 
-        routine?.items?.sortedBy { it.routineExercise.orderIndex }?.forEachIndexed { index, item ->
+        routine?.items?.sortedBy { it.routineExercise.orderIndex }?.let { items ->
+            // 루틴에 저장된 슈퍼셋 묶음도 그대로 가져온다.
+            val groups = SupersetGroups.normalize(items.map { it.routineExercise.supersetGroup })
+            items.zip(groups)
+        }?.forEachIndexed { index, (item, group) ->
             val workoutExerciseId = workoutDao.insertWorkoutExercise(
                 WorkoutExerciseEntity(
                     workoutId = workoutId,
                     exerciseId = item.exercise.id,
                     orderIndex = index,
                     restSeconds = item.routineExercise.restSeconds ?: item.exercise.defaultRestSeconds,
+                    supersetGroup = group,
                 ),
             )
             val lastSets = workoutDao.getLastPerformedSets(item.exercise.id, workoutId)
@@ -155,8 +161,40 @@ class WorkoutRepositoryImpl @Inject constructor(
         return workoutExerciseId
     }
 
-    override suspend fun removeWorkoutExercise(workoutExerciseId: Long) =
+    override suspend fun removeWorkoutExercise(workoutExerciseId: Long) {
+        val workoutId = workoutDao.getWorkoutIdOfExercise(workoutExerciseId)
         workoutDao.deleteWorkoutExercise(workoutExerciseId)
+        // 묶음 한가운데를 지우면 남은 운동이 혼자가 될 수 있다. 묶음을 다시 정리한다.
+        if (workoutId != null) normalizeSupersets(workoutId)
+    }
+
+    override suspend fun linkSupersetWithPrevious(workoutExerciseId: Long) =
+        editSupersets(workoutExerciseId) { groups, index -> SupersetGroups.linkWithPrevious(groups, index) }
+
+    override suspend fun unlinkSuperset(workoutExerciseId: Long) =
+        editSupersets(workoutExerciseId) { groups, index -> SupersetGroups.unlink(groups, index) }
+
+    private suspend fun editSupersets(
+        workoutExerciseId: Long,
+        edit: (groups: List<Int>, index: Int) -> List<Int>,
+    ) {
+        val workoutId = workoutDao.getWorkoutIdOfExercise(workoutExerciseId) ?: return
+        val rows = workoutDao.getWorkoutExercises(workoutId)
+        val index = rows.indexOfFirst { it.id == workoutExerciseId }
+        if (index < 0) return
+        saveSupersets(rows, edit(rows.map { it.supersetGroup }, index))
+    }
+
+    private suspend fun normalizeSupersets(workoutId: Long) {
+        val rows = workoutDao.getWorkoutExercises(workoutId)
+        saveSupersets(rows, SupersetGroups.normalize(rows.map { it.supersetGroup }))
+    }
+
+    private suspend fun saveSupersets(rows: List<WorkoutExerciseEntity>, groups: List<Int>) {
+        rows.zip(groups).forEach { (row, group) ->
+            if (row.supersetGroup != group) workoutDao.updateWorkoutExercise(row.copy(supersetGroup = group))
+        }
+    }
 
     override suspend fun addSet(workoutExerciseId: Long): Long {
         val sets = workoutDao.getSets(workoutExerciseId)

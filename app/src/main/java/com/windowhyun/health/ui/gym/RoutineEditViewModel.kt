@@ -11,6 +11,7 @@ import com.windowhyun.health.domain.model.ExerciseDeleteResult
 import com.windowhyun.health.domain.model.ExerciseEditResult
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.RoutineItem
+import com.windowhyun.health.domain.usecase.SupersetGroups
 import com.windowhyun.health.domain.repository.ExerciseRepository
 import com.windowhyun.health.domain.repository.RoutineRepository
 import com.windowhyun.health.ui.navigation.Routes
@@ -203,8 +204,25 @@ class RoutineEditViewModel @Inject constructor(
         }
     }
 
+    /** 앞 운동과 슈퍼셋으로 묶는다. */
+    fun linkSuperset(index: Int) = _uiState.update { state ->
+        state.copy(items = state.items.withGroups(SupersetGroups.linkWithPrevious(state.items.groups(), index)))
+    }
+
+    /** 슈퍼셋에서 뺀다. */
+    fun unlinkSuperset(index: Int) = _uiState.update { state ->
+        state.copy(items = state.items.withGroups(SupersetGroups.unlink(state.items.groups(), index)))
+    }
+
+    private fun List<RoutineItem>.groups(): List<Int> = map { it.supersetGroup }
+
+    private fun List<RoutineItem>.withGroups(groups: List<Int>): List<RoutineItem> =
+        zip(groups) { item, group -> item.copy(supersetGroup = group) }
+
+    /** 순서 번호를 다시 매기고, 운동이 빠지거나 옮겨져 어긋난 슈퍼셋 묶음을 정리한다. */
     private fun List<RoutineItem>.reindex(): List<RoutineItem> =
-        mapIndexed { index, item -> item.copy(orderIndex = index) }
+        withGroups(SupersetGroups.normalize(groups()))
+            .mapIndexed { index, item -> item.copy(orderIndex = index) }
 
     companion object {
         private const val DEFAULT_SETS = 3

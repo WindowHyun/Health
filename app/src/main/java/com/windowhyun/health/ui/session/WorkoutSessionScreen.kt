@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -41,6 +41,7 @@ import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.core.util.formatWeight
 import com.windowhyun.health.domain.model.WorkoutExerciseRecord
 import com.windowhyun.health.domain.model.WorkoutSet
+import com.windowhyun.health.domain.usecase.SupersetGroups
 import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.components.Hairline
 import com.windowhyun.health.ui.components.HealthOutlinedButton
@@ -136,9 +137,16 @@ fun WorkoutSessionScreen(
                 )
             }
 
-            items(workout?.exercises.orEmpty(), key = { it.id }) { record ->
+            val records = workout?.exercises.orEmpty()
+            val groups = records.map { it.supersetGroup }
+            itemsIndexed(records, key = { _, record -> record.id }) { index, record ->
                 ExerciseBlock(
                     record = record,
+                    supersetLabel = SupersetGroups.label(groups, index),
+                    restsAfter = SupersetGroups.restAfter(groups, index),
+                    canLinkWithPrevious = index > 0 && !SupersetGroups.isLinkedWithPrevious(groups, index),
+                    onLinkSuperset = { viewModel.linkSuperset(record.id) },
+                    onUnlinkSuperset = { viewModel.unlinkSuperset(record.id) },
                     lastSets = state.lastPerformance[record.exercise.id].orEmpty(),
                     weightUnit = state.settings.weightUnit,
                     defaultRestSeconds = state.settings.defaultRestSeconds,
@@ -257,6 +265,11 @@ private fun SessionSummaryRow(completedSets: Int, totalVolume: Double, weightUni
 @Composable
 private fun ExerciseBlock(
     record: WorkoutExerciseRecord,
+    supersetLabel: String?,
+    restsAfter: Boolean,
+    canLinkWithPrevious: Boolean,
+    onLinkSuperset: () -> Unit,
+    onUnlinkSuperset: () -> Unit,
     lastSets: List<WorkoutSet>,
     weightUnit: WeightUnit,
     defaultRestSeconds: Int,
@@ -276,12 +289,24 @@ private fun ExerciseBlock(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                if (supersetLabel != null) {
+                    Text(
+                        text = "슈퍼셋 $supersetLabel",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
                 Text(
                     text = record.exercise.name,
                     style = MaterialTheme.typography.headlineSmall,
                 )
+                val restText = if (restsAfter) {
+                    "휴식 ${record.restSeconds ?: defaultRestSeconds}초"
+                } else {
+                    "쉬지 않고 다음 운동으로"
+                }
                 Text(
-                    text = "${record.exercise.bodyPart.label} · 휴식 ${record.restSeconds ?: defaultRestSeconds}초",
+                    text = "${record.exercise.bodyPart.label} · $restText",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -292,6 +317,12 @@ private fun ExerciseBlock(
             IconButton(onClick = onRemoveExercise) {
                 Icon(Icons.Filled.Delete, contentDescription = "운동 빼기", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+
+        if (canLinkWithPrevious) {
+            TextButton(onClick = onLinkSuperset) { Text("앞 운동과 슈퍼셋으로 묶기") }
+        } else if (supersetLabel != null) {
+            TextButton(onClick = onUnlinkSuperset) { Text("슈퍼셋에서 빼기") }
         }
 
         LastPerformanceBlock(lastSets = lastSets, weightUnit = weightUnit)

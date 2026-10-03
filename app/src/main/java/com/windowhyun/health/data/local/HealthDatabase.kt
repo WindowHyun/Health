@@ -41,7 +41,7 @@ import com.windowhyun.health.data.local.entity.WorkoutSetEntity
         RunLapEntity::class,
         RunLocationEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -95,6 +95,21 @@ abstract class HealthDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /**
+         * v3 -> v4: 슈퍼셋. 운동 줄마다 묶음 번호(0 = 묶음 없음)를 둔다.
+         * 기존 기록은 전부 0 이 되므로 그대로 보인다.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE workout_exercise ADD COLUMN supersetGroup INTEGER NOT NULL DEFAULT 0",
+                )
+                db.execSQL(
+                    "ALTER TABLE routine_exercise ADD COLUMN supersetGroup INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     }
 }

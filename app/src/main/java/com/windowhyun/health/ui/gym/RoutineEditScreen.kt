@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import com.windowhyun.health.ui.components.SectionLabel
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.domain.model.RoutineItem
+import com.windowhyun.health.domain.usecase.SupersetGroups
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
@@ -143,6 +145,11 @@ fun RoutineEditScreen(
                 RoutineItemCard(
                     index = index,
                     item = item,
+                    supersetLabel = SupersetGroups.label(state.items.map { it.supersetGroup }, index),
+                    canLinkWithPrevious = index > 0 &&
+                        !SupersetGroups.isLinkedWithPrevious(state.items.map { it.supersetGroup }, index),
+                    onLinkSuperset = { viewModel.linkSuperset(index) },
+                    onUnlinkSuperset = { viewModel.unlinkSuperset(index) },
                     isFirst = index == 0,
                     isLast = index == state.items.lastIndex,
                     onMoveUp = { viewModel.moveItem(index, index - 1) },
@@ -186,6 +193,10 @@ fun RoutineEditScreen(
 private fun RoutineItemCard(
     index: Int,
     item: RoutineItem,
+    supersetLabel: String?,
+    canLinkWithPrevious: Boolean,
+    onLinkSuperset: () -> Unit,
+    onUnlinkSuperset: () -> Unit,
     isFirst: Boolean,
     isLast: Boolean,
     onMoveUp: () -> Unit,
@@ -205,6 +216,12 @@ private fun RoutineItemCard(
                     modifier = Modifier.padding(end = 12.dp),
                 )
                 Column(modifier = Modifier.weight(1f)) {
+                    if (supersetLabel != null) {
+                        Text(
+                            text = "슈퍼셋 $supersetLabel",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
                     Text(
                         text = item.exercise.name,
                         style = MaterialTheme.typography.titleMedium,
@@ -224,6 +241,12 @@ private fun RoutineItemCard(
                 IconButton(onClick = onRemove) {
                     Icon(Icons.Filled.Delete, contentDescription = "삭제")
                 }
+            }
+
+            if (canLinkWithPrevious) {
+                TextButton(onClick = onLinkSuperset) { Text("앞 운동과 슈퍼셋으로 묶기") }
+            } else if (supersetLabel != null) {
+                TextButton(onClick = onUnlinkSuperset) { Text("슈퍼셋에서 빼기") }
             }
 
             Row(
@@ -270,7 +293,7 @@ private fun RoutineItemCard(
                         Icon(Icons.Filled.Add, contentDescription = "휴식 늘리기")
                     }
                     if (item.restSeconds != null) {
-                        androidx.compose.material3.TextButton(onClick = { onRestChange(null) }) {
+                        TextButton(onClick = { onRestChange(null) }) {
                             Text("기본값")
                         }
                     }
