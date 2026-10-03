@@ -59,6 +59,8 @@ data class BackupSettings(
     val bodyWeightKg: Double = 70.0,
     val themeMode: String = "SYSTEM",
     val keepScreenOnDuringWorkout: Boolean = true,
+    val runVibrationCues: Boolean = true,
+    val autoPauseRun: Boolean = true,
 )
 
 @Serializable

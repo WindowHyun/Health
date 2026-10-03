@@ -45,4 +45,8 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
 
     fun setKeepScreenOn(enabled: Boolean) = update { it.copy(keepScreenOnDuringWorkout = enabled) }
+
+    fun setRunVibrationCues(enabled: Boolean) = update { it.copy(runVibrationCues = enabled) }
+
+    fun setAutoPauseRun(enabled: Boolean) = update { it.copy(autoPauseRun = enabled) }
 }

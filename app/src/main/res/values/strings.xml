@@ -10,4 +10,8 @@
     <string name="run_in_progress">러닝 기록 중</string>
     <string name="run_paused">러닝 일시정지</string>
     <string name="run_signal_lost">위치 신호 없음</string>
+    <string name="run_auto_paused">러닝 자동 일시정지</string>
+    <string name="run_action_pause">일시정지</string>
+    <string name="run_action_resume">계속</string>
+    <string name="run_action_stop">종료</string>
 </resources>

@@ -274,6 +274,8 @@ private fun AppSettings.toBackup() = BackupSettings(
     bodyWeightKg = bodyWeightKg,
     themeMode = themeMode.name,
     keepScreenOnDuringWorkout = keepScreenOnDuringWorkout,
+    runVibrationCues = runVibrationCues,
+    autoPauseRun = autoPauseRun,
 )
 
 /**
@@ -290,6 +292,8 @@ private fun BackupSettings.toSettings(current: AppSettings) = current.copy(
     bodyWeightKg = bodyWeightKg,
     themeMode = enumOrNull<ThemeMode>(themeMode) ?: current.themeMode,
     keepScreenOnDuringWorkout = keepScreenOnDuringWorkout,
+    runVibrationCues = runVibrationCues,
+    autoPauseRun = autoPauseRun,
 )
 
 private inline fun <reified T : Enum<T>> enumOrNull(name: String): T? =

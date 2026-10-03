@@ -44,6 +44,7 @@ fun HealthNavHost(
                 },
                 onOpenGym = { navController.navigate(Routes.GYM) },
                 onOpenRunning = { navController.navigate(Routes.RUNNING) },
+                onOpenRunResult = { navController.navigate(Routes.RUN_SUMMARY) { launchSingleTop = true } },
                 onOpenWorkout = { workoutId -> navController.navigate(Routes.workoutDetail(workoutId)) },
                 onOpenRun = { runId -> navController.navigate(Routes.runDetail(runId)) },
             )
@@ -81,7 +82,10 @@ fun HealthNavHost(
         composable(Routes.RUN_SUMMARY) {
             RunSummaryScreen(
                 onClose = {
-                    navController.popBackStack(Routes.RUNNING, inclusive = false)
+                    // 홈의 "결과 보기"로 들어왔다면 러닝 탭이 스택에 없다. 그때는 그냥 한 단계 뒤로.
+                    if (!navController.popBackStack(Routes.RUNNING, inclusive = false)) {
+                        navController.popBackStack()
+                    }
                 },
             )
         }

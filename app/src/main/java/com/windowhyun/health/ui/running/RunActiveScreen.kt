@@ -115,6 +115,15 @@ fun RunActiveScreen(
                 }
             }
 
+            if (tracking.autoPaused) {
+                Text(
+                    text = "멈춰서 자동 일시정지했어요 · 움직이면 이어집니다",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
             tracking.goal.progress(tracking.distanceMeters, tracking.durationSeconds)?.let { progress ->
                 GoalProgress(
                     progress = progress,

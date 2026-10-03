@@ -123,6 +123,7 @@ class HomeCrashTest {
                     onStartWorkout = {},
                     onOpenGym = {},
                     onOpenRunning = {},
+                    onOpenRunResult = {},
                     onOpenWorkout = {},
                     onOpenRun = {},
                     viewModel = viewModel,

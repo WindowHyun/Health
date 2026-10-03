@@ -53,10 +53,13 @@ class RunTrackingService : LifecycleService() {
 
     @Inject lateinit var stepCounter: StepCounter
 
+    @Inject lateinit var haptics: RunHaptics
+
     private var locationJob: Job? = null
     private var stepJob: Job? = null
     private var tickerJob: Job? = null
     private var notificationJob: Job? = null
+    private var cueJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
@@ -119,6 +122,13 @@ class RunTrackingService : LifecycleService() {
             }
         }
 
+        // 진동 설정은 시작할 때 한 번 읽어 둔다. 목표 달성 직후 서비스가 내려가므로, 그때 설정을
+        // 읽느라 멈추면 진동이 나기 전에 끝난다.
+        cueJob = lifecycleScope.launch {
+            val vibrate = settingsRepository.current().runVibrationCues
+            runTracker.cues.collect { cue -> if (vibrate) haptics.vibrate(cue) }
+        }
+
         notificationJob = lifecycleScope.launch {
             val distanceUnit = settingsRepository.settings.first().distanceUnit
             runTracker.state.collect { state ->
@@ -127,6 +137,7 @@ class RunTrackingService : LifecycleService() {
                     distanceText = formatDistance(state.distanceMeters, distanceUnit),
                     durationText = formatDuration(state.durationSeconds),
                     paused = state.status == RunStatus.PAUSED,
+                    autoPaused = state.autoPaused,
                     signalLost = state.signalLost,
                 )
             }
@@ -157,6 +168,7 @@ class RunTrackingService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        cueJob?.cancel()
         locationJob?.cancel()
         stepJob?.cancel()
         tickerJob?.cancel()
@@ -183,6 +195,7 @@ class RunTrackingService : LifecycleService() {
         distanceText: String,
         durationText: String,
         paused: Boolean,
+        autoPaused: Boolean,
         signalLost: Boolean,
     ) {
         // 권한 확인은 lint 가 알아볼 수 있도록 이 함수 안에서 직접 한다.
@@ -197,7 +210,7 @@ class RunTrackingService : LifecycleService() {
         runCatching {
             manager.notify(
                 NOTIFICATION_ID,
-                buildNotification(distanceText, durationText, paused, signalLost),
+                buildNotification(distanceText, durationText, paused, autoPaused, signalLost),
             )
         }
     }
@@ -206,6 +219,7 @@ class RunTrackingService : LifecycleService() {
         distanceText: String,
         durationText: String,
         paused: Boolean = false,
+        autoPaused: Boolean = false,
         signalLost: Boolean = false,
     ): Notification {
         val openApp = PendingIntent.getActivity(
@@ -219,7 +233,13 @@ class RunTrackingService : LifecycleService() {
 
         return NotificationCompat.Builder(this, HealthApplication.CHANNEL_RUN_TRACKING)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(if (paused) getString(R.string.run_paused) else getString(R.string.run_in_progress))
+            .setContentTitle(
+                when {
+                    autoPaused -> getString(R.string.run_auto_paused)
+                    paused -> getString(R.string.run_paused)
+                    else -> getString(R.string.run_in_progress)
+                },
+            )
             .setContentText(
                 "$distanceText · $durationText" +
                     if (signalLost) " · ${getString(R.string.run_signal_lost)}" else "",
@@ -229,7 +249,29 @@ class RunTrackingService : LifecycleService() {
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_WORKOUT)
+            .apply {
+                // 폰을 꺼내지 않고 알림에서 바로 멈추고 끝낼 수 있게 한다.
+                runNotificationActions(paused).forEach { action -> addAction(notificationAction(action)) }
+            }
             .build()
+    }
+
+    private fun notificationAction(action: RunNotificationAction): NotificationCompat.Action {
+        val (intentAction, label, icon) = when (action) {
+            RunNotificationAction.PAUSE ->
+                Triple(ACTION_PAUSE, getString(R.string.run_action_pause), android.R.drawable.ic_media_pause)
+            RunNotificationAction.RESUME ->
+                Triple(ACTION_RESUME, getString(R.string.run_action_resume), android.R.drawable.ic_media_play)
+            RunNotificationAction.STOP ->
+                Triple(ACTION_STOP, getString(R.string.run_action_stop), android.R.drawable.ic_menu_close_clear_cancel)
+        }
+        val intent = PendingIntent.getService(
+            this,
+            intentAction.hashCode(),
+            Intent(this, RunTrackingService::class.java).setAction(intentAction),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Action.Builder(icon, label, intent).build()
     }
 
     companion object {

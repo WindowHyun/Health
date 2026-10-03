@@ -78,6 +78,8 @@ data class RunTrackingState(
      * 이 동안은 시간만 흐르고 거리는 쌓이지 않는다.
      */
     val signalLost: Boolean = false,
+    /** 멈춰서 자동으로 일시정지된 상태. 움직이면 저절로 이어진다(직접 누른 일시정지와 구분). */
+    val autoPaused: Boolean = false,
     val startTime: Long = 0,
 ) {
     val isActive: Boolean get() = status == RunStatus.TRACKING || status == RunStatus.PAUSED

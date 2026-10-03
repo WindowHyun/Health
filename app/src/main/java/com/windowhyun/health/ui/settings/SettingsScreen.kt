@@ -122,6 +122,24 @@ fun SettingsScreen(
             item { SettingSectionTitle("러닝") }
 
             item {
+                SwitchRow(
+                    title = "자동 일시정지",
+                    subtitle = "멈추면 시간도 멈추고, 다시 움직이면 이어서 기록합니다.",
+                    checked = settings.autoPauseRun,
+                    onCheckedChange = viewModel::setAutoPauseRun,
+                )
+            }
+
+            item {
+                SwitchRow(
+                    title = "진동 안내",
+                    subtitle = "구간(Lap)마다, 목표를 채웠을 때, 자동 일시정지될 때 진동으로 알려 줍니다.",
+                    checked = settings.runVibrationCues,
+                    onCheckedChange = viewModel::setRunVibrationCues,
+                )
+            }
+
+            item {
                 StepperRow(
                     title = "자동 Lap 거리",
                     value = "${settings.autoLapMeters}m",

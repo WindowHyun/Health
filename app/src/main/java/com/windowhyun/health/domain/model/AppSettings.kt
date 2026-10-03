@@ -22,4 +22,8 @@ data class AppSettings(
     val bodyWeightKg: Double = 70.0,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val keepScreenOnDuringWorkout: Boolean = true,
+    /** 러닝 중 1km 구간 · 목표 달성 · 자동 일시정지를 진동으로 알린다. */
+    val runVibrationCues: Boolean = true,
+    /** 멈추면 러닝을 자동으로 일시정지하고, 다시 움직이면 이어 간다. */
+    val autoPauseRun: Boolean = true,
 )

@@ -77,6 +77,7 @@ fun HomeScreen(
     onStartWorkout: (Long) -> Unit,
     onOpenGym: () -> Unit,
     onOpenRunning: () -> Unit,
+    onOpenRunResult: () -> Unit,
     onOpenWorkout: (Long) -> Unit,
     onOpenRun: (Long) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
@@ -130,6 +131,21 @@ fun HomeScreen(
                         },
                         action = "돌아가기",
                         onClick = onOpenRunning,
+                    )
+                }
+            }
+
+            // 알림의 종료 버튼으로 끝낸 러닝은 결과 화면을 거치지 않았다. 여기서 이어서 볼 수 있다.
+            if (state.activeRun.status == RunStatus.FINISHED) {
+                item {
+                    Spacer(Modifier.height(if (activeWorkout != null) 12.dp else 32.dp))
+                    StatusStrip(
+                        label = "방금 끝낸 러닝",
+                        title = distanceParts(state.activeRun.distanceMeters, state.settings.distanceUnit).let { (n, u) ->
+                            "$n$u · ${formatDurationKorean(state.activeRun.durationSeconds)}"
+                        },
+                        action = "결과 보기",
+                        onClick = onOpenRunResult,
                     )
                 }
             }

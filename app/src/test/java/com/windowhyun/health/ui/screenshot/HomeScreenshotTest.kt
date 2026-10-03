@@ -63,6 +63,7 @@ class HomeScreenshotTest {
                                 onStartWorkout = {},
                                 onOpenGym = {},
                                 onOpenRunning = {},
+                                onOpenRunResult = {},
                                 onOpenWorkout = {},
                                 onOpenRun = {},
                                 viewModel = viewModel,

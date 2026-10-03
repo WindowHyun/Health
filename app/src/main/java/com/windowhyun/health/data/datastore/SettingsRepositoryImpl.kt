@@ -35,6 +35,8 @@ class SettingsRepositoryImpl @Inject constructor(
         val BODY_WEIGHT_KG = doublePreferencesKey("body_weight_kg")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
+        val RUN_VIBRATION_CUES = booleanPreferencesKey("run_vibration_cues")
+        val AUTO_PAUSE_RUN = booleanPreferencesKey("auto_pause_run")
     }
 
     override val settings: Flow<AppSettings> = dataStore.data.map { it.toSettings() }
@@ -58,6 +60,8 @@ class SettingsRepositoryImpl @Inject constructor(
                 runCatching { ThemeMode.valueOf(name) }.getOrNull()
             } ?: defaults.themeMode,
             keepScreenOnDuringWorkout = prefs[Keys.KEEP_SCREEN_ON] ?: defaults.keepScreenOnDuringWorkout,
+            runVibrationCues = prefs[Keys.RUN_VIBRATION_CUES] ?: defaults.runVibrationCues,
+            autoPauseRun = prefs[Keys.AUTO_PAUSE_RUN] ?: defaults.autoPauseRun,
         )
     }
 
@@ -82,6 +86,8 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.BODY_WEIGHT_KG] = updated.bodyWeightKg
             prefs[Keys.THEME_MODE] = updated.themeMode.name
             prefs[Keys.KEEP_SCREEN_ON] = updated.keepScreenOnDuringWorkout
+            prefs[Keys.RUN_VIBRATION_CUES] = updated.runVibrationCues
+            prefs[Keys.AUTO_PAUSE_RUN] = updated.autoPauseRun
         }
     }
 }
