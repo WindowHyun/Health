@@ -4,17 +4,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,14 +19,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.SectionLabel
+import com.windowhyun.health.ui.components.HealthButton
+import com.windowhyun.health.core.designsystem.theme.healthColors
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,59 +60,53 @@ fun RunSummaryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             item {
-                Text(
-                    text = run?.date?.formatKoreanFull().orEmpty(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = formatDistance(run?.distanceMeters ?: 0.0, state.settings.distanceUnit),
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
+                RunHeadline(
+                    dateText = run?.date?.formatKoreanFull().orEmpty(),
+                    distanceMeters = run?.distanceMeters ?: 0.0,
+                    unit = state.settings.distanceUnit,
                 )
             }
 
             if (state.personalBests.isLongestDistance || state.personalBests.isFastestAveragePace) {
                 item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        ),
+                    // 기록 갱신은 라임 면으로. 이 화면에서 가장 눈에 띄어야 하는 소식이다.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.small)
+                            .background(MaterialTheme.healthColors.accent)
+                            .padding(16.dp),
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.EmojiEvents, contentDescription = null)
-                                Text(
-                                    text = "개인 기록 갱신",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(start = 8.dp),
-                                )
-                            }
-                            if (state.personalBests.isLongestDistance) {
-                                Text(
-                                    text = "최장 거리 (이전 " +
-                                        formatDistance(
-                                            state.personalBests.previousLongestMeters,
-                                            state.settings.distanceUnit,
-                                        ) + ")",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                            if (state.personalBests.isFastestAveragePace) {
-                                Text(
-                                    text = "최고 평균 페이스" + (
-                                        state.personalBests.previousBestPaceSecPerKm
-                                            ?.let { " (이전 ${formatPace(it, state.settings.distanceUnit)})" } ?: ""
-                                        ),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
+                        val onAccent = MaterialTheme.healthColors.onAccent
+                        Text(
+                            text = "개인 기록 갱신",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = onAccent,
+                        )
+                        if (state.personalBests.isLongestDistance) {
+                            Text(
+                                text = "최장 거리 (이전 " +
+                                    formatDistance(
+                                        state.personalBests.previousLongestMeters,
+                                        state.settings.distanceUnit,
+                                    ) + ")",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = onAccent,
+                            )
+                        }
+                        if (state.personalBests.isFastestAveragePace) {
+                            Text(
+                                text = "최고 평균 페이스" + (
+                                    state.personalBests.previousBestPaceSecPerKm
+                                        ?.let { " (이전 ${formatPace(it, state.settings.distanceUnit)})" } ?: ""
+                                    ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = onAccent,
+                            )
                         }
                     }
                 }
@@ -128,7 +120,7 @@ fun RunSummaryScreen(
             }
 
             item {
-                Text("이동 경로", style = MaterialTheme.typography.titleMedium)
+                SectionLabel("이동 경로")
             }
             item {
                 RunRouteSection(run = run ?: return@item)
@@ -136,7 +128,7 @@ fun RunSummaryScreen(
 
             if (!run?.laps.isNullOrEmpty()) {
                 item {
-                    Text("구간 기록", style = MaterialTheme.typography.titleMedium)
+                    SectionLabel("구간 기록")
                 }
                 runLapItems(laps = run.laps, distanceUnit = state.settings.distanceUnit)
             }
@@ -154,12 +146,12 @@ fun RunSummaryScreen(
             }
 
             item {
-                Button(
+                HealthButton(
                     onClick = viewModel::save,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
-                ) { Text("저장", style = MaterialTheme.typography.titleMedium) }
+                ) { Text("저장") }
             }
 
             item {

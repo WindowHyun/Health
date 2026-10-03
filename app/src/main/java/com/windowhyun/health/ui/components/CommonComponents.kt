@@ -2,23 +2,19 @@ package com.windowhyun.health.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
-/** 홈/통계에서 쓰는 작은 지표 카드. */
+/**
+ * 작은 지표. 카드로 감싸지 않고 위에 가는 선 하나를 긋고 라벨과 굵은 값을 왼쪽 정렬로 놓는다.
+ * 여러 개를 가로로 나란히 놓으면 선이 이어져 표처럼 읽힌다.
+ */
 @Composable
 fun StatCard(
     label: String,
@@ -26,16 +22,13 @@ fun StatCard(
     modifier: Modifier = Modifier,
     caption: String? = null,
 ) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
+    Column(modifier = modifier) {
+        Hairline()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(top = 10.dp, bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 text = label,
@@ -44,9 +37,8 @@ fun StatCard(
             )
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.displaySmall.copy(fontSize = 24.sp, lineHeight = 28.sp),
                 color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
             )
             if (caption != null) {
                 Text(
@@ -59,10 +51,9 @@ fun StatCard(
     }
 }
 
-/** 목록이 비어 있을 때 보여 주는 안내. */
+/** 목록이 비어 있을 때 보여 주는 안내. 아이콘 없이 글자만, 왼쪽 정렬로 조용하게. */
 @Composable
 fun EmptyMessage(
-    icon: ImageVector,
     title: String,
     modifier: Modifier = Modifier,
     description: String? = null,
@@ -70,46 +61,19 @@ fun EmptyMessage(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(40.dp),
-            tint = MaterialTheme.colorScheme.outline,
-        )
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.titleMedium,
         )
         if (description != null) {
             Text(
                 text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-/** 화면 안 섹션 제목 + 우측 액션. */
-@Composable
-fun SectionHeader(
-    title: String,
-    modifier: Modifier = Modifier,
-    trailing: @Composable (() -> Unit)? = null,
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(text = title, style = MaterialTheme.typography.titleMedium)
-        trailing?.invoke()
     }
 }

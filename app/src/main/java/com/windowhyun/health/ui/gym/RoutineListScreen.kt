@@ -13,21 +13,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.StatusStrip
+import com.windowhyun.health.ui.components.SectionLabel
+import com.windowhyun.health.ui.components.HealthOutlinedButton
+import com.windowhyun.health.ui.components.HealthButton
+import com.windowhyun.health.ui.components.Hairline
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,11 +54,11 @@ fun RoutineListScreen(
     onEditRoutine: (Long) -> Unit,
     onStartWorkout: (Long) -> Unit,
     viewModel: RoutineListViewModel = hiltViewModel(),
+    templateViewModel: RoutineTemplateViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var routineToDelete by remember { mutableStateOf<Routine?>(null) }
     var showTemplateSheet by remember { mutableStateOf(false) }
-    val templateViewModel: RoutineTemplateViewModel = hiltViewModel()
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -97,50 +97,51 @@ fun RoutineListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 96.dp),
         ) {
             if (state.activeWorkout != null) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text("진행 중인 운동이 있습니다")
-                            Button(onClick = { viewModel.startWorkout(null) }) { Text("이어하기") }
-                        }
-                    }
+                    StatusStrip(
+                        label = "진행 중인 운동",
+                        title = state.activeWorkout?.displayName.orEmpty(),
+                        action = "이어하기",
+                        onClick = { viewModel.startWorkout(null) },
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    )
                 }
             }
 
             item {
-                OutlinedButton(
+                HealthButton(
                     onClick = { viewModel.startWorkout(null) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
                 ) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                    Text("루틴 없이 바로 시작", modifier = Modifier.padding(start = 8.dp))
+                    Text("루틴 없이 바로 시작")
                 }
             }
 
             item {
-                OutlinedButton(
+                HealthOutlinedButton(
                     onClick = { showTemplateSheet = true },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 28.dp),
                 ) {
                     Icon(Icons.Filled.Star, contentDescription = null)
-                    Text("유명한 루틴 템플릿에서 추가", modifier = Modifier.padding(start = 8.dp))
+                    Text("유명한 루틴 템플릿에서 추가")
                 }
+            }
+
+            if (state.routines.isNotEmpty()) {
+                item { SectionLabel("내 루틴 ${state.routines.size}개", Modifier.padding(bottom = 10.dp)) }
             }
 
             if (!state.loading && state.routines.isEmpty()) {
                 item {
                     EmptyMessage(
-                        icon = Icons.Filled.FitnessCenter,
                         title = "루틴이 없습니다",
                         description = "상체 / 하체 / 전신처럼 자주 하는 운동 묶음을 만들어 두면\n운동 시작이 한 번의 터치로 끝납니다.",
                     )
@@ -188,8 +189,9 @@ private fun RoutineCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Hairline()
+        Column(modifier = Modifier.padding(vertical = 16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -198,8 +200,7 @@ private fun RoutineCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = routine.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.headlineSmall,
                     )
                     Text(
                         text = "운동 ${routine.exerciseCount}개 · ${routine.totalSets}세트",
@@ -212,8 +213,8 @@ private fun RoutineCard(
                             .joinToString(" ") { it.getDisplayName(TextStyle.SHORT, Locale.KOREAN) }
                         Text(
                             text = days,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(top = 2.dp),
                         )
                     }
                 }
@@ -230,15 +231,16 @@ private fun RoutineCard(
                 )
             }
 
-            Button(
+            HealthOutlinedButton(
                 onClick = onStart,
                 enabled = startEnabled && routine.items.isNotEmpty(),
+                compact = true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp),
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                Text("운동 시작", modifier = Modifier.padding(start = 8.dp))
+                Text("운동 시작")
             }
         }
     }

@@ -13,8 +13,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.SectionLabel
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,11 +33,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.windowhyun.health.core.util.formatDistance
 import com.windowhyun.health.core.util.formatKoreanFull
 import com.windowhyun.health.core.util.formatTimeOfDay
 import com.windowhyun.health.ui.components.ConfirmDialog
@@ -98,19 +95,14 @@ fun RunDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             item {
-                Text(
-                    text = run.date.formatKoreanFull() + " " + run.startTime.formatTimeOfDay(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = formatDistance(run.distanceMeters, state.settings.distanceUnit),
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
+                RunHeadline(
+                    dateText = run.date.formatKoreanFull() + " " + run.startTime.formatTimeOfDay(),
+                    distanceMeters = run.distanceMeters,
+                    unit = state.settings.distanceUnit,
                 )
             }
 
@@ -119,7 +111,7 @@ fun RunDetailScreen(
             }
 
             item {
-                Text("이동 경로", style = MaterialTheme.typography.titleMedium)
+                SectionLabel("이동 경로")
             }
             item {
                 RunRouteSection(run = run)
@@ -127,7 +119,7 @@ fun RunDetailScreen(
 
             if (run.laps.isNotEmpty()) {
                 item {
-                    Text("구간 기록", style = MaterialTheme.typography.titleMedium)
+                    SectionLabel("구간 기록")
                 }
                 runLapItems(laps = run.laps, distanceUnit = state.settings.distanceUnit)
             }
@@ -138,7 +130,7 @@ fun RunDetailScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("메모", style = MaterialTheme.typography.titleMedium)
+                    SectionLabel("메모")
                     if (!state.editingMemo) {
                         TextButton(onClick = viewModel::startEditingMemo) {
                             Icon(
@@ -169,23 +161,15 @@ fun RunDetailScreen(
                         ) { Text("저장") }
                     }
                 } else {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        ),
-                    ) {
-                        Text(
-                            text = run.memo?.takeIf { it.isNotBlank() } ?: "메모가 없습니다.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (run.memo.isNullOrBlank()) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                            modifier = Modifier.padding(16.dp),
-                        )
-                    }
+                    Text(
+                        text = run.memo?.takeIf { it.isNotBlank() } ?: "메모가 없습니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (run.memo.isNullOrBlank()) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
                 }
             }
         }

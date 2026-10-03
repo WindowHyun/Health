@@ -13,9 +13,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +23,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.PersonalRecordsPanel
+import com.windowhyun.health.ui.components.StatCard
+import com.windowhyun.health.ui.components.Hairline
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,13 +33,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.util.formatDurationKorean
 import com.windowhyun.health.core.util.formatKoreanFull
-import com.windowhyun.health.core.util.formatPersonalRecordValue
 import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.core.util.formatWeight
 import com.windowhyun.health.ui.components.ConfirmDialog
@@ -85,60 +83,57 @@ fun WorkoutDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(
                         text = workout?.date?.formatKoreanFull().orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Text(
-                        text = "${formatDurationKorean(workout?.durationSeconds ?: 0)} · " +
-                            "${workout?.totalCompletedSets ?: 0}세트 · " +
-                            "${workout?.totalReps ?: 0}회 · " +
-                            formatVolume(workout?.totalVolume ?: 0.0, state.settings.weightUnit),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
-            }
-
-            if (state.personalRecords.isNotEmpty()) {
-                items(state.personalRecords, key = { "${it.exerciseId}-${it.type}" }) { record ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        ),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Filled.EmojiEvents, contentDescription = null)
-                            Text(
-                                text = "${record.exerciseName} · ${record.type.label} " +
-                                    formatPersonalRecordValue(
-                                        record.type, record.value, state.settings.weightUnit,
-                                    ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
-                        }
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        StatCard(
+                            label = "운동 시간",
+                            value = formatDurationKorean(workout?.durationSeconds ?: 0),
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatCard(
+                            label = "총 볼륨",
+                            value = formatVolume(workout?.totalVolume ?: 0.0, state.settings.weightUnit),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        StatCard(
+                            label = "세트",
+                            value = "${workout?.totalCompletedSets ?: 0}",
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatCard(
+                            label = "반복",
+                            value = "${workout?.totalReps ?: 0}회",
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                 }
             }
 
+            if (state.personalRecords.isNotEmpty()) {
+                item {
+                    PersonalRecordsPanel(records = state.personalRecords, weightUnit = state.settings.weightUnit)
+                }
+            }
+
             items(workout?.exercises.orEmpty(), key = { it.id }) { record ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Hairline()
+                    Column(modifier = Modifier.padding(vertical = 16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = record.exercise.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.headlineSmall,
                                 modifier = Modifier.weight(1f),
                             )
                             // 이 종목의 지난 기록 전체와 성장 그래프로 간다.
@@ -161,10 +156,12 @@ fun WorkoutDetailScreen(
                                 onValuesChange = { weightKg, reps, duration ->
                                     viewModel.updateSet(set, weightKg, reps, duration)
                                 },
+                                // 이미 끝난 기록이라 완료 버튼도, 완료 색칠도 없다.
+                                showComplete = false,
                                 onToggleCompleted = { _, _, _ -> },
                                 onCycleSetType = { viewModel.cycleSetType(set) },
                                 onRemove = { viewModel.deleteSet(set.id) },
-                                modifier = Modifier.padding(vertical = 2.dp),
+                                modifier = Modifier.padding(vertical = 3.dp),
                             )
                         }
                     }

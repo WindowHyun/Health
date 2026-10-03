@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,12 +20,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.windowhyun.health.core.designsystem.theme.healthColors
 import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.util.formatDistance
+import com.windowhyun.health.core.util.formatDistanceValue
 import com.windowhyun.health.core.util.formatDuration
 import com.windowhyun.health.core.util.formatPace
 import com.windowhyun.health.domain.model.Run
 import com.windowhyun.health.domain.model.RunLap
+import com.windowhyun.health.ui.components.MetricValue
 import com.windowhyun.health.ui.components.StatCard
 import java.util.Locale
 
@@ -42,8 +44,8 @@ fun RunStatGrid(
     distanceUnit: DistanceUnit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             StatCard(
                 label = "총 시간",
                 value = formatDuration(run.durationSeconds),
@@ -55,7 +57,7 @@ fun RunStatGrid(
                 modifier = Modifier.weight(1f),
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             StatCard(
                 label = "최고 페이스",
                 value = formatPace(run.bestPaceSecPerKm, distanceUnit),
@@ -68,7 +70,7 @@ fun RunStatGrid(
             )
         }
         if (run.steps > 0) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(
                     label = "걸음",
                     value = String.format(Locale.US, "%,d", run.steps),
@@ -126,7 +128,7 @@ fun RunRouteSection(run: Run, modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(280.dp)
-                .clip(RoundedCornerShape(12.dp)),
+                .clip(MaterialTheme.shapes.small),
         )
         val tileStatus by rememberMapTileStatus(hasRoute = run.route.isNotEmpty())
         tileStatus?.let { message ->
@@ -191,12 +193,8 @@ private fun LapRow(
             Text(
                 text = formatPace(lap.paceSecPerKm, distanceUnit),
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (isFastest) FontWeight.Bold else FontWeight.Medium,
-                color = if (isFastest) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
+                fontWeight = if (isFastest) FontWeight.ExtraBold else FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.width(72.dp),
             )
             PaceBar(ratio = ratio, highlight = isFastest, modifier = Modifier.weight(1f))
@@ -218,26 +216,38 @@ private fun LapRow(
     }
 }
 
+/** 가장 빠른 구간은 라임, 나머지는 회색. 막대 길이가 곧 상대 속도라 색을 못 봐도 읽힌다. */
 @Composable
 private fun PaceBar(ratio: Float, highlight: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .height(8.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.outlineVariant),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(ratio.coerceIn(0f, 1f))
                 .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
                 .background(
-                    if (highlight) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                    },
+                    if (highlight) MaterialTheme.healthColors.accent else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
+        )
+    }
+}
+
+/** 러닝 결과 · 상세가 같이 쓰는 머리글: 날짜 줄과 아주 큰 거리. */
+@Composable
+fun RunHeadline(dateText: String, distanceMeters: Double, unit: DistanceUnit, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = dateText,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        MetricValue(
+            number = formatDistanceValue(distanceMeters, unit),
+            unit = unit.label,
+            numberStyle = MaterialTheme.typography.displayLarge,
         )
     }
 }

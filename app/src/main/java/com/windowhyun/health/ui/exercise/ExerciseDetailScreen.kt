@@ -15,8 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ShowChart
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -26,9 +24,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.Hairline
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,15 +78,15 @@ fun ExerciseDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             if (exercise != null) {
                 item {
                     Text(
                         text = "${exercise.bodyPart.label} · ${exercise.trackingType.label} · " +
                             "기록 ${state.sessions.size}회",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -97,7 +95,6 @@ fun ExerciseDetailScreen(
             if (!state.loading && state.sessions.isEmpty()) {
                 item {
                     EmptyMessage(
-                        icon = Icons.AutoMirrored.Filled.ShowChart,
                         title = "아직 기록이 없습니다",
                         description = "이 종목으로 운동을 마치면 여기에 기록과 그래프가 쌓입니다.",
                     )
@@ -107,7 +104,7 @@ fun ExerciseDetailScreen(
 
             if (state.records.isNotEmpty()) {
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         state.records.forEach { record ->
                             StatCard(
                                 label = record.type.label,
@@ -120,7 +117,7 @@ fun ExerciseDetailScreen(
             }
 
             item {
-                Text("성장 그래프", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("성장 그래프", style = MaterialTheme.typography.headlineSmall)
                 if (state.metrics.size > 1) {
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -163,16 +160,13 @@ fun ExerciseDetailScreen(
                         text = "점을 누르면 그날 값이 보입니다.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
                     )
                 }
             }
 
             item {
-                Text(
-                    "전체 기록 ${state.sessions.size}회",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                Text("전체 기록 ${state.sessions.size}회", style = MaterialTheme.typography.headlineSmall)
             }
 
             items(state.sessions, key = { it.workoutId }) { session ->
@@ -194,12 +188,15 @@ private fun SessionCard(
     unit: WeightUnit,
     onClick: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Hairline()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             Text(
                 text = session.date.formatKoreanFull() + (session.routineName?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.labelLarge,
@@ -207,8 +204,7 @@ private fun SessionCard(
             )
             Text(
                 text = sessionSummary(session, trackingType, unit),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
             )
             session.sets.forEach { set ->
                 Row {

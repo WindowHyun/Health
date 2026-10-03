@@ -12,10 +12,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -24,12 +22,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.HealthButton
+import com.windowhyun.health.ui.components.Hairline
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
@@ -69,7 +68,7 @@ fun ExercisePickerSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("운동 추가", style = MaterialTheme.typography.titleLarge)
+            Text("운동 추가", style = MaterialTheme.typography.headlineSmall)
 
             OutlinedTextField(
                 value = query,
@@ -137,13 +136,14 @@ fun ExercisePickerSheet(
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
+                        HealthButton(
                             onClick = {
                                 onCreate(newName, newCategory, newBodyPart, newTrackingType)
                                 newName = ""
                                 creating = false
                             },
                             enabled = newName.isNotBlank(),
+                            compact = true,
                         ) { Text("추가하고 넣기") }
                         TextButton(onClick = { creating = false }) { Text("취소") }
                     }
@@ -155,30 +155,26 @@ fun ExercisePickerSheet(
                 }
             }
 
-            HorizontalDivider()
+            Hairline()
 
             LazyColumn(
                 modifier = Modifier.heightIn(max = 360.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 items(filtered, key = { it.id }) { exercise ->
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPick(exercise) }
-                            .padding(vertical = 10.dp),
+                            .padding(vertical = 12.dp),
                     ) {
-                        Text(
-                            text = exercise.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                        )
+                        Text(text = exercise.name, style = MaterialTheme.typography.titleMedium)
                         Text(
                             text = "${exercise.bodyPart.label} · ${exercise.category.label}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    Hairline()
                 }
                 if (filtered.isEmpty()) {
                     item {

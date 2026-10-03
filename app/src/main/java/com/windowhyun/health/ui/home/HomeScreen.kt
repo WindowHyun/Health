@@ -28,6 +28,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.runTitle
+import com.windowhyun.health.ui.components.StatusStrip
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -52,7 +54,6 @@ import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.core.util.startOfWeek
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.Run
-import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.ui.components.AccentButton
@@ -308,27 +309,6 @@ private fun WeekStrip(today: LocalDate, activeDays: Set<LocalDate>) {
     }
 }
 
-/** 진행 중인 운동 · 러닝으로 돌아가는 띠. 라임 면이라 다른 어떤 것보다 눈에 띈다. */
-@Composable
-private fun StatusStrip(label: String, title: String, action: String, onClick: () -> Unit) {
-    val colors = MaterialTheme.healthColors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.small)
-            .background(colors.accent)
-            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onAccent.copy(alpha = 0.7f))
-            Text(title, style = MaterialTheme.typography.titleMedium, color = colors.onAccent)
-        }
-        PanelButton(text = action, onClick = onClick)
-    }
-}
-
 /** 오늘 예정된 루틴. 화면에서 유일하게 어두운 덩어리라 "지금 할 것"이 먼저 보인다. */
 @Composable
 private fun TodayRoutine(routine: Routine, enabled: Boolean, onStart: () -> Unit) {
@@ -477,11 +457,7 @@ private fun recentRecords(
             id = run.id,
             startTime = run.startTime,
             date = run.date,
-            title = when (run.goalType) {
-                RunGoalType.FREE -> "자유 달리기"
-                RunGoalType.DISTANCE -> "거리 목표 달리기"
-                RunGoalType.DURATION -> "시간 목표 달리기"
-            },
+            title = runTitle(run),
             detail = "${formatDurationKorean(run.durationSeconds)} · 평균 ${formatPace(run.averagePaceSecPerKm, distanceUnit)}",
             number = number,
             unit = unit,

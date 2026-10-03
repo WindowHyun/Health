@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.windowhyun.health.ui.components.ConfirmDialog
+import com.windowhyun.health.ui.components.Hairline
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,7 +24,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +49,7 @@ import com.windowhyun.health.domain.model.ThemeMode
 fun SettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
+    backupViewModel: BackupViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
 
@@ -68,8 +69,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 32.dp),
         ) {
             item { SettingSectionTitle("운동") }
 
@@ -99,7 +99,6 @@ fun SettingsScreen(
                 )
             }
 
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { SettingSectionTitle("단위") }
 
             item {
@@ -120,7 +119,6 @@ fun SettingsScreen(
                 )
             }
 
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { SettingSectionTitle("러닝") }
 
             item {
@@ -142,7 +140,6 @@ fun SettingsScreen(
                 )
             }
 
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { SettingSectionTitle("화면") }
 
             item {
@@ -154,16 +151,8 @@ fun SettingsScreen(
                 )
             }
 
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-            item { SettingSectionTitle("연동 / 데이터") }
-
-            item {
-                DisabledRow(
-                    title = "Health Connect 연결",
-                    subtitle = "Phase 4 에서 추가됩니다. 연결하지 않아도 앱 기록은 그대로 사용할 수 있습니다.",
-                )
-            }
-            item { DataSection() }
+            item { SettingSectionTitle("데이터") }
+            item { DataSection(backupViewModel) }
         }
     }
 }
@@ -175,7 +164,7 @@ fun SettingsScreen(
  * 백업 파일이 유일한 복구 수단이므로 설정 맨 위가 아니라도 눈에 띄게 둔다.
  */
 @Composable
-private fun DataSection(viewModel: BackupViewModel = hiltViewModel()) {
+private fun DataSection(viewModel: BackupViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -227,7 +216,7 @@ private fun DataSection(viewModel: BackupViewModel = hiltViewModel()) {
         }
 
         state.message?.let { message ->
-            ResultText(text = message, color = MaterialTheme.colorScheme.primary)
+            ResultText(text = message, color = MaterialTheme.colorScheme.onSurface)
         }
         state.error?.let { error ->
             ResultText(text = error, color = MaterialTheme.colorScheme.error)
@@ -266,37 +255,43 @@ private fun ActionRow(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 10.dp),
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (enabled) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.outline
-            },
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (enabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    },
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text("→", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Hairline()
     }
 }
 
+/** 구역 제목. 위에 넉넉한 여백, 아래에 가는 선. 구역 안의 줄들은 선 없이 여백으로만 나눈다. */
 @Composable
 private fun SettingSectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 8.dp),
-    )
+    Column(modifier = Modifier.padding(top = 32.dp, bottom = 6.dp)) {
+        Text(text = title, style = MaterialTheme.typography.headlineSmall)
+        Hairline(modifier = Modifier.padding(top = 10.dp))
+    }
 }
 
 @Composable
@@ -310,7 +305,7 @@ private fun StepperRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -325,7 +320,7 @@ private fun StepperRow(
             }
         }
         IconButton(onClick = onMinus) { Icon(Icons.Filled.Remove, contentDescription = "줄이기") }
-        Text(value, style = MaterialTheme.typography.titleMedium)
+        Text(value, style = MaterialTheme.typography.titleLarge)
         IconButton(onClick = onPlus) { Icon(Icons.Filled.Add, contentDescription = "늘리기") }
     }
 }
@@ -340,7 +335,7 @@ private fun SwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -365,9 +360,12 @@ private fun <T> ChipRow(
     selected: T,
     onSelect: (T) -> Unit,
 ) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             options.forEach { (option, label) ->
                 FilterChip(
                     selected = option == selected,
@@ -376,21 +374,5 @@ private fun <T> ChipRow(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun DisabledRow(title: String, subtitle: String) {
-    Column(modifier = Modifier.padding(vertical = 6.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.outline,
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline,
-        )
     }
 }

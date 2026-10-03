@@ -5,13 +5,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -76,8 +83,67 @@ fun MetricValue(
 /**
  * 직사각형에 가까운(모서리 4dp) 버튼. 기본 알약 버튼 대신 쓴다.
  *
- * [container] 가 투명이면 [content] 색 테두리만 그린다.
+ * [container] 가 투명이면 [border] 만 그린다. [body] 는 Material 버튼처럼 줄 안에 놓이고
+ * 아이콘 · 글자가 [content] 색과 굵은 글자체를 받는다.
  */
+@Composable
+fun HealthButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    container: Color = MaterialTheme.healthColors.accent,
+    content: Color = MaterialTheme.healthColors.onAccent,
+    border: BorderStroke? = null,
+    compact: Boolean = false,
+    body: @Composable RowScope.() -> Unit,
+) {
+    val shape = MaterialTheme.shapes.small
+    Box(
+        modifier = modifier
+            .heightIn(min = if (compact) 44.dp else 52.dp)
+            .alpha(if (enabled) 1f else 0.38f)
+            .clip(shape)
+            .background(container)
+            .then(if (border != null) Modifier.border(border, shape) else Modifier)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = if (compact) 8.dp else 20.dp, vertical = if (compact) 8.dp else 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        CompositionLocalProvider(LocalContentColor provides content) {
+            ProvideTextStyle(if (compact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    content = body,
+                )
+            }
+        }
+    }
+}
+
+/** 테두리만 있는 [HealthButton]. 두 번째로 중요한 동작. */
+@Composable
+fun HealthOutlinedButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    compact: Boolean = false,
+    body: @Composable RowScope.() -> Unit,
+) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    HealthButton(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        container = Color.Transparent,
+        content = ink,
+        border = BorderStroke(1.dp, ink),
+        compact = compact,
+        body = body,
+    )
+}
+
+/** 글자만 있는 단순한 [HealthButton] 모양. */
 @Composable
 private fun BlockButton(
     text: String,
@@ -88,20 +154,7 @@ private fun BlockButton(
     enabled: Boolean,
     border: BorderStroke? = null,
 ) {
-    val shape = MaterialTheme.shapes.small
-    Box(
-        modifier = modifier
-            .heightIn(min = 52.dp)
-            .alpha(if (enabled) 1f else 0.38f)
-            .clip(shape)
-            .background(container)
-            .then(if (border != null) Modifier.border(border, shape) else Modifier)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = text, style = MaterialTheme.typography.titleMedium, color = content)
-    }
+    HealthButton(onClick, modifier, enabled, container, content, border) { Text(text) }
 }
 
 /** 가장 눈에 띄어야 하는 동작(시작). 화면에 하나씩만 쓴다. */
@@ -138,4 +191,31 @@ fun OutlineBlockButton(
 ) {
     val ink = MaterialTheme.colorScheme.onSurface
     BlockButton(text, onClick, Color.Transparent, ink, modifier, enabled, border = BorderStroke(1.dp, ink))
+}
+
+/** 진행 중인 운동 · 러닝으로 돌아가는 띠. 라임 면이라 다른 어떤 것보다 눈에 띈다. */
+@Composable
+fun StatusStrip(
+    label: String,
+    title: String,
+    action: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.healthColors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .background(colors.accent)
+            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onAccent.copy(alpha = 0.7f))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = colors.onAccent)
+        }
+        PanelButton(text = action, onClick = onClick)
+    }
 }

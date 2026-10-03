@@ -67,8 +67,7 @@ internal fun HistoryCalendar(
     val colors = chartColors()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
     ) {
         item {
             MonthHeader(
@@ -95,14 +94,16 @@ internal fun HistoryCalendar(
         }
 
         item {
-            MonthGrid(
-                month = state.month,
-                selected = state.selectedDate,
-                entriesByDate = state.entriesByDate,
-                gymColor = colors.gym,
-                runColor = colors.run,
-                onSelect = onSelectDate,
-            )
+            Box(modifier = Modifier.padding(vertical = 12.dp)) {
+                MonthGrid(
+                    month = state.month,
+                    selected = state.selectedDate,
+                    entriesByDate = state.entriesByDate,
+                    gymColor = colors.gym,
+                    runColor = colors.run,
+                    onSelect = onSelectDate,
+                )
+            }
         }
 
         item {
@@ -115,6 +116,7 @@ internal fun HistoryCalendar(
                 },
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
             )
         }
 

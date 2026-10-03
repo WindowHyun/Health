@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,19 +15,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,8 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.model.WeightUnit
@@ -45,6 +42,9 @@ import com.windowhyun.health.core.util.formatWeight
 import com.windowhyun.health.domain.model.WorkoutExerciseRecord
 import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.ui.components.ConfirmDialog
+import com.windowhyun.health.ui.components.Hairline
+import com.windowhyun.health.ui.components.HealthOutlinedButton
+import com.windowhyun.health.ui.components.MetricValue
 import com.windowhyun.health.ui.gym.ExercisePickerSheet
 import kotlinx.coroutines.flow.collectLatest
 
@@ -92,20 +92,23 @@ fun WorkoutSessionScreen(
                     Column {
                         Text(
                             text = workout?.displayName ?: "운동",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        // 경과 시간이 이 화면의 제목이다. 숫자 폭을 맞춰 초가 바뀌어도 흔들리지 않는다.
                         Text(
                             text = formatDuration(state.elapsedSeconds),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.displaySmall.copy(fontSize = 28.sp, lineHeight = 32.sp),
                         )
                     }
                 },
                 actions = {
-                    TextButton(onClick = { showFinishDialog = true }) { Text("운동 종료") }
+                    HealthOutlinedButton(
+                        onClick = { showFinishDialog = true },
+                        compact = true,
+                        modifier = Modifier.padding(end = 12.dp),
+                    ) { Text("운동 종료") }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
             )
         },
         bottomBar = {
@@ -123,8 +126,7 @@ fun WorkoutSessionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         ) {
             item {
                 SessionSummaryRow(
@@ -135,7 +137,7 @@ fun WorkoutSessionScreen(
             }
 
             items(workout?.exercises.orEmpty(), key = { it.id }) { record ->
-                ExerciseCard(
+                ExerciseBlock(
                     record = record,
                     lastSets = state.lastPerformance[record.exercise.id].orEmpty(),
                     weightUnit = state.settings.weightUnit,
@@ -150,15 +152,18 @@ fun WorkoutSessionScreen(
                     onRemoveExercise = { viewModel.removeExercise(record.id) },
                     onStartRest = { seconds -> viewModel.startRestTimer(seconds) },
                 )
+                Hairline()
             }
 
             item {
-                OutlinedButton(
+                HealthOutlinedButton(
                     onClick = { showPicker = true },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 20.dp),
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = null)
-                    Text("운동 추가", modifier = Modifier.padding(start = 8.dp))
+                    Text("운동 추가")
                 }
             }
 
@@ -217,23 +222,39 @@ fun WorkoutSessionScreen(
 
 @Composable
 private fun SessionSummaryRow(completedSets: Int, totalVolume: Double, weightUnit: WeightUnit) {
+    val volume = formatVolume(totalVolume, weightUnit)
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(32.dp),
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("완료 세트", style = MaterialTheme.typography.labelMedium)
-            Text("$completedSets", style = MaterialTheme.typography.titleLarge)
+        Column {
+            Text(
+                text = "완료 세트",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            MetricValue(number = "$completedSets", unit = "세트")
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("총 볼륨", style = MaterialTheme.typography.labelMedium)
-            Text(formatVolume(totalVolume, weightUnit), style = MaterialTheme.typography.titleLarge)
+        Column {
+            Text(
+                text = "총 볼륨",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            MetricValue(number = volume.removeSuffix(weightUnit.label), unit = weightUnit.label)
         }
     }
+    Hairline()
 }
 
+/**
+ * 종목 하나. 카드로 감싸지 않고 위아래 가는 선으로만 나눈다.
+ * 세트 행이 화면의 주인공이라 머리 부분은 이름과 한 줄 정보만 둔다.
+ */
 @Composable
-private fun ExerciseCard(
+private fun ExerciseBlock(
     record: WorkoutExerciseRecord,
     lastSets: List<WorkoutSet>,
     weightUnit: WeightUnit,
@@ -246,95 +267,77 @@ private fun ExerciseCard(
     onRemoveExercise: () -> Unit,
     onStartRest: (Int) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = record.exercise.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = "${record.exercise.bodyPart.label} · 휴식 ${record.restSeconds ?: defaultRestSeconds}초",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TextButton(onClick = { onStartRest(record.restSeconds ?: defaultRestSeconds) }) {
-                    Text("휴식 시작")
-                }
-                IconButton(onClick = onRemoveExercise) {
-                    Icon(Icons.Filled.Delete, contentDescription = "운동 빼기")
-                }
-            }
-
-            LastPerformanceBlock(lastSets = lastSets, weightUnit = weightUnit)
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            Text(
-                text = "오늘",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-
-            record.sets.forEach { set ->
-                SetRow(
-                    set = set,
-                    weightUnit = weightUnit,
-                    trackingType = record.exercise.trackingType,
-                    onValuesChange = { weightKg, reps, duration ->
-                        onValuesChange(set, weightKg, reps, duration)
-                    },
-                    onToggleCompleted = { weightKg, reps, duration ->
-                        onToggleCompleted(set, weightKg, reps, duration)
-                    },
-                    onCycleSetType = { onCycleSetType(set) },
-                    onRemove = { onRemoveSet(set.id) },
-                    modifier = Modifier.padding(vertical = 2.dp),
+    Column(modifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 20.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = record.exercise.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Text(
+                    text = "${record.exercise.bodyPart.label} · 휴식 ${record.restSeconds ?: defaultRestSeconds}초",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-
-            Button(
-                onClick = onAddSet,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Text("세트 추가", modifier = Modifier.padding(start = 8.dp))
+            TextButton(onClick = { onStartRest(record.restSeconds ?: defaultRestSeconds) }) {
+                Text("휴식 시작")
             }
+            IconButton(onClick = onRemoveExercise) {
+                Icon(Icons.Filled.Delete, contentDescription = "운동 빼기", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        LastPerformanceBlock(lastSets = lastSets, weightUnit = weightUnit)
+
+        Spacer(Modifier.height(12.dp))
+
+        record.sets.forEach { set ->
+            SetRow(
+                set = set,
+                weightUnit = weightUnit,
+                trackingType = record.exercise.trackingType,
+                onValuesChange = { weightKg, reps, duration ->
+                    onValuesChange(set, weightKg, reps, duration)
+                },
+                onToggleCompleted = { weightKg, reps, duration ->
+                    onToggleCompleted(set, weightKg, reps, duration)
+                },
+                onCycleSetType = { onCycleSetType(set) },
+                onRemove = { onRemoveSet(set.id) },
+                modifier = Modifier.padding(vertical = 3.dp),
+            )
+        }
+
+        HealthOutlinedButton(
+            onClick = onAddSet,
+            compact = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp),
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null)
+            Text("세트 추가")
         }
     }
 }
 
 @Composable
 private fun LastPerformanceBlock(lastSets: List<WorkoutSet>, weightUnit: WeightUnit) {
-    if (lastSets.isEmpty()) {
-        Text(
-            text = "지난 기록 없음 — 첫 기록을 만들어 보세요.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        return
+    val text = if (lastSets.isEmpty()) {
+        "지난 기록 없음 — 첫 기록을 만들어 보세요."
+    } else {
+        "지난 운동  " + lastSets.joinToString(" · ") { "${formatWeight(it.weightKg, weightUnit)}×${it.reps}" }
     }
-    Column(modifier = Modifier.padding(top = 8.dp)) {
-        Text(
-            text = "지난 운동",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        lastSets.forEach { set ->
-            Text(
-                text = "${formatWeight(set.weightKg, weightUnit)} × ${set.reps}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp),
+    )
 }

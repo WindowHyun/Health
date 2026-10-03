@@ -13,11 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.DirectionsRun
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -30,17 +25,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.runTitle
+import com.windowhyun.health.ui.components.MetricValue
+import com.windowhyun.health.ui.components.Hairline
+import com.windowhyun.health.core.util.formatDistanceValue
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.model.WeightUnit
-import com.windowhyun.health.core.util.formatDistance
 import com.windowhyun.health.core.util.formatDurationKorean
 import com.windowhyun.health.core.util.formatKoreanFull
 import com.windowhyun.health.core.util.formatPace
@@ -78,13 +77,19 @@ fun HistoryScreen(
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 20.dp),
             ) {
                 HistoryMode.entries.forEachIndexed { index, option ->
                     SegmentedButton(
                         selected = mode == option,
                         onClick = { viewModel.setMode(option) },
-                        shape = SegmentedButtonDefaults.itemShape(index, HistoryMode.entries.size),
+                        // 알약 모양 대신 각진 모서리로, 선택 표시(체크)는 검정 면으로 대신한다.
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = HistoryMode.entries.size,
+                            baseShape = MaterialTheme.shapes.small,
+                        ),
+                        icon = {},
                     ) { Text(option.label) }
                 }
             }
@@ -132,8 +137,7 @@ private fun HistoryList(
     val entries = state.visibleEntries
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
     ) {
         // 기록이 둘 다 없으면 필터를 보여 줄 이유가 없다.
         if (state.totalCount > 0) {
@@ -144,6 +148,7 @@ private fun HistoryList(
                     runCount = state.runCount,
                     total = state.totalCount,
                     onSelect = onFilter,
+                    modifier = Modifier.padding(bottom = 4.dp),
                 )
             }
         }
@@ -151,7 +156,6 @@ private fun HistoryList(
         if (!state.loading && entries.isEmpty() && state.olderCount == 0) {
             item {
                 EmptyMessage(
-                    icon = Icons.Filled.CalendarMonth,
                     title = if (state.totalCount == 0) {
                         "저장된 기록이 없습니다"
                     } else {
@@ -165,12 +169,13 @@ private fun HistoryList(
         itemsIndexed(entries, key = { _, entry -> entry.key }) { index, entry ->
             // 날짜가 바뀌는 지점에만 머리글을 둔다.
             val isFirstOfDay = index == 0 || entries[index - 1].date != entry.date
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column {
                 if (isFirstOfDay) {
                     Text(
                         text = entry.date.formatKoreanFull(),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
                     )
                 }
                 HistoryEntryCard(
@@ -222,9 +227,10 @@ private fun FilterChips(
     runCount: Int,
     total: Int,
     onSelect: (HistoryFilter) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        modifier = modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         HistoryFilter.entries.forEach { filter ->
@@ -248,14 +254,15 @@ private fun GymEntryCard(
     weightUnit: WeightUnit,
     onClick: () -> Unit,
 ) {
-    EntryCard(
-        icon = Icons.Filled.FitnessCenter,
+    val volume = formatVolume(workout.totalVolume, weightUnit)
+    EntryRow(
+        kind = "헬스",
+        time = "${workout.startTime.formatTimeOfDay()} 시작",
         title = workout.displayName,
-        subtitle = "${workout.startTime.formatTimeOfDay()} 시작 · " +
-            formatDurationKorean(workout.durationSeconds),
-        detail = "${workout.performedExerciseCount}개 운동 · " +
-            "${workout.totalCompletedSets}세트 · " +
-            formatVolume(workout.totalVolume, weightUnit),
+        detail = "${formatDurationKorean(workout.durationSeconds)} · " +
+            "${workout.performedExerciseCount}개 운동 · ${workout.totalCompletedSets}세트",
+        number = volume.removeSuffix(weightUnit.label),
+        unit = weightUnit.label,
         memo = workout.memo,
         onClick = onClick,
     )
@@ -267,68 +274,73 @@ private fun RunEntryCard(
     distanceUnit: DistanceUnit,
     onClick: () -> Unit,
 ) {
-    EntryCard(
-        icon = Icons.AutoMirrored.Filled.DirectionsRun,
-        title = formatDistance(run.distanceMeters, distanceUnit),
-        subtitle = "${run.startTime.formatTimeOfDay()} 시작 · " +
-            formatDurationKorean(run.durationSeconds),
-        detail = "평균 ${formatPace(run.averagePaceSecPerKm, distanceUnit)} · ${run.calories}kcal",
+    EntryRow(
+        kind = "러닝",
+        time = "${run.startTime.formatTimeOfDay()} 시작",
+        title = runTitle(run),
+        detail = "${formatDurationKorean(run.durationSeconds)} · " +
+            "평균 ${formatPace(run.averagePaceSecPerKm, distanceUnit)} · ${run.calories}kcal",
+        number = formatDistanceValue(run.distanceMeters, distanceUnit),
+        unit = distanceUnit.label,
         memo = run.memo,
         onClick = onClick,
     )
 }
 
+/**
+ * 기록 한 줄. 카드 없이 위에 가는 선만 긋는다. 종류와 시각은 작은 글자로,
+ * 그 기록을 대표하는 값(볼륨 · 거리)은 오른쪽에 크게 둔다.
+ */
 @Composable
-private fun EntryCard(
-    icon: ImageVector,
+private fun EntryRow(
+    kind: String,
+    time: String,
     title: String,
-    subtitle: String,
     detail: String,
+    number: String,
+    unit: String,
     memo: String?,
     onClick: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Hairline()
         Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .size(24.dp)
-                    .align(Alignment.CenterVertically),
-            )
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Row {
+                    Text(kind, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "  $time",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(title, style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = detail,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (!memo.isNullOrBlank()) {
                     Text(
                         text = "\"$memo\"",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 6.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
             }
+            MetricValue(
+                number = number,
+                unit = unit,
+                modifier = Modifier.padding(start = 12.dp),
+                numberStyle = MaterialTheme.typography.displaySmall.copy(fontSize = 24.sp, lineHeight = 28.sp),
+            )
         }
     }
 }

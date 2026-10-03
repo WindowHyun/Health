@@ -6,6 +6,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,15 +23,11 @@ import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsOff
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -41,15 +38,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.windowhyun.health.core.designsystem.theme.healthColors
 import com.windowhyun.health.domain.model.RunGoalType
+import com.windowhyun.health.ui.components.HealthButton
+import com.windowhyun.health.ui.components.HealthOutlinedButton
+import com.windowhyun.health.ui.components.MetricValue
+import com.windowhyun.health.ui.components.SectionLabel
 
 /**
  * 러닝 시작 화면.
@@ -104,8 +106,8 @@ fun RunSetupScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item {
                 GpsStatusCard(
@@ -119,7 +121,7 @@ fun RunSetupScreen(
             }
 
             item {
-                Text("러닝 모드", style = MaterialTheme.typography.titleMedium)
+                SectionLabel("러닝 모드")
             }
 
             item {
@@ -146,7 +148,8 @@ fun RunSetupScreen(
                 RunGoalType.DISTANCE -> item {
                     GoalStepper(
                         label = "목표 거리",
-                        value = String.format(java.util.Locale.US, "%.1f km", state.goalDistanceKm),
+                        number = String.format(java.util.Locale.US, "%.1f", state.goalDistanceKm),
+                        unit = "km",
                         onMinus = { viewModel.changeGoalDistance(-0.5) },
                         onPlus = { viewModel.changeGoalDistance(0.5) },
                     )
@@ -155,7 +158,8 @@ fun RunSetupScreen(
                 RunGoalType.DURATION -> item {
                     GoalStepper(
                         label = "목표 시간",
-                        value = "${state.goalDurationMinutes}분",
+                        number = "${state.goalDurationMinutes}",
+                        unit = "분",
                         onMinus = { viewModel.changeGoalDuration(-5) },
                         onPlus = { viewModel.changeGoalDuration(5) },
                     )
@@ -183,7 +187,7 @@ fun RunSetupScreen(
             }
 
             item {
-                Button(
+                HealthButton(
                     onClick = viewModel::startRun,
                     enabled = state.canStart,
                     modifier = Modifier
@@ -191,11 +195,7 @@ fun RunSetupScreen(
                         .height(72.dp),
                 ) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(28.dp))
-                    Text(
-                        text = "러닝 시작",
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
+                    Text(text = "러닝 시작", style = MaterialTheme.typography.headlineSmall)
                 }
             }
 
@@ -210,6 +210,7 @@ fun RunSetupScreen(
     }
 }
 
+/** 시작 전 점검 띠. 준비되면 라임, 막혀 있으면 오류색 면으로 알린다(글자도 함께 바뀐다). */
 @Composable
 private fun GpsStatusCard(
     hasPermission: Boolean,
@@ -218,55 +219,57 @@ private fun GpsStatusCard(
     onOpenLocationSettings: () -> Unit,
 ) {
     val ready = hasPermission && gpsEnabled
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (ready) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.errorContainer
-            },
-        ),
+    val container = if (ready) MaterialTheme.healthColors.accent else MaterialTheme.colorScheme.errorContainer
+    val content = if (ready) MaterialTheme.healthColors.onAccent else MaterialTheme.colorScheme.onErrorContainer
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .background(container)
+            .padding(16.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (ready) Icons.Filled.GpsFixed else Icons.Filled.GpsOff,
-                    contentDescription = null,
-                )
-                Text(
-                    text = when {
-                        !hasPermission -> "위치 권한이 필요합니다"
-                        !gpsEnabled -> "위치(GPS)가 꺼져 있습니다"
-                        else -> "GPS 준비됨"
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = if (ready) Icons.Filled.GpsFixed else Icons.Filled.GpsOff,
+                contentDescription = null,
+                tint = content,
+            )
+            Text(
+                text = when {
+                    !hasPermission -> "위치 권한이 필요합니다"
+                    !gpsEnabled -> "위치(GPS)가 꺼져 있습니다"
+                    else -> "GPS 준비됨"
+                },
+                style = MaterialTheme.typography.titleMedium,
+                color = content,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
 
-            if (!hasPermission) {
-                Text(
-                    text = "러닝 경로를 기록하려면 위치 권한을 허용해 주세요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                OutlinedButton(
-                    onClick = onRequestPermission,
-                    modifier = Modifier.padding(top = 8.dp),
-                ) { Text("권한 허용하기") }
-            } else if (!gpsEnabled) {
-                Text(
-                    text = "설정에서 위치를 켜 주세요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                OutlinedButton(
-                    onClick = onOpenLocationSettings,
-                    modifier = Modifier.padding(top = 8.dp),
-                ) { Text("위치 설정 열기") }
-            }
+        if (!hasPermission) {
+            Text(
+                text = "러닝 경로를 기록하려면 위치 권한을 허용해 주세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = content,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            HealthOutlinedButton(
+                onClick = onRequestPermission,
+                compact = true,
+                modifier = Modifier.padding(top = 12.dp),
+            ) { Text("권한 허용하기", color = content) }
+        } else if (!gpsEnabled) {
+            Text(
+                text = "설정에서 위치를 켜 주세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = content,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            HealthOutlinedButton(
+                onClick = onOpenLocationSettings,
+                compact = true,
+                modifier = Modifier.padding(top = 12.dp),
+            ) { Text("위치 설정 열기", color = content) }
         }
     }
 }
@@ -274,7 +277,8 @@ private fun GpsStatusCard(
 @Composable
 private fun GoalStepper(
     label: String,
-    value: String,
+    number: String,
+    unit: String,
     onMinus: () -> Unit,
     onPlus: () -> Unit,
 ) {
@@ -286,7 +290,7 @@ private fun GoalStepper(
         Text(label, style = MaterialTheme.typography.bodyLarge)
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onMinus) { Icon(Icons.Filled.Remove, contentDescription = "줄이기") }
-            Text(value, style = MaterialTheme.typography.headlineSmall)
+            MetricValue(number = number, unit = unit, modifier = Modifier.padding(horizontal = 4.dp))
             IconButton(onClick = onPlus) { Icon(Icons.Filled.Add, contentDescription = "늘리기") }
         }
     }

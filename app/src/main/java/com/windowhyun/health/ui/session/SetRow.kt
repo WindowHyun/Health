@@ -1,6 +1,8 @@
 package com.windowhyun.health.ui.session
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -8,19 +10,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,12 +27,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.windowhyun.health.core.designsystem.theme.healthColors
 import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.core.model.SetType
 import com.windowhyun.health.core.model.WeightUnit
@@ -59,6 +61,8 @@ fun SetRow(
     modifier: Modifier = Modifier,
     trackingType: ExerciseTrackingType = ExerciseTrackingType.WEIGHT_REPS,
     onCycleSetType: (() -> Unit)? = null,
+    /** 완료 버튼과 완료 색칠을 보일지. 끝난 기록을 고치는 화면에서는 끈다. */
+    showComplete: Boolean = true,
 ) {
     // set.id 가 같은 동안에는 화면 입력값을 유지한다.
     var weightText by remember(set.id) {
@@ -78,10 +82,12 @@ fun SetRow(
     fun duration() = durationSecondsOf(minutesText, secondsText)
 
     val isWarmup = set.setType == SetType.WARMUP
+    // 끝낸 세트는 라임을 옅게 깐다. 한눈에 "어디까지 했는지"가 보이되 입력칸 글자는 그대로 읽힌다.
     val background = when {
-        set.completed && isWarmup -> MaterialTheme.colorScheme.secondaryContainer
-        set.completed -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surface
+        !showComplete -> Color.Transparent
+        set.completed && isWarmup -> MaterialTheme.colorScheme.surfaceVariant
+        set.completed -> MaterialTheme.healthColors.accent.copy(alpha = 0.28f)
+        else -> Color.Transparent
     }
     // 완료 버튼을 누를 수 있는 조건은 기록 방식에 따라 다르다.
     val hasValue = when (trackingType) {
@@ -92,8 +98,8 @@ fun SetRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(background, RoundedCornerShape(12.dp))
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .background(background, MaterialTheme.shapes.small)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -158,22 +164,11 @@ fun SetRow(
             }
         }
 
-        FilledIconButton(
-            onClick = { onToggleCompleted(weightKg(), reps(), duration()) },
-            enabled = set.completed || hasValue,
-            modifier = Modifier.size(52.dp),
-            colors = if (set.completed) {
-                IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                IconButtonDefaults.filledIconButtonColors()
-            },
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = if (set.completed) "세트 완료 취소" else "세트 완료",
-                modifier = Modifier.size(28.dp),
+        if (showComplete) {
+            CompleteButton(
+                completed = set.completed,
+                enabled = set.completed || hasValue,
+                onClick = { onToggleCompleted(weightKg(), reps(), duration()) },
             )
         }
 
@@ -188,37 +183,59 @@ fun SetRow(
 }
 
 /**
+ * 세트 완료 버튼. 운동 중 가장 많이 누르는 버튼이라 크게(52dp) 두고,
+ * 끝나면 라임 면에 검정 체크로 바뀐다(색 + 체크 표시 + 접근성 설명이 함께 바뀐다).
+ */
+@Composable
+private fun CompleteButton(completed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.healthColors
+    val ink = MaterialTheme.colorScheme.onSurface
+    val shape = MaterialTheme.shapes.small
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .alpha(if (enabled) 1f else 0.38f)
+            .clip(shape)
+            .background(if (completed) colors.accent else Color.Transparent)
+            .then(if (completed) Modifier else Modifier.border(1.dp, ink, shape))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Check,
+            contentDescription = if (completed) "세트 완료 취소" else "세트 완료",
+            tint = if (completed) colors.onAccent else ink,
+            modifier = Modifier.size(28.dp),
+        )
+    }
+}
+
+/**
  * 세트 번호. 누르면 종류가 본세트 → 워밍업 → 드롭 → 실패 순으로 바뀐다.
+ * 본세트는 숫자만, 그 밖의 종류는 상자로 감싸 구분한다(색에만 기대지 않는다).
  *
  * 종류를 고르는 별도 메뉴를 두지 않는 이유는, 운동 중 조작을 한 번으로 끝내기 위해서다.
  */
 @Composable
 private fun SetNumberChip(set: WorkoutSet, onCycleSetType: (() -> Unit)?) {
+    val special = set.setType != SetType.NORMAL
     val label = set.setType.shortLabel.ifEmpty { "${set.setNumber}" }
-    val color = if (set.setType == SetType.NORMAL) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.primary
-    }
+    val ink = MaterialTheme.colorScheme.onSurface
+    val tag = Modifier
+        .size(30.dp)
+        .then(if (special) Modifier.border(1.dp, ink, MaterialTheme.shapes.extraSmall) else Modifier)
 
-    if (onCycleSetType == null) {
-        Box(modifier = Modifier.width(40.dp), contentAlignment = Alignment.Center) {
-            Text(text = label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        }
-        return
-    }
-
-    TextButton(
-        onClick = onCycleSetType,
-        modifier = Modifier.width(40.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+    Box(
+        modifier = Modifier
+            .size(width = 40.dp, height = 48.dp)
+            .then(
+                if (onCycleSetType != null) Modifier.clickable(role = Role.Button, onClick = onCycleSetType) else Modifier,
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = color,
-        )
+        Box(modifier = tag, contentAlignment = Alignment.Center) {
+            Text(text = label, style = MaterialTheme.typography.titleMedium, color = ink)
+        }
     }
 }
 
@@ -236,13 +253,19 @@ private fun NumberField(
         modifier = modifier,
         singleLine = true,
         label = null,
-        textStyle = TextStyle(
+        // 입력한 값이 이 화면의 핵심이라 크고 굵은 숫자로, 폭을 맞춰 자리가 흔들리지 않게 한다.
+        textStyle = MaterialTheme.typography.displaySmall.copy(
             fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
+            lineHeight = 28.sp,
             textAlign = TextAlign.Center,
         ),
         suffix = { Text(suffix, style = MaterialTheme.typography.labelMedium) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            focusedBorderColor = MaterialTheme.colorScheme.onSurface,
+            cursorColor = MaterialTheme.colorScheme.onSurface,
+        ),
     )
 }
 

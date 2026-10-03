@@ -18,19 +18,20 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.SectionLabel
+import com.windowhyun.health.ui.components.HealthOutlinedButton
+import com.windowhyun.health.ui.components.HealthButton
+import com.windowhyun.health.ui.components.Hairline
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +39,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -72,10 +72,11 @@ fun RoutineEditScreen(
                     }
                 },
                 actions = {
-                    Button(
+                    HealthButton(
                         onClick = viewModel::save,
                         enabled = state.canSave,
-                        modifier = Modifier.padding(end = 8.dp),
+                        compact = true,
+                        modifier = Modifier.padding(end = 12.dp),
                     ) { Text("저장") }
                 },
             )
@@ -85,8 +86,7 @@ fun RoutineEditScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         ) {
             item {
                 OutlinedTextField(
@@ -94,13 +94,18 @@ fun RoutineEditScreen(
                     onValueChange = viewModel::setName,
                     label = { Text("루틴 이름 (예: 상체, 하체, 전신 A)") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp),
                 )
             }
 
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("요일 지정 (선택)", style = MaterialTheme.typography.titleSmall)
+                Column(
+                    modifier = Modifier.padding(bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SectionLabel("요일 지정 (선택)")
                     Text(
                         text = "지정한 요일에는 홈 화면에 이 루틴이 바로 뜹니다.",
                         style = MaterialTheme.typography.bodySmall,
@@ -120,14 +125,16 @@ fun RoutineEditScreen(
 
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("운동 ${state.items.size}개", style = MaterialTheme.typography.titleMedium)
-                    OutlinedButton(onClick = { showPicker = true }) {
+                    Text("운동 ${state.items.size}개", style = MaterialTheme.typography.titleLarge)
+                    HealthOutlinedButton(onClick = { showPicker = true }, compact = true) {
                         Icon(Icons.Filled.Add, contentDescription = null)
-                        Text("운동 추가", modifier = Modifier.padding(start = 4.dp))
+                        Text("운동 추가")
                     }
                 }
             }
@@ -186,20 +193,20 @@ private fun RoutineItemCard(
     onSetsChange: (Int) -> Unit,
     onRestChange: (Int?) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Hairline()
+        Column(modifier = Modifier.padding(vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "${index + 1}",
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(end = 12.dp),
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = item.exercise.name,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
                     )
                     Text(
                         text = "${item.exercise.bodyPart.label} · ${item.exercise.category.label}",

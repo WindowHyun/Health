@@ -63,6 +63,13 @@ fun formatDistance(meters: Double, unit: DistanceUnit): String =
     String.format(Locale.US, "%.2f", unit.fromMeters(meters)) + unit.label
 
 /**
+ * 거리의 숫자 부분만. 큰 숫자에 작은 단위를 따로 붙여 보여 줄 때 쓴다(단위는 [DistanceUnit.label]).
+ * 예: 8420.0m, 2자리 -> "8.42"
+ */
+fun formatDistanceValue(meters: Double, unit: DistanceUnit, decimals: Int = 2): String =
+    String.format(Locale.US, "%.${decimals}f", unit.fromMeters(meters))
+
+/**
  * 1km 당 초로 저장된 페이스를 사용자의 거리 단위로 바꿔 적는다.
  *
  * 거리는 마일로 바꾸면서 페이스는 km 그대로 두면, 3.11mile 옆에 km 페이스가 붙어 틀린 값이
