@@ -3,6 +3,10 @@ package com.windowhyun.health.ui.screenshot
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.PaddingValues
+import com.windowhyun.health.ui.share.RunShareCard
+import com.windowhyun.health.ui.share.RunCardData
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -144,6 +148,18 @@ class RunScreenshotTest {
         compose.saveScreenshot(name)
     }
 
+    /** 공유용 러닝 카드. 360x450dp 로 그대로 그려 본다. */
+    private fun shareCard(name: String, withRoute: Boolean, best: Boolean) {
+        val run = runBlocking { fixture.runs.getRun(1)!! }.let { if (withRoute) it else it.copy(route = emptyList()) }
+        val data = RunCardData.from(run, DistanceUnit.KM, isPersonalBest = best)
+        show(false) {
+            Box(modifier = Modifier.size(360.dp, 450.dp)) { RunShareCard(data) }
+        }
+        compose.saveScreenshot(name)
+    }
+
+    @Test fun `share card with route`() = shareCard("run_card_route", withRoute = true, best = true)
+    @Test fun `share card without route`() = shareCard("run_card_noroute", withRoute = false, best = false)
     @Test fun `active light`() = active("run_active_light", dark = false)
     @Test fun `active dark`() = active("run_active_dark", dark = true)
     @Test fun `setup light`() = setup("run_setup_light", dark = false, gpsOn = true)

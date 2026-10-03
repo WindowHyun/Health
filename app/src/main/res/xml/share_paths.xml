@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 공유할 정리 카드 이미지는 캐시 폴더의 share/ 에 잠깐 만들고, 이 폴더만 다른 앱에 열어 준다. -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

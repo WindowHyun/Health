@@ -22,6 +22,7 @@ import com.windowhyun.health.domain.model.Exercise
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.RoutineItem
 import com.windowhyun.health.domain.model.RunGoalType
+import com.windowhyun.health.domain.model.RunPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -97,6 +98,18 @@ class ScreenshotFixture(context: Context) {
         suspend fun finishedRun(daysAgo: Long, meters: Double, seconds: Long) {
             val id = runs.startRun(RunGoalType.FREE, 0.0)
             val pace = seconds / (meters / 1000)
+            // 눈으로 볼 때 경로 카드가 비지 않도록, 구불구불한 고리 모양 길을 넣는다.
+            runs.appendRoutePoints(
+                id,
+                (0..120).map { i ->
+                    val angle = i / 120.0 * 2 * Math.PI
+                    RunPoint(
+                        latitude = 37.5665 + 0.006 * Math.sin(angle) + 0.0015 * Math.sin(angle * 5),
+                        longitude = 126.9780 + 0.009 * Math.cos(angle) * (1 + 0.15 * Math.cos(angle * 3)),
+                        timestamp = 1_000L * i,
+                    )
+                },
+            )
             runs.finishRun(id, System.currentTimeMillis(), meters, seconds, pace, pace - 12, (meters * 0.06).toInt(), 0)
             val stored = db.runDao().getRun(id)!!
             val shift = daysAgo * 86_400_000L

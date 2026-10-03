@@ -34,9 +34,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.util.formatDistance
-import com.windowhyun.health.core.util.formatKoreanFull
 import com.windowhyun.health.core.util.formatPace
 import com.windowhyun.health.ui.components.ConfirmDialog
+import com.windowhyun.health.ui.share.RunCardData
+import com.windowhyun.health.ui.share.RunShareCard
+import com.windowhyun.health.ui.share.ShareCardSection
 
 /** 러닝 결과. 거리·시간·페이스·Lap·경로·개인기록을 한 화면에 모아 보여 준다. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,12 +65,18 @@ fun RunSummaryScreen(
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            item {
-                RunHeadline(
-                    dateText = run?.date?.formatKoreanFull().orEmpty(),
-                    distanceMeters = run?.distanceMeters ?: 0.0,
-                    unit = state.settings.distanceUnit,
-                )
+            // 러닝이 끝나면 한 장으로 정리한 카드를 바로 보여 주고, 저장 · 공유할 수 있게 한다.
+            if (run != null) {
+                item {
+                    val isBest = state.personalBests.isLongestDistance || state.personalBests.isFastestAveragePace
+                    val data = remember(run, state.settings.distanceUnit, isBest) {
+                        RunCardData.from(run, state.settings.distanceUnit, isBest)
+                    }
+                    ShareCardSection(
+                        fileName = "health-run-${run.date}",
+                        description = "러닝 ${data.distanceNumber}${data.distanceUnit}, ${data.durationText}, 평균 페이스 ${data.paceText}",
+                    ) { RunShareCard(data) }
+                }
             }
 
             if (state.personalBests.isLongestDistance || state.personalBests.isFastestAveragePace) {

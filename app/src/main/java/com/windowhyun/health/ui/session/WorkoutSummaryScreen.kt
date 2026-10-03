@@ -3,7 +3,6 @@ package com.windowhyun.health.ui.session
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,15 +17,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import com.windowhyun.health.ui.components.PersonalRecordsPanel
+import com.windowhyun.health.ui.share.ShareCardSection
+import com.windowhyun.health.ui.share.WorkoutCardData
+import com.windowhyun.health.ui.share.WorkoutShareCard
 import com.windowhyun.health.ui.components.HealthButton
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.windowhyun.health.core.util.formatDurationKorean
-import com.windowhyun.health.core.util.formatVolume
-import com.windowhyun.health.ui.components.StatCard
 
 /** 운동 종료 요약. 새 PR 은 가장 눈에 띄게 보여 준다. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,45 +54,16 @@ fun WorkoutSummaryScreen(
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            item {
-                Text(
-                    text = workout?.displayName ?: "운동",
-                    style = MaterialTheme.typography.headlineLarge,
-                )
-            }
-
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    StatCard(
-                        label = "총 운동시간",
-                        value = formatDurationKorean(workout?.durationSeconds ?: 0),
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatCard(
-                        label = "완료한 운동",
-                        value = "${workout?.performedExerciseCount ?: 0}개",
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    StatCard(
-                        label = "총 세트",
-                        value = "${workout?.totalCompletedSets ?: 0}",
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatCard(
-                        label = "총 반복",
-                        value = "${workout?.totalReps ?: 0}회",
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatCard(
-                        label = "총 볼륨",
-                        value = formatVolume(workout?.totalVolume ?: 0.0, state.settings.weightUnit),
-                        modifier = Modifier.weight(1f),
-                    )
+            // 운동이 끝나면 한 장으로 정리한 카드를 바로 보여 주고, 저장 · 공유할 수 있게 한다.
+            if (workout != null) {
+                item {
+                    val data = remember(workout, state.personalRecords, state.settings.weightUnit) {
+                        WorkoutCardData.from(workout, state.personalRecords, state.settings.weightUnit)
+                    }
+                    ShareCardSection(
+                        fileName = "health-workout-${workout.date}",
+                        description = "${data.title} ${data.durationText}, 볼륨 ${data.volumeText}, ${data.totalSets}세트",
+                    ) { WorkoutShareCard(data) }
                 }
             }
 
