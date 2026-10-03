@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.windowhyun.health.data.local.HealthDatabase
 import com.windowhyun.health.data.repository.ExerciseRepositoryImpl
 import com.windowhyun.health.data.repository.RoutineRepositoryImpl
@@ -148,11 +149,78 @@ class RoutineTemplateTest {
         assertThat(saved.map { it.name }).doesNotContain("5x5 B")
     }
 
-    /** 다섯 템플릿 전부 이름이 겹치지 않는 종류이며, id 도 서로 달라야 한다. */
+    /** 템플릿 id 는 서로 달라야 한다(목록의 key 이기도 하다). */
     @Test
     fun `template ids are unique`() {
         val ids = RoutineTemplates.all.map { it.id }
         assertThat(ids).containsNoDuplicates()
+    }
+
+    /**
+     * 날마다 만들어지는 루틴 이름이 템플릿끼리 겹치면 루틴 목록에 같은 이름이 두 개 생겨
+     * 어느 것이 어느 프로그램인지 알 수 없다.
+     */
+    @Test
+    fun `routine names are unique across all templates`() {
+        val names = RoutineTemplates.all.flatMap { it.days }.map { it.routineName }
+        assertThat(names).containsNoDuplicates()
+    }
+
+    /** 한 날에 같은 종목이 두 줄 들어 있으면 오타이거나 의도하지 않은 중복이다. */
+    @Test
+    fun `no exercise repeats inside a day`() {
+        RoutineTemplates.all.flatMap { it.days }.forEach { day ->
+            val names = day.exercises.map { it.first }
+            assertWithMessage(day.routineName).that(names).containsNoDuplicates()
+        }
+    }
+
+    /** 세트 수가 0 이거나 터무니없이 크면 입력 실수다. 편집 화면의 한도(1~20)를 넘지 않는다. */
+    @Test
+    fun `default sets stay in a sensible range`() {
+        RoutineTemplates.all.flatMap { it.days }.forEach { day ->
+            day.exercises.forEach { (name, sets) ->
+                assertWithMessage("${day.routineName} / $name").that(sets).isIn(1..10)
+            }
+        }
+    }
+
+    /** 비어 있는 날이나 설명 없는 템플릿이 목록에 올라가면 안 된다. */
+    @Test
+    fun `every template has a title description and non empty days`() {
+        RoutineTemplates.all.forEach { template ->
+            assertWithMessage(template.id).that(template.title).isNotEmpty()
+            assertWithMessage(template.id).that(template.description).isNotEmpty()
+            assertWithMessage(template.id).that(template.days).isNotEmpty()
+            template.days.forEach { assertWithMessage("${template.id}/${it.routineName}").that(it.exercises).isNotEmpty() }
+        }
+    }
+
+    /** 목록은 갈래별로 묶여 보이고, 모든 템플릿이 정확히 한 갈래에 들어간다. */
+    @Test
+    fun `grouped list contains every template exactly once in category order`() {
+        val grouped = RoutineTemplates.byCategory
+        assertThat(grouped.flatMap { it.second }.map { it.id })
+            .containsExactlyElementsIn(RoutineTemplates.all.map { it.id })
+        assertThat(grouped.map { it.first }).isInStrictOrder(compareBy<RoutineTemplates.Category> { it.ordinal })
+        grouped.forEach { (category, templates) ->
+            assertThat(templates.all { it.category == category }).isTrue()
+        }
+    }
+
+    /** 새로 넣은 프로그램은 실제로 적용되어 날마다 루틴이 만들어진다. */
+    @Test
+    fun `every template can be applied and creates a routine per day`() = runTest(dispatcher) {
+        RoutineTemplates.all.forEach { template ->
+            viewModel.applyTemplate(template)
+            val result = viewModel.applied.first()
+            assertWithMessage(template.id).that(result.missingExerciseNames).isEmpty()
+            assertWithMessage(template.id).that(result.createdRoutineNames)
+                .containsExactlyElementsIn(template.days.map { it.routineName }).inOrder()
+        }
+
+        val expected = RoutineTemplates.all.sumOf { it.days.size }
+        assertThat(routines.observeRoutines().first()).hasSize(expected)
     }
 
     /** 카드를 빠르게 두 번 눌러도 루틴은 한 벌만 생긴다. */

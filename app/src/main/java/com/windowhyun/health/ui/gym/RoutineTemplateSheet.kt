@@ -41,15 +41,25 @@ fun RoutineTemplateSheet(
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(
-                text = "많이 알려진 프로그램을 그대로 넣습니다. 만든 뒤에는 자유롭게 고칠 수 있습니다.",
+                text = "이름난 프로그램과 장비 · 목적별 구성을 한 번에 넣습니다. 만든 뒤에는 자유롭게 고칠 수 있습니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
             )
 
             LazyColumn {
-                items(RoutineTemplates.all, key = { it.id }) { template ->
-                    TemplateCard(template = template, onClick = { onPick(template) })
+                RoutineTemplates.byCategory.forEach { (category, templates) ->
+                    item(key = "category-${category.name}") {
+                        Text(
+                            text = category.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                        )
+                    }
+                    items(templates, key = { it.id }) { template ->
+                        TemplateCard(template = template, onClick = { onPick(template) })
+                    }
                 }
             }
         }
