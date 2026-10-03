@@ -10,6 +10,8 @@ import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.repository.RunRepository
 import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.domain.repository.WorkoutRepository
+import com.windowhyun.health.domain.usecase.StatsCalculator
+import com.windowhyun.health.domain.usecase.TrainingStats
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -54,7 +56,21 @@ enum class HistoryMode(val label: String) {
     LIST("목록"),
     CALENDAR("캘린더"),
     EXERCISES("종목"),
+    STATS("통계"),
 }
+
+/** 통계가 보여 줄 기간. 이번 주를 마지막으로 하는 주 수다. */
+enum class StatsRange(val label: String, val weeks: Int) {
+    MONTH("4주", 4),
+    QUARTER("12주", 12),
+    HALF_YEAR("6개월", 26),
+}
+
+data class StatsUiState(
+    val range: StatsRange = StatsRange.QUARTER,
+    val stats: TrainingStats? = null,
+    val settings: AppSettings = AppSettings(),
+)
 
 /** 캘린더 한 달치. 날짜별 기록을 미리 묶어 두어 칸마다 다시 찾지 않는다. */
 data class CalendarUiState(
@@ -260,6 +276,32 @@ class HistoryViewModel internal constructor(
             selected = if (current.selectedDate == date) null else date,
         )
     }
+
+    // ----- 통계 -----
+
+    private val statsRange = MutableStateFlow(StatsRange.QUARTER)
+
+    fun setStatsRange(value: StatsRange) {
+        statsRange.value = value
+    }
+
+    /** 선택한 기간의 주간·부위별 통계. 자정을 넘기면 새 주 기준으로 다시 계산한다. */
+    val stats: StateFlow<StatsUiState> = combine(today, statsRange) { today, range -> today to range }
+        .flatMapLatest { (today, range) ->
+            val from = StatsCalculator.rangeStart(today, range.weeks)
+            combine(
+                workoutRepository.observeWorkoutsBetween(from = from, to = today),
+                runRepository.observeRunsBetween(from = from, to = today),
+                settingsRepository.settings,
+            ) { workouts, runs, settings ->
+                StatsUiState(
+                    range = range,
+                    stats = StatsCalculator.compute(workouts, runs, today, range.weeks),
+                    settings = settings,
+                )
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatsUiState())
 
     // ----- 종목 -----
 

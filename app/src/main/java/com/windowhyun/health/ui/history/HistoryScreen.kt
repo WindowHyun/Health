@@ -121,6 +121,11 @@ fun HistoryScreen(
                     val exercises by viewModel.exercises.collectAsStateWithLifecycle()
                     HistoryExerciseList(exercises = exercises, onOpenExercise = onOpenExercise)
                 }
+
+                HistoryMode.STATS -> {
+                    val stats by viewModel.stats.collectAsStateWithLifecycle()
+                    HistoryStats(state = stats, onSelectRange = viewModel::setStatsRange)
+                }
             }
         }
     }

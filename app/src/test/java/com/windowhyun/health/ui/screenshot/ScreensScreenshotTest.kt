@@ -89,7 +89,7 @@ class ScreensScreenshotTest {
         show(dark) {
             HistoryScreen(onOpenWorkout = {}, onOpenRun = {}, onOpenExercise = {}, viewModel = viewModel)
         }
-        waitFor { !viewModel.uiState.value.loading }
+        waitFor { !viewModel.uiState.value.loading && viewModel.stats.value.stats != null }
         compose.saveScreenshot(name)
     }
 
@@ -136,6 +136,8 @@ class ScreensScreenshotTest {
     @Test fun `history list light`() = history("history_list_light", dark = false, HistoryMode.LIST)
     @Test fun `history calendar light`() = history("history_calendar_light", dark = false, HistoryMode.CALENDAR)
     @Test fun `history exercises light`() = history("history_exercises_light", dark = false, HistoryMode.EXERCISES)
+    @Test fun `history stats light`() = history("history_stats_light", dark = false, HistoryMode.STATS)
+    @Test fun `history stats dark`() = history("history_stats_dark", dark = true, HistoryMode.STATS)
     @Test fun `history list dark`() = history("history_list_dark", dark = true, HistoryMode.LIST)
     @Test fun `summary light`() = workoutSummary("summary_light", dark = false)
     @Test fun `detail light`() = workoutDetail("detail_light", dark = false)

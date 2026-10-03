@@ -25,6 +25,7 @@ import com.windowhyun.health.domain.repository.WorkoutRepository
 import com.windowhyun.health.ui.history.HistoryEntry
 import com.windowhyun.health.ui.history.HistoryFilter
 import com.windowhyun.health.ui.history.HistoryViewModel
+import com.windowhyun.health.ui.history.StatsRange
 import com.windowhyun.health.ui.navigation.Routes
 import com.windowhyun.health.ui.running.RunDetailViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -320,5 +321,36 @@ class HistoryAndRunDetailTest {
         val state = historyViewModel().uiState.first { !it.loading }
 
         assertThat(state.entries).isEmpty()
+    }
+    // ----- 통계 -----
+
+    /** 방금 끝낸 헬스와 러닝이 이번 주 통계에 잡힌다. */
+    @Test
+    fun `stats count this weeks workout and run`() = runTest(dispatcher) {
+        val workoutId = workouts.startWorkout(null)
+        workouts.finishWorkout(workoutId)
+        finishRun(distanceMeters = 5_000.0, minutesAgo = 30)
+
+        val state = historyViewModel().stats.first { it.stats != null }
+
+        val stats = state.stats!!
+        assertThat(stats.workoutCount).isEqualTo(1)
+        assertThat(stats.runCount).isEqualTo(1)
+        assertThat(stats.runDistanceMeters).isWithin(0.001).of(5_000.0)
+        assertThat(stats.weeks).hasSize(StatsRange.QUARTER.weeks)
+    }
+
+    /** 기간을 바꾸면 주 수가 따라 바뀐다. */
+    @Test
+    fun `changing the stats range changes the number of weeks`() = runTest(dispatcher) {
+        val viewModel = historyViewModel()
+        viewModel.setStatsRange(StatsRange.MONTH)
+
+        val month = viewModel.stats.first { it.range == StatsRange.MONTH && it.stats != null }
+        assertThat(month.stats!!.weeks).hasSize(4)
+
+        viewModel.setStatsRange(StatsRange.HALF_YEAR)
+        val half = viewModel.stats.first { it.range == StatsRange.HALF_YEAR && it.stats != null }
+        assertThat(half.stats!!.weeks).hasSize(26)
     }
 }
