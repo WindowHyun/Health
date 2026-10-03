@@ -207,6 +207,20 @@ interface SettingsRepository {
     suspend fun update(transform: (AppSettings) -> AppSettings)
 }
 
+/**
+ * 자동 백업을 쓰는 폴더. 안드로이드 파일 선택기(SAF)로 고른 폴더를 가리킨다.
+ * 실패하면 사용자에게 그대로 보여 줄 메시지를 담은 예외를 던진다.
+ */
+interface BackupFolder {
+    /** [folderUri] 폴더에 [fileName] 파일을 만들고 [writer] 로 채운다. 도중에 실패하면 반쯤 쓴 파일은 지운다. */
+    suspend fun write(folderUri: String, fileName: String, writer: suspend (OutputStream) -> Unit)
+
+    /** 폴더 안 파일 이름들. */
+    suspend fun listNames(folderUri: String): List<String>
+
+    suspend fun delete(folderUri: String, fileName: String)
+}
+
 /** 백업 파일 한 건의 내용 요약. 내보내기·복원 후 무엇이 오갔는지 알려 준다. */
 data class BackupSummary(
     val createdAt: Long = 0,

@@ -5,11 +5,16 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
 import com.windowhyun.health.core.designsystem.theme.HealthTheme
+import com.windowhyun.health.data.backup.AutoBackupManager
 import com.windowhyun.health.data.backup.BackupRepositoryImpl
+import com.windowhyun.health.data.backup.FakeBackupFolder
 import com.windowhyun.health.domain.model.ThemeMode
 import com.windowhyun.health.ui.exercise.ExerciseDetailScreen
 import com.windowhyun.health.ui.exercise.ExerciseDetailViewModel
@@ -29,6 +34,7 @@ import com.windowhyun.health.ui.settings.SettingsScreen
 import com.windowhyun.health.ui.settings.SettingsViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.SupervisorJob
 import org.junit.After
 import org.junit.Before
@@ -121,13 +127,30 @@ class ScreensScreenshotTest {
         compose.saveScreenshot(name)
     }
 
-    private fun settings(name: String, dark: Boolean) {
+    private fun settings(name: String, dark: Boolean, autoBackup: Boolean = false) {
         val viewModel = SettingsViewModel(fixture.settings)
+        val backupRepository = BackupRepositoryImpl(fixture.db, fixture.db.backupDao(), fixture.settings, Dispatchers.IO)
+        if (autoBackup) {
+            runBlocking {
+                fixture.settings.update {
+                    it.copy(
+                        autoBackupFolderUri = "content://com.android.externalstorage.documents/tree/primary%3ABackups%2Fhealth",
+                        lastAutoBackupAt = System.currentTimeMillis() - 3_600_000,
+                    )
+                }
+            }
+        }
         val backup = BackupViewModel(
             context,
-            BackupRepositoryImpl(fixture.db, fixture.db.backupDao(), fixture.settings, Dispatchers.IO),
+            backupRepository,
+            fixture.settings,
+            AutoBackupManager(backupRepository, fixture.settings, FakeBackupFolder()),
         )
         show(dark) { SettingsScreen(onBack = {}, viewModel = viewModel, backupViewModel = backup) }
+        if (autoBackup) {
+            // 데이터 구역은 화면 아래쪽이라 그 자리까지 스크롤한 뒤 찍는다.
+            compose.onNode(hasScrollAction()).performScrollToNode(hasText("자동 백업 · 켜짐"))
+        }
         compose.saveScreenshot(name)
     }
 
@@ -143,5 +166,6 @@ class ScreensScreenshotTest {
     @Test fun `detail light`() = workoutDetail("detail_light", dark = false)
     @Test fun `exercise light`() = exerciseDetail("exercise_light", dark = false)
     @Test fun `settings light`() = settings("settings_light", dark = false)
+    @Test fun `settings auto backup light`() = settings("settings_autobackup_light", dark = false, autoBackup = true)
     @Test fun `settings dark`() = settings("settings_dark", dark = true)
 }

@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,7 +42,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatWeight
+import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.ThemeMode
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /** 설정. 홈 우측 상단 버튼으로만 들어온다. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -203,7 +208,20 @@ private fun DataSection(viewModel: BackupViewModel) {
         ActivityResultContracts.CreateDocument("text/csv"),
     ) { uri -> uri?.let(viewModel::exportRunCsv) }
 
+    val chooseAutoBackupFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri -> uri?.let(viewModel::chooseAutoBackupFolder) }
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+
     Column {
+        AutoBackupBlock(
+            settings = settings,
+            enabled = !state.working,
+            onChooseFolder = { chooseAutoBackupFolder.launch(null) },
+            onSetDays = viewModel::setAutoBackupEveryDays,
+            onBackupNow = viewModel::runAutoBackupNow,
+            onDisable = viewModel::disableAutoBackup,
+        )
         ActionRow(
             title = "백업 파일 만들기",
             subtitle = "모든 기록과 설정을 JSON 파일 하나로 저장합니다.",
@@ -255,6 +273,83 @@ private fun DataSection(viewModel: BackupViewModel) {
         )
     }
 }
+
+/**
+ * 정해 둔 폴더에 주기적으로 백업. 앱을 켤 때 확인하고 최근 5개만 남긴다.
+ * 꺼져 있을 때는 한 줄짜리 행 하나만 보이고, 켜면 간격과 결과가 펼쳐진다.
+ */
+@Composable
+private fun AutoBackupBlock(
+    settings: AppSettings,
+    enabled: Boolean,
+    onChooseFolder: () -> Unit,
+    onSetDays: (Int) -> Unit,
+    onBackupNow: () -> Unit,
+    onDisable: () -> Unit,
+) {
+    val folder = settings.autoBackupFolderUri
+    ActionRow(
+        title = if (folder == null) "자동 백업" else "자동 백업 · 켜짐",
+        subtitle = if (folder == null) {
+            "고른 폴더에 백업 파일을 주기적으로 만듭니다. 최근 5개만 남깁니다."
+        } else {
+            "폴더: ${autoBackupFolderLabel(folder)} (눌러서 바꾸기)"
+        },
+        enabled = enabled,
+        onClick = onChooseFolder,
+    )
+    if (folder == null) return
+
+    Column(modifier = Modifier.padding(bottom = 8.dp)) {
+        Row(
+            modifier = Modifier.padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("간격", style = MaterialTheme.typography.bodyMedium)
+            AUTO_BACKUP_INTERVALS.forEach { (days, label) ->
+                FilterChip(
+                    selected = settings.autoBackupEveryDays == days,
+                    onClick = { onSetDays(days) },
+                    label = { Text(label) },
+                )
+            }
+        }
+        val last = if (settings.lastAutoBackupAt > 0) {
+            "마지막 백업: ${formatBackupTime(settings.lastAutoBackupAt)}"
+        } else {
+            "아직 백업하지 않았습니다."
+        }
+        Text(
+            text = last,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        settings.lastAutoBackupError?.let { error ->
+            Text(
+                text = "자동 백업 실패: $error",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            TextButton(onClick = onBackupNow, enabled = enabled) { Text("지금 백업") }
+            TextButton(onClick = onDisable, enabled = enabled) { Text("끄기") }
+        }
+    }
+    Hairline()
+}
+
+private val AUTO_BACKUP_INTERVALS = listOf(1 to "매일", 7 to "매주")
+
+/** `primary:Backups/health` 처럼 보이는 폴더 위치를 사람이 읽기 좋게. */
+internal fun autoBackupFolderLabel(folderUri: String): String =
+    Uri.decode(folderUri).substringAfterLast("/tree/").substringBefore("/document/").ifBlank { folderUri }
+
+internal fun formatBackupTime(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
+    DateTimeFormatter.ofPattern("M월 d일 HH:mm").format(Instant.ofEpochMilli(epochMillis).atZone(zone))
 
 @Composable
 private fun ResultText(text: String, color: androidx.compose.ui.graphics.Color) {
@@ -327,7 +422,8 @@ private fun StepperRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        // 설명이 길어도 스위치에 붙지 않도록 오른쪽을 비워 둔다.
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) {
                 Text(

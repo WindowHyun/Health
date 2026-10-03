@@ -1,17 +1,24 @@
 package com.windowhyun.health.ui.settings
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.windowhyun.health.data.backup.AutoBackupManager
+import com.windowhyun.health.data.backup.AutoBackupResult
+import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.repository.BackupFormatException
 import com.windowhyun.health.domain.repository.BackupRepository
 import com.windowhyun.health.domain.repository.BackupSummary
+import com.windowhyun.health.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -34,7 +41,13 @@ data class BackupUiState(
 class BackupViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val backupRepository: BackupRepository,
+    private val settingsRepository: SettingsRepository,
+    private val autoBackupManager: AutoBackupManager,
 ) : ViewModel() {
+
+    /** 자동 백업 설정(폴더 · 간격 · 마지막 결과). */
+    val settings: StateFlow<AppSettings> = settingsRepository.settings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
 
     private val _uiState = MutableStateFlow(BackupUiState())
     val uiState: StateFlow<BackupUiState> = _uiState.asStateFlow()
@@ -77,6 +90,64 @@ class BackupViewModel @Inject constructor(
             backupRepository.exportRunCsv(it)
         } ?: error("파일을 만들 수 없습니다.")
         "러닝 기록 ${rows}줄을 내보냈습니다."
+    }
+
+    // ----- 자동 백업 -----
+
+    /** 폴더를 고르면 접근 권한을 계속 유지하고, 바로 한 번 백업해 제대로 되는지 보여 준다. */
+    fun chooseAutoBackupFolder(uri: Uri) {
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        run("자동 백업") {
+            val previous = settingsRepository.current().autoBackupFolderUri
+            settingsRepository.update {
+                it.copy(
+                    autoBackupFolderUri = uri.toString(),
+                    lastAutoBackupAt = 0,
+                    lastAutoBackupError = null,
+                )
+            }
+            if (previous != null && previous != uri.toString()) releasePermission(previous)
+            backupNow("자동 백업을 켰습니다.")
+        }
+    }
+
+    fun disableAutoBackup() {
+        viewModelScope.launch {
+            val previous = settingsRepository.current().autoBackupFolderUri
+            settingsRepository.update {
+                it.copy(autoBackupFolderUri = null, lastAutoBackupAt = 0, lastAutoBackupError = null)
+            }
+            previous?.let(::releasePermission)
+            _uiState.update { it.copy(message = "자동 백업을 껐습니다. 만들어 둔 백업 파일은 그대로 남아 있습니다.") }
+        }
+    }
+
+    fun setAutoBackupEveryDays(days: Int) {
+        viewModelScope.launch { settingsRepository.update { it.copy(autoBackupEveryDays = days) } }
+    }
+
+    fun runAutoBackupNow() = run("자동 백업") { backupNow("백업했습니다.") }
+
+    private suspend fun backupNow(successMessage: String): String =
+        when (val result = autoBackupManager.runNow()) {
+            is AutoBackupResult.Done -> "$successMessage ${result.fileName}"
+            is AutoBackupResult.Failed -> error(result.message)
+            AutoBackupResult.NotConfigured -> error("백업할 폴더를 먼저 골라 주세요.")
+            AutoBackupResult.NotDue -> successMessage
+        }
+
+    private fun releasePermission(uri: String) {
+        runCatching {
+            context.contentResolver.releasePersistableUriPermission(
+                Uri.parse(uri),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
     }
 
     fun clearMessage() = _uiState.update { it.copy(message = null, error = null) }

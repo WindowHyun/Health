@@ -11,6 +11,8 @@ import com.windowhyun.health.domain.repository.RunRepository
 import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.domain.repository.WorkoutRepository
 import com.windowhyun.health.data.backup.BackupRepositoryImpl
+import com.windowhyun.health.data.backup.SafBackupFolder
+import com.windowhyun.health.domain.repository.BackupFolder
 import com.windowhyun.health.domain.repository.BackupRepository
 import dagger.Binds
 import dagger.Module
@@ -46,4 +48,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindBackupRepository(impl: BackupRepositoryImpl): BackupRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindBackupFolder(impl: SafBackupFolder): BackupFolder
 }

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.model.WeightUnit
@@ -37,6 +38,10 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val RUN_VIBRATION_CUES = booleanPreferencesKey("run_vibration_cues")
         val AUTO_PAUSE_RUN = booleanPreferencesKey("auto_pause_run")
+        val AUTO_BACKUP_FOLDER = stringPreferencesKey("auto_backup_folder")
+        val AUTO_BACKUP_DAYS = intPreferencesKey("auto_backup_every_days")
+        val LAST_AUTO_BACKUP_AT = longPreferencesKey("last_auto_backup_at")
+        val LAST_AUTO_BACKUP_ERROR = stringPreferencesKey("last_auto_backup_error")
     }
 
     override val settings: Flow<AppSettings> = dataStore.data.map { it.toSettings() }
@@ -62,7 +67,15 @@ class SettingsRepositoryImpl @Inject constructor(
             keepScreenOnDuringWorkout = prefs[Keys.KEEP_SCREEN_ON] ?: defaults.keepScreenOnDuringWorkout,
             runVibrationCues = prefs[Keys.RUN_VIBRATION_CUES] ?: defaults.runVibrationCues,
             autoPauseRun = prefs[Keys.AUTO_PAUSE_RUN] ?: defaults.autoPauseRun,
+            autoBackupFolderUri = prefs[Keys.AUTO_BACKUP_FOLDER],
+            autoBackupEveryDays = prefs[Keys.AUTO_BACKUP_DAYS] ?: defaults.autoBackupEveryDays,
+            lastAutoBackupAt = prefs[Keys.LAST_AUTO_BACKUP_AT] ?: defaults.lastAutoBackupAt,
+            lastAutoBackupError = prefs[Keys.LAST_AUTO_BACKUP_ERROR],
         )
+    }
+
+    private fun MutablePreferences.putOrRemove(key: Preferences.Key<String>, value: String?) {
+        if (value == null) remove(key) else this[key] = value
     }
 
     override suspend fun current(): AppSettings = settings.first()
@@ -88,6 +101,10 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.KEEP_SCREEN_ON] = updated.keepScreenOnDuringWorkout
             prefs[Keys.RUN_VIBRATION_CUES] = updated.runVibrationCues
             prefs[Keys.AUTO_PAUSE_RUN] = updated.autoPauseRun
+            prefs.putOrRemove(Keys.AUTO_BACKUP_FOLDER, updated.autoBackupFolderUri)
+            prefs[Keys.AUTO_BACKUP_DAYS] = updated.autoBackupEveryDays
+            prefs[Keys.LAST_AUTO_BACKUP_AT] = updated.lastAutoBackupAt
+            prefs.putOrRemove(Keys.LAST_AUTO_BACKUP_ERROR, updated.lastAutoBackupError)
         }
     }
 }
