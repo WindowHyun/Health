@@ -190,6 +190,7 @@ fun WorkoutSessionScreen(
                 showPicker = false
             },
             onDismiss = { showPicker = false },
+            manager = viewModel.exerciseManager,
         )
     }
 

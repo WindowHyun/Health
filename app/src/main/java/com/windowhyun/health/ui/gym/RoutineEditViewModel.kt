@@ -7,6 +7,8 @@ import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
 import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.domain.model.Exercise
+import com.windowhyun.health.domain.model.ExerciseDeleteResult
+import com.windowhyun.health.domain.model.ExerciseEditResult
 import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.RoutineItem
 import com.windowhyun.health.domain.repository.ExerciseRepository
@@ -50,6 +52,46 @@ class RoutineEditViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(RoutineEditUiState(routineId = routineId))
     val uiState: StateFlow<RoutineEditUiState> = _uiState.asStateFlow()
+
+    private val baseExerciseManager = RepositoryExerciseManager(exerciseRepository)
+
+    /**
+     * 종목을 고치거나 지우면, 지금 편집 중인 루틴의 목록에도 바로 반영한다.
+     * 안 그러면 지운 종목이 목록에 남은 채 저장되어 앱이 죽고, 고친 이름은 옛 이름으로 보인다.
+     */
+    val exerciseManager: ExerciseManager = object : ExerciseManager by baseExerciseManager {
+        override suspend fun edit(
+            id: Long,
+            name: String,
+            category: ExerciseCategory,
+            bodyPart: BodyPart,
+            trackingType: ExerciseTrackingType,
+        ): ExerciseEditResult {
+            val result = baseExerciseManager.edit(id, name, category, bodyPart, trackingType)
+            if (result == ExerciseEditResult.Saved) {
+                exerciseRepository.getExercise(id)?.let { updated ->
+                    _uiState.update { state ->
+                        state.copy(
+                            items = state.items.map { item ->
+                                if (item.exercise.id == id) item.copy(exercise = updated) else item
+                            },
+                        )
+                    }
+                }
+            }
+            return result
+        }
+
+        override suspend fun delete(id: Long): ExerciseDeleteResult {
+            val result = baseExerciseManager.delete(id)
+            if (result == ExerciseDeleteResult.Deleted) {
+                _uiState.update { state ->
+                    state.copy(items = state.items.filter { it.exercise.id != id }.reindex())
+                }
+            }
+            return result
+        }
+    }
 
     /** 운동 선택 시트에서 쓰는 전체 종목 목록. */
     val exercises: StateFlow<List<Exercise>> = exerciseRepository.observeExercises()

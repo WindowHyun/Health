@@ -177,6 +177,7 @@ fun RoutineEditScreen(
                 showPicker = false
             },
             onDismiss = { showPicker = false },
+            manager = viewModel.exerciseManager,
         )
     }
 }

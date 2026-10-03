@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -45,7 +46,10 @@ fun ExercisePickerSheet(
     onPick: (Exercise) -> Unit,
     onCreate: (String, ExerciseCategory, BodyPart, ExerciseTrackingType) -> Unit,
     onDismiss: () -> Unit,
+    /** 있으면, 직접 만든 종목 옆에 "수정" 버튼이 생겨 고치거나 지울 수 있다. */
+    manager: ExerciseManager? = null,
 ) {
+    var editing by remember { mutableStateOf<Exercise?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by remember { mutableStateOf("") }
     var bodyPartFilter by remember { mutableStateOf<BodyPart?>(null) }
@@ -161,18 +165,24 @@ fun ExercisePickerSheet(
                 modifier = Modifier.heightIn(max = 360.dp),
             ) {
                 items(filtered, key = { it.id }) { exercise ->
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPick(exercise) }
                             .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(text = exercise.name, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = "${exercise.bodyPart.label} · ${exercise.category.label}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = exercise.name, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = "${exercise.bodyPart.label} · ${exercise.category.label}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (manager != null && !exercise.isBuiltIn) {
+                            TextButton(onClick = { editing = exercise }) { Text("수정") }
+                        }
                     }
                     Hairline()
                 }
@@ -188,5 +198,10 @@ fun ExercisePickerSheet(
                 }
             }
         }
+    }
+
+    val target = editing
+    if (target != null && manager != null) {
+        ExerciseEditDialog(exercise = target, manager = manager, onDismiss = { editing = null })
     }
 }

@@ -15,6 +15,8 @@ import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.domain.repository.ExerciseRepository
 import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.domain.repository.WorkoutRepository
+import com.windowhyun.health.ui.gym.ExerciseManager
+import com.windowhyun.health.ui.gym.RepositoryExerciseManager
 import com.windowhyun.health.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -92,6 +94,9 @@ class WorkoutSessionViewModel internal constructor(
 
     private val _events = MutableSharedFlow<WorkoutSessionEvent>(extraBufferCapacity = 1)
     val events = _events.asSharedFlow()
+
+    /** 운동 추가 시트에서 직접 만든 종목을 고치고 지우는 창구. */
+    val exerciseManager: ExerciseManager = RepositoryExerciseManager(exerciseRepository)
 
     /** 운동 추가 시트에서 사용할 전체 종목. */
     val exercises: StateFlow<List<Exercise>> = exerciseRepository.observeExercises()

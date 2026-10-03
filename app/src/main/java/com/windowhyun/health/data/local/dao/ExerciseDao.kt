@@ -36,6 +36,14 @@ interface ExerciseDao {
     @Delete
     suspend fun delete(exercise: ExerciseEntity)
 
+    /** 이 종목이 들어 있는 운동 기록(진행 중 포함) 수. */
+    @Query("SELECT COUNT(DISTINCT workoutId) FROM workout_exercise WHERE exerciseId = :id")
+    suspend fun countWorkoutUses(id: Long): Int
+
+    /** 이 종목이 들어 있는 루틴 수. */
+    @Query("SELECT COUNT(DISTINCT routineId) FROM routine_exercise WHERE exerciseId = :id")
+    suspend fun countRoutineUses(id: Long): Int
+
     @Query("SELECT COUNT(*) FROM exercise")
     suspend fun count(): Int
 }

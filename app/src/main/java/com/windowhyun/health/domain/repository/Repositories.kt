@@ -15,6 +15,11 @@ import com.windowhyun.health.domain.model.RunPoint
 import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.domain.model.WorkoutSummary
+import com.windowhyun.health.domain.model.ExerciseUsage
+import com.windowhyun.health.domain.model.ExerciseEditResult
+import com.windowhyun.health.domain.model.ExerciseDeleteResult
+import com.windowhyun.health.core.model.ExerciseCategory
+import com.windowhyun.health.core.model.ExerciseTrackingType
 import kotlinx.coroutines.flow.Flow
 import java.io.InputStream
 import java.io.OutputStream
@@ -28,6 +33,26 @@ interface ExerciseRepository {
     suspend fun addExercise(exercise: Exercise): Long
     suspend fun updateExercise(exercise: Exercise)
     suspend fun deleteExercise(exercise: Exercise)
+
+    suspend fun getUsage(id: Long): ExerciseUsage
+
+    /**
+     * 직접 만든 종목을 고친다. 기본 종목은 고치지 않고, 기록이 있으면 기록 방식은 바꾸지 않는다.
+     * 이름이 겹치면 저장하지 않는다.
+     */
+    suspend fun editExercise(
+        id: Long,
+        name: String,
+        category: ExerciseCategory,
+        bodyPart: BodyPart,
+        trackingType: ExerciseTrackingType,
+    ): ExerciseEditResult
+
+    /**
+     * 직접 만든 종목을 지운다. 운동 기록에 들어 있으면 지우지 않는다(종목을 지우면 그 기록도
+     * 같이 지워지기 때문). 루틴에만 들어 있다면 지우고, 루틴에서도 빠진다.
+     */
+    suspend fun deleteCustomExercise(id: Long): ExerciseDeleteResult
 }
 
 interface RoutineRepository {
