@@ -5,6 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
@@ -21,6 +24,8 @@ import com.windowhyun.health.ui.exercise.ExerciseDetailViewModel
 import com.windowhyun.health.ui.gym.RoutineListScreen
 import com.windowhyun.health.ui.gym.RoutineListViewModel
 import com.windowhyun.health.ui.gym.RoutineTemplateViewModel
+import com.windowhyun.health.ui.running.RunDetailScreen
+import com.windowhyun.health.ui.running.RunDetailViewModel
 import com.windowhyun.health.ui.history.HistoryMode
 import com.windowhyun.health.ui.history.HistoryScreen
 import com.windowhyun.health.ui.history.HistoryViewModel
@@ -117,6 +122,43 @@ class ScreensScreenshotTest {
         compose.saveScreenshot(name)
     }
 
+    /** 끝난 운동 기록 상세에서 공유 아이콘을 누르면 정리 카드와 공유 · 저장 버튼이 뜬다. */
+    private fun workoutDetailCard(name: String) {
+        val viewModel = WorkoutDetailViewModel(
+            fixture.workouts, fixture.settings, SavedStateHandle(mapOf(Routes.ARG_WORKOUT_ID to 1L)), appScope,
+        )
+        show(false) { WorkoutDetailScreen(onBack = {}, onOpenExercise = {}, viewModel = viewModel) }
+        waitFor { viewModel.uiState.value.workout != null }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("정리 카드 만들기").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("공유").assertExists()
+        compose.onNodeWithText("HEALTH").assertExists()
+        compose.onNodeWithText("닫기").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("HEALTH").assertDoesNotExist()
+    }
+
+    /** 지난 러닝 상세에서도 같은 방식으로 정리 카드가 열린다. */
+    private fun runDetailCard() {
+        val viewModel = RunDetailViewModel(
+            runRepository = fixture.runs,
+            settingsRepository = fixture.settings,
+            savedStateHandle = SavedStateHandle(mapOf(Routes.ARG_RUN_ID to 1L)),
+            appScope = appScope,
+        )
+        show(false) { RunDetailScreen(onBack = {}, viewModel = viewModel) }
+        waitFor { viewModel.uiState.value.run != null }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("정리 카드 만들기").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("공유").assertExists()
+        compose.onNodeWithText("러닝").assertExists()
+        compose.onNodeWithText("닫기").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("공유").assertDoesNotExist()
+    }
+
     private fun exerciseDetail(name: String, dark: Boolean) {
         val viewModel = ExerciseDetailViewModel(
             fixture.workouts, fixture.exercises, fixture.settings,
@@ -163,6 +205,8 @@ class ScreensScreenshotTest {
     @Test fun `history stats dark`() = history("history_stats_dark", dark = true, HistoryMode.STATS)
     @Test fun `history list dark`() = history("history_list_dark", dark = true, HistoryMode.LIST)
     @Test fun `summary light`() = workoutSummary("summary_light", dark = false)
+    @Test fun `run detail opens the share card`() = runDetailCard()
+    @Test fun `workout detail opens the share card`() = workoutDetailCard("detail_card")
     @Test fun `detail light`() = workoutDetail("detail_light", dark = false)
     @Test fun `exercise light`() = exerciseDetail("exercise_light", dark = false)
     @Test fun `settings light`() = settings("settings_light", dark = false)

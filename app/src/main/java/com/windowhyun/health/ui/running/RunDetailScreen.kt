@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +40,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.util.formatKoreanFull
 import com.windowhyun.health.core.util.formatTimeOfDay
 import com.windowhyun.health.ui.components.ConfirmDialog
+import com.windowhyun.health.ui.share.RunCardData
+import com.windowhyun.health.ui.share.RunShareCard
+import com.windowhyun.health.ui.share.ShareCardDialog
 
 /**
  * 저장된 러닝 상세.
@@ -53,6 +57,7 @@ fun RunDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showCard by remember { mutableStateOf(false) }
     val run = state.run
 
     LaunchedEffect(state.deleted) {
@@ -75,6 +80,10 @@ fun RunDetailScreen(
                     }
                 },
                 actions = {
+                    // 이미 끝난 러닝도 정리 카드로 만들어 저장 · 공유할 수 있다.
+                    IconButton(onClick = { showCard = true }, enabled = run != null) {
+                        Icon(Icons.Filled.Share, contentDescription = "정리 카드 만들기")
+                    }
                     IconButton(onClick = { showDeleteDialog = true }) {
                         Icon(
                             Icons.Filled.Delete,
@@ -173,6 +182,18 @@ fun RunDetailScreen(
                 }
             }
         }
+    }
+
+    if (showCard && run != null) {
+        // 지난 러닝이 그때 신기록이었는지는 저장해 두지 않아서 신기록 표시는 붙이지 않는다.
+        val data = remember(run, state.settings.distanceUnit) {
+            RunCardData.from(run, state.settings.distanceUnit, isPersonalBest = false)
+        }
+        ShareCardDialog(
+            fileName = "health-run-${run.date}",
+            description = "러닝 ${data.distanceNumber}${data.distanceUnit}, ${data.durationText}, 평균 페이스 ${data.paceText}",
+            onDismiss = { showCard = false },
+        ) { RunShareCard(data) }
     }
 
     if (showDeleteDialog) {

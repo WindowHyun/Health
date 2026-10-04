@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +43,9 @@ import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.core.util.formatWeight
 import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.session.SetRow
+import com.windowhyun.health.ui.share.ShareCardDialog
+import com.windowhyun.health.ui.share.WorkoutCardData
+import com.windowhyun.health.ui.share.WorkoutShareCard
 
 /** 과거 헬스 기록 상세. 세트 값과 메모를 수정할 수 있다. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +57,7 @@ fun WorkoutDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showCard by remember { mutableStateOf(false) }
     val workout = state.workout
 
     LaunchedEffect(state.deleted) {
@@ -72,6 +77,10 @@ fun WorkoutDetailScreen(
                     }
                 },
                 actions = {
+                    // 이미 끝난 운동도 정리 카드로 만들어 저장 · 공유할 수 있다.
+                    IconButton(onClick = { showCard = true }, enabled = workout != null) {
+                        Icon(Icons.Filled.Share, contentDescription = "정리 카드 만들기")
+                    }
                     IconButton(onClick = { showDeleteDialog = true }) {
                         Icon(Icons.Filled.Delete, contentDescription = "기록 삭제")
                     }
@@ -179,6 +188,17 @@ fun WorkoutDetailScreen(
                 )
             }
         }
+    }
+
+    if (showCard && workout != null) {
+        val data = remember(workout, state.personalRecords, state.settings.weightUnit) {
+            WorkoutCardData.from(workout, state.personalRecords, state.settings.weightUnit)
+        }
+        ShareCardDialog(
+            fileName = "health-workout-${workout.date}",
+            description = "${data.title} ${data.durationText}, 볼륨 ${data.volumeText}, ${data.totalSets}세트",
+            onDismiss = { showCard = false },
+        ) { WorkoutShareCard(data) }
     }
 
     if (showDeleteDialog) {
