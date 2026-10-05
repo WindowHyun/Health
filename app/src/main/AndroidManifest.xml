@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 휴식 타이머 알림 / 진동 -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        휴식 타이머 알람: 화면이 꺼져 있어도 정해진 시각에 알려야 한다.
+        Android 13+ 는 타이머 앱이 쓰는 USE_EXACT_ALARM, 12 이하는 SCHEDULE_EXACT_ALARM.
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+
+    <!-- 러닝 GPS 기록 -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- 러닝 걸음 수 (Android 10+ 에서 런타임 권한) -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!--
+        지도 타일 내려받기.
+        기록 자체는 전부 기기 안에 저장되고, 네트워크는 OpenStreetMap 타일을
+        받는 데에만 쓴다. 받은 타일은 캐시되어 다음부터는 오프라인에서도 보인다.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- GPS 가 없는 기기에도 설치는 되도록(헬스 기능만 사용) -->
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
+
+    <!-- 걸음 센서가 없는 기기에서도 동작하도록(걸음 수만 숨김) -->
+    <uses-feature
+        android:name="android.hardware.sensor.stepcounter"
+        android:required="false" />
+
+    <application
+        android:name=".HealthApplication"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Health">
+
+        <!-- 정리 카드 이미지를 공유 시트로 넘기기 위한 파일 공급자. 캐시의 share/ 폴더만 연다. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_paths" />
+        </provider>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Health"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 휴식 타이머 알람이 울리면 알림 · 진동을 낸다. -->
+        <receiver
+            android:name=".core.notification.RestTimerReceiver"
+            android:exported="false" />
+
+        <!--
+            러닝 기록용 Foreground Service.
+            화면이 꺼져도 GPS 수신과 시간 누적이 이어진다.
+        -->
+        <service
+            android:name=".service.RunTrackingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+    </application>
+
+</manifest>

@@ -1,0 +1,252 @@
+package com.windowhyun.health.data.local.dao
+
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Transaction
+import androidx.room.Update
+import com.windowhyun.health.core.model.ExerciseTrackingType
+import com.windowhyun.health.data.local.entity.WorkoutEntity
+import com.windowhyun.health.data.local.entity.WorkoutExerciseEntity
+import com.windowhyun.health.data.local.entity.WorkoutSetEntity
+import com.windowhyun.health.data.local.relation.ExerciseHistorySetRow
+import com.windowhyun.health.data.local.relation.ExerciseHistorySummaryRow
+import com.windowhyun.health.data.local.relation.ExerciseSetHistory
+import com.windowhyun.health.data.local.relation.WorkoutWithDetail
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface WorkoutDao {
+
+    // ---------- 세션 ----------
+
+    @Insert
+    suspend fun insertWorkout(workout: WorkoutEntity): Long
+
+    @Update
+    suspend fun updateWorkout(workout: WorkoutEntity)
+
+    @Query("SELECT * FROM workout WHERE id = :id")
+    suspend fun getWorkout(id: Long): WorkoutEntity?
+
+    @Query("DELETE FROM workout WHERE id = :id")
+    suspend fun deleteWorkout(id: Long)
+
+    @Query("UPDATE workout SET memo = :memo WHERE id = :id")
+    suspend fun updateMemo(id: Long, memo: String?)
+
+    /** 아직 끝나지 않은 세션. 앱을 다시 켰을 때 이어하기 위해 사용한다. */
+    @Query("SELECT * FROM workout WHERE endTime IS NULL ORDER BY startTime DESC LIMIT 1")
+    fun observeActiveWorkout(): Flow<WorkoutEntity?>
+
+    @Query("SELECT * FROM workout WHERE endTime IS NULL ORDER BY startTime DESC LIMIT 1")
+    suspend fun getActiveWorkout(): WorkoutEntity?
+
+    @Transaction
+    @Query("SELECT * FROM workout WHERE id = :id")
+    fun observeWorkoutDetail(id: Long): Flow<WorkoutWithDetail?>
+
+    @Transaction
+    @Query("SELECT * FROM workout WHERE id = :id")
+    suspend fun getWorkoutDetail(id: Long): WorkoutWithDetail?
+
+    @Transaction
+    @Query("SELECT * FROM workout WHERE endTime IS NOT NULL ORDER BY startTime DESC LIMIT :limit")
+    fun observeRecentWorkouts(limit: Int): Flow<List<WorkoutWithDetail>>
+
+    @Transaction
+    @Query(
+        "SELECT * FROM workout WHERE endTime IS NOT NULL AND date BETWEEN :fromEpochDay AND :toEpochDay " +
+            "ORDER BY startTime DESC",
+    )
+    fun observeWorkoutsBetween(fromEpochDay: Long, toEpochDay: Long): Flow<List<WorkoutWithDetail>>
+
+    @Query(
+        "SELECT COUNT(*) FROM workout WHERE endTime IS NOT NULL AND date BETWEEN :fromEpochDay AND :toEpochDay",
+    )
+    fun observeWorkoutCountBetween(fromEpochDay: Long, toEpochDay: Long): Flow<Int>
+
+    /** 이 날짜 이전에 끝난 운동 수. 목록이 보여 주지 않은 옛 기록이 있는지 알려 준다. */
+    @Query("SELECT COUNT(*) FROM workout WHERE endTime IS NOT NULL AND date < :beforeEpochDay")
+    fun observeWorkoutCountBefore(beforeEpochDay: Long): Flow<Int>
+
+    @Query(
+        "SELECT COALESCE(SUM(durationSeconds), 0) FROM workout " +
+            "WHERE endTime IS NOT NULL AND date BETWEEN :fromEpochDay AND :toEpochDay",
+    )
+    fun observeWorkoutDurationBetween(fromEpochDay: Long, toEpochDay: Long): Flow<Long>
+
+    // ---------- 세션 내 운동 ----------
+
+    @Insert
+    suspend fun insertWorkoutExercise(workoutExercise: WorkoutExerciseEntity): Long
+
+    @Update
+    suspend fun updateWorkoutExercise(workoutExercise: WorkoutExerciseEntity)
+
+    @Query("DELETE FROM workout_exercise WHERE id = :id")
+    suspend fun deleteWorkoutExercise(id: Long)
+
+    @Query("SELECT * FROM workout_exercise WHERE workoutId = :workoutId ORDER BY orderIndex")
+    suspend fun getWorkoutExercises(workoutId: Long): List<WorkoutExerciseEntity>
+
+    @Query("SELECT workoutId FROM workout_exercise WHERE id = :id")
+    suspend fun getWorkoutIdOfExercise(id: Long): Long?
+
+    @Query("SELECT COALESCE(MAX(orderIndex), -1) + 1 FROM workout_exercise WHERE workoutId = :workoutId")
+    suspend fun nextExerciseOrder(workoutId: Long): Int
+
+    // ---------- 세트 ----------
+
+    @Insert
+    suspend fun insertSet(set: WorkoutSetEntity): Long
+
+    @Insert
+    suspend fun insertSets(sets: List<WorkoutSetEntity>)
+
+    @Update
+    suspend fun updateSet(set: WorkoutSetEntity)
+
+    @Delete
+    suspend fun deleteSet(set: WorkoutSetEntity)
+
+    @Query("SELECT * FROM workout_set WHERE id = :id")
+    suspend fun getSet(id: Long): WorkoutSetEntity?
+
+    /** 이 세트가 속한 종목의 기록 방식. 쓰지 않는 칸을 비우는 데 쓴다. */
+    @Query(
+        """
+        SELECT e.trackingType FROM workout_set s
+        JOIN workout_exercise we ON s.workoutExerciseId = we.id
+        JOIN exercise e ON we.exerciseId = e.id
+        WHERE s.id = :setId
+        """,
+    )
+    suspend fun getTrackingTypeOfSet(setId: Long): ExerciseTrackingType?
+
+    @Query(
+        """
+        SELECT e.trackingType FROM workout_exercise we
+        JOIN exercise e ON we.exerciseId = e.id
+        WHERE we.id = :workoutExerciseId
+        """,
+    )
+    suspend fun getTrackingTypeOfWorkoutExercise(workoutExerciseId: Long): ExerciseTrackingType?
+
+    @Query("SELECT * FROM workout_set WHERE workoutExerciseId = :workoutExerciseId ORDER BY setNumber")
+    suspend fun getSets(workoutExerciseId: Long): List<WorkoutSetEntity>
+
+    @Query("DELETE FROM workout_set WHERE workoutExerciseId = :workoutExerciseId AND completed = 0")
+    suspend fun deleteIncompleteSets(workoutExerciseId: Long)
+
+    /** 한 종목의 세트 번호를 1..n 으로 다시 매긴다. */
+    @Transaction
+    suspend fun renumberSets(workoutExerciseId: Long) {
+        getSets(workoutExerciseId).forEachIndexed { index, set ->
+            val expected = index + 1
+            if (set.setNumber != expected) updateSet(set.copy(setNumber = expected))
+        }
+    }
+
+    // ---------- 지난 기록 / PR ----------
+
+    /**
+     * 같은 종목을 마지막으로 수행한 세션의 완료된 세트들.
+     * [excludeWorkoutId] 로 진행 중인 세션을 제외한다.
+     */
+    @Query(
+        """
+        SELECT s.* FROM workout_set s
+        WHERE s.completed = 1 AND s.setType != 'WARMUP' AND s.workoutExerciseId = (
+            SELECT we.id FROM workout_exercise we
+            JOIN workout w ON w.id = we.workoutId
+            WHERE we.exerciseId = :exerciseId
+              AND w.endTime IS NOT NULL
+              AND w.id != :excludeWorkoutId
+              AND EXISTS (
+                  SELECT 1 FROM workout_set x
+                  WHERE x.workoutExerciseId = we.id AND x.completed = 1 AND x.setType != 'WARMUP'
+              )
+            ORDER BY w.startTime DESC LIMIT 1
+        )
+        ORDER BY s.setNumber
+        """,
+    )
+    suspend fun getLastPerformedSets(exerciseId: Long, excludeWorkoutId: Long): List<WorkoutSetEntity>
+
+    /**
+     * 종목의 완료 세트 전체 이력. PR(최고 중량 / 최고 볼륨 / 예상 1RM) 계산에 사용한다.
+     * 계산식을 SQL 과 Kotlin 두 곳에 두지 않기 위해 값만 가져와 Kotlin 에서 계산한다.
+     */
+    @Query(
+        """
+        SELECT w.id AS workoutId, we.id AS workoutExerciseId, s.weightKg AS weightKg,
+               s.reps AS reps, s.durationSeconds AS durationSeconds, w.startTime AS startTime
+        FROM workout_set s
+        JOIN workout_exercise we ON we.id = s.workoutExerciseId
+        JOIN workout w ON w.id = we.workoutId
+        WHERE we.exerciseId = :exerciseId AND s.completed = 1 AND s.setType != 'WARMUP'
+          AND w.endTime IS NOT NULL
+        ORDER BY w.startTime
+        """,
+    )
+    suspend fun getCompletedSetHistory(exerciseId: Long): List<ExerciseSetHistory>
+
+    /** 종목별 전체 이력. 워밍업도 함께 가져와 화면에서 구분해 보여 준다. */
+    @Query(
+        """
+        SELECT w.id AS workoutId, w.date AS date, w.startTime AS startTime,
+               w.routineName AS routineName, s.id AS setId, s.setNumber AS setNumber,
+               s.weightKg AS weightKg, s.reps AS reps, s.durationSeconds AS durationSeconds,
+               s.setType AS setType
+        FROM workout_set s
+        JOIN workout_exercise we ON we.id = s.workoutExerciseId
+        JOIN workout w ON w.id = we.workoutId
+        WHERE we.exerciseId = :exerciseId AND s.completed = 1 AND w.endTime IS NOT NULL
+        ORDER BY w.startTime DESC, we.orderIndex, s.setNumber
+        """,
+    )
+    fun observeExerciseHistory(exerciseId: Long): Flow<List<ExerciseHistorySetRow>>
+
+    /** 끝난 운동에서 한 세트라도 완료한 종목. 최근에 한 종목이 위로 온다. */
+    @Query(
+        """
+        SELECT e.id AS exerciseId, e.name AS name, e.bodyPart AS bodyPart,
+               e.trackingType AS trackingType,
+               COUNT(DISTINCT w.id) AS sessionCount, MAX(w.startTime) AS lastStartTime,
+               MAX(w.date) AS lastDate
+        FROM exercise e
+        JOIN workout_exercise we ON we.exerciseId = e.id
+        JOIN workout w ON w.id = we.workoutId
+        JOIN workout_set s ON s.workoutExerciseId = we.id
+        WHERE s.completed = 1 AND w.endTime IS NOT NULL
+        GROUP BY e.id
+        ORDER BY lastStartTime DESC
+        """,
+    )
+    fun observeExercisesWithHistory(): Flow<List<ExerciseHistorySummaryRow>>
+
+    @Query("SELECT DISTINCT we.exerciseId FROM workout_exercise we WHERE we.workoutId = :workoutId")
+    suspend fun getExerciseIdsInWorkout(workoutId: Long): List<Long>
+
+    /** 세트가 속한 운동 기록과 종목. 끝난 기록을 고칠 때 PR 을 다시 계산하는 데 쓴다. */
+    @Query(
+        """
+        SELECT w.id AS workoutId, we.exerciseId AS exerciseId, w.endTime AS endTime
+        FROM workout_set s
+        JOIN workout_exercise we ON s.workoutExerciseId = we.id
+        JOIN workout w ON we.workoutId = w.id
+        WHERE s.id = :setId
+        """,
+    )
+    suspend fun getSetOwner(setId: Long): SetOwner?
+
+    @Query("SELECT id, endTime FROM workout WHERE id IN (:ids)")
+    suspend fun getEndTimes(ids: List<Long>): List<WorkoutEndTime>
+}
+
+data class SetOwner(val workoutId: Long, val exerciseId: Long, val endTime: Long?)
+
+data class WorkoutEndTime(val id: Long, val endTime: Long?)

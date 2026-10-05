@@ -1,0 +1,182 @@
+package com.windowhyun.health.ui.navigation
+
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+import com.windowhyun.health.ui.exercise.ExerciseDetailScreen
+import com.windowhyun.health.ui.gym.RoutineEditScreen
+import com.windowhyun.health.ui.gym.RoutineListScreen
+import com.windowhyun.health.ui.history.HistoryScreen
+import com.windowhyun.health.ui.history.WorkoutDetailScreen
+import com.windowhyun.health.ui.home.HomeScreen
+import com.windowhyun.health.ui.running.RunActiveScreen
+import com.windowhyun.health.ui.running.RunDetailScreen
+import com.windowhyun.health.ui.running.RunSetupScreen
+import com.windowhyun.health.ui.running.RunSummaryScreen
+import com.windowhyun.health.ui.session.WorkoutSessionScreen
+import com.windowhyun.health.ui.session.WorkoutSummaryScreen
+import com.windowhyun.health.ui.settings.SettingsScreen
+
+/**
+ * 모든 화면 연결. 운동 시작/종료 흐름은 백스택을 정리해
+ * 뒤로가기로 진행 중이던 화면에 되돌아가지 않도록 한다.
+ */
+@Composable
+fun HealthNavHost(
+    navController: NavHostController,
+    modifier: Modifier = Modifier,
+) {
+    NavHost(
+        navController = navController,
+        startDestination = Routes.HOME,
+        modifier = modifier.fillMaxSize(),
+    ) {
+        composable(Routes.HOME) {
+            HomeScreen(
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onStartWorkout = { workoutId ->
+                    navController.navigate(Routes.workoutSession(workoutId))
+                },
+                onOpenGym = { navController.navigate(Routes.GYM) },
+                onOpenRunning = { navController.navigate(Routes.RUNNING) },
+                onOpenRunResult = { navController.navigate(Routes.RUN_SUMMARY) { launchSingleTop = true } },
+                onOpenWorkout = { workoutId -> navController.navigate(Routes.workoutDetail(workoutId)) },
+                onOpenRun = { runId -> navController.navigate(Routes.runDetail(runId)) },
+            )
+        }
+
+        composable(Routes.GYM) {
+            RoutineListScreen(
+                onCreateRoutine = { navController.navigate(Routes.routineEdit()) },
+                onEditRoutine = { routineId -> navController.navigate(Routes.routineEdit(routineId)) },
+                onStartWorkout = { workoutId -> navController.navigate(Routes.workoutSession(workoutId)) },
+            )
+        }
+
+        composable(Routes.RUNNING) {
+            RunSetupScreen(
+                onRunStarted = {
+                    navController.navigate(Routes.RUN_ACTIVE) {
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+
+        composable(Routes.RUN_ACTIVE) {
+            RunActiveScreen(
+                onFinished = {
+                    navController.navigate(Routes.RUN_SUMMARY) {
+                        // 진행 화면으로 되돌아가지 않도록 스택에서 제거한다.
+                        popUpTo(Routes.RUN_ACTIVE) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Routes.RUN_SUMMARY) {
+            RunSummaryScreen(
+                onClose = {
+                    // 홈의 "결과 보기"로 들어왔다면 러닝 탭이 스택에 없다. 그때는 그냥 한 단계 뒤로.
+                    if (!navController.popBackStack(Routes.RUNNING, inclusive = false)) {
+                        navController.popBackStack()
+                    }
+                },
+            )
+        }
+
+        composable(Routes.HISTORY) {
+            HistoryScreen(
+                onOpenWorkout = { workoutId -> navController.navigate(Routes.workoutDetail(workoutId)) },
+                onOpenRun = { runId -> navController.navigate(Routes.runDetail(runId)) },
+                onOpenExercise = { exerciseId -> navController.navigate(Routes.exerciseDetail(exerciseId)) },
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = "${Routes.ROUTINE_EDIT}/{${Routes.ARG_ROUTINE_ID}}",
+            arguments = listOf(navArgument(Routes.ARG_ROUTINE_ID) { type = NavType.LongType }),
+        ) {
+            RoutineEditScreen(onDone = { navController.popBackStack() })
+        }
+
+        composable(
+            route = "${Routes.WORKOUT_SESSION}/{${Routes.ARG_WORKOUT_ID}}",
+            arguments = listOf(navArgument(Routes.ARG_WORKOUT_ID) { type = NavType.LongType }),
+        ) {
+            WorkoutSessionScreen(
+                onFinished = { workoutId ->
+                    navController.navigate(Routes.workoutSummary(workoutId)) {
+                        popUpTo(Routes.HOME)
+                    }
+                },
+                onDiscarded = {
+                    navController.popBackStack(Routes.HOME, inclusive = false)
+                },
+            )
+        }
+
+        composable(
+            route = "${Routes.WORKOUT_SUMMARY}/{${Routes.ARG_WORKOUT_ID}}",
+            arguments = listOf(navArgument(Routes.ARG_WORKOUT_ID) { type = NavType.LongType }),
+        ) {
+            WorkoutSummaryScreen(
+                onClose = { navController.popBackStack(Routes.HOME, inclusive = false) },
+            )
+        }
+
+        composable(
+            route = WORKOUT_DETAIL_PATTERN,
+            arguments = listOf(navArgument(Routes.ARG_WORKOUT_ID) { type = NavType.LongType }),
+        ) {
+            WorkoutDetailScreen(
+                onBack = { navController.popBackStack() },
+                onOpenExercise = { exerciseId ->
+                    navController.navigateOrReturn(
+                        routePattern = EXERCISE_DETAIL_PATTERN,
+                        argName = Routes.ARG_EXERCISE_ID,
+                        id = exerciseId,
+                        route = Routes.exerciseDetail(exerciseId),
+                    )
+                },
+            )
+        }
+
+        composable(
+            route = EXERCISE_DETAIL_PATTERN,
+            arguments = listOf(navArgument(Routes.ARG_EXERCISE_ID) { type = NavType.LongType }),
+        ) {
+            ExerciseDetailScreen(
+                onBack = { navController.popBackStack() },
+                onOpenWorkout = { workoutId ->
+                    navController.navigateOrReturn(
+                        routePattern = WORKOUT_DETAIL_PATTERN,
+                        argName = Routes.ARG_WORKOUT_ID,
+                        id = workoutId,
+                        route = Routes.workoutDetail(workoutId),
+                    )
+                },
+            )
+        }
+
+        composable(
+            route = "${Routes.RUN_DETAIL}/{${Routes.ARG_RUN_ID}}",
+            arguments = listOf(navArgument(Routes.ARG_RUN_ID) { type = NavType.LongType }),
+        ) {
+            RunDetailScreen(onBack = { navController.popBackStack() })
+        }
+    }
+}
+
+/** 운동 기록 · 종목 상세의 경로 모양. 앞 화면이 같은 대상인지 비교할 때도 쓴다. */
+internal val WORKOUT_DETAIL_PATTERN = "${Routes.WORKOUT_DETAIL}/{${Routes.ARG_WORKOUT_ID}}"
+internal val EXERCISE_DETAIL_PATTERN = "${Routes.EXERCISE_DETAIL}/{${Routes.ARG_EXERCISE_ID}}"

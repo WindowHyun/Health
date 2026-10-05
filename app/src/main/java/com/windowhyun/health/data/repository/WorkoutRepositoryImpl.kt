@@ -1,0 +1,498 @@
+package com.windowhyun.health.data.repository
+
+import com.windowhyun.health.core.model.ExerciseTrackingType
+import com.windowhyun.health.core.model.PersonalRecord
+import com.windowhyun.health.core.model.PersonalRecordType
+import com.windowhyun.health.core.model.SetType
+import com.windowhyun.health.data.local.dao.ExerciseDao
+import com.windowhyun.health.data.local.dao.PersonalRecordDao
+import com.windowhyun.health.data.local.dao.RoutineDao
+import com.windowhyun.health.data.local.dao.SetOwner
+import com.windowhyun.health.data.local.dao.WorkoutDao
+import com.windowhyun.health.data.local.entity.PersonalRecordEntity
+import com.windowhyun.health.data.local.entity.WorkoutEntity
+import com.windowhyun.health.data.local.entity.WorkoutExerciseEntity
+import com.windowhyun.health.data.local.entity.WorkoutSetEntity
+import com.windowhyun.health.data.mapper.toDomain
+import com.windowhyun.health.domain.model.ExerciseHistorySummary
+import com.windowhyun.health.domain.model.ExerciseSession
+import com.windowhyun.health.domain.model.Workout
+import com.windowhyun.health.domain.model.WorkoutSet
+import com.windowhyun.health.domain.model.WorkoutSummary
+import com.windowhyun.health.domain.repository.WorkoutRepository
+import com.windowhyun.health.domain.usecase.PersonalRecordCalculator
+import com.windowhyun.health.domain.usecase.SupersetGroups
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.time.LocalDate
+import java.time.ZoneId
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.max
+
+/**
+ * 헬스 세션의 모든 쓰기/읽기를 담당한다.
+ *
+ * 설계상의 핵심: 운동을 "시작"하는 순간 세션과 세트 행을 DB 에 먼저 만든다.
+ * 덕분에 앱이 죽어도 진행 상황이 남고, UI 는 DB Flow 만 구독하면 된다.
+ */
+@Singleton
+class WorkoutRepositoryImpl @Inject constructor(
+    private val workoutDao: WorkoutDao,
+    private val routineDao: RoutineDao,
+    private val exerciseDao: ExerciseDao,
+    private val personalRecordDao: PersonalRecordDao,
+) : WorkoutRepository {
+
+    private val zone: ZoneId get() = ZoneId.systemDefault()
+
+    override fun observeActiveWorkout(): Flow<Workout?> =
+        workoutDao.observeActiveWorkout().map { it?.toDomain() }
+
+    override fun observeWorkoutDetail(workoutId: Long): Flow<Workout?> =
+        workoutDao.observeWorkoutDetail(workoutId).map { it?.toDomain() }
+
+    override fun observeRecentWorkouts(limit: Int): Flow<List<Workout>> =
+        workoutDao.observeRecentWorkouts(limit).map { list -> list.map { it.toDomain() } }
+
+    override fun observeWorkoutsBetween(from: LocalDate, to: LocalDate): Flow<List<Workout>> =
+        workoutDao.observeWorkoutsBetween(from.toEpochDay(), to.toEpochDay())
+            .map { list -> list.map { it.toDomain() } }
+
+    override fun observeWorkoutCountBetween(from: LocalDate, to: LocalDate): Flow<Int> =
+        workoutDao.observeWorkoutCountBetween(from.toEpochDay(), to.toEpochDay())
+
+    override fun observeWorkoutCountBefore(date: LocalDate): Flow<Int> =
+        workoutDao.observeWorkoutCountBefore(date.toEpochDay())
+
+    override fun observeWorkoutDurationBetween(from: LocalDate, to: LocalDate): Flow<Long> =
+        workoutDao.observeWorkoutDurationBetween(from.toEpochDay(), to.toEpochDay())
+
+    override suspend fun getWorkout(workoutId: Long): Workout? =
+        workoutDao.getWorkoutDetail(workoutId)?.toDomain()
+
+    /**
+     * 운동 시작 · 종료는 한 번에 하나씩 한다.
+     *
+     * 시작 버튼을 빠르게 두 번 누르면 진행 중인 운동이 두 개 생겨 하나가 어디에도 보이지 않게
+     * 되고, 종료를 두 번 누르면 PR 이 두 번 저장됐다.
+     */
+    private val sessionLock = Mutex()
+
+    /** 이미 진행 중인 운동이 있으면 새로 만들지 않고 그 운동을 돌려준다. */
+    override suspend fun startWorkout(routineId: Long?): Long = sessionLock.withLock {
+        workoutDao.getActiveWorkout()?.id ?: startWorkoutLocked(routineId)
+    }
+
+    private suspend fun startWorkoutLocked(routineId: Long?): Long {
+        val now = System.currentTimeMillis()
+        val routine = routineId?.let { routineDao.getRoutine(it) }
+        val workoutId = workoutDao.insertWorkout(
+            WorkoutEntity(
+                routineId = routine?.routine?.id,
+                routineName = routine?.routine?.name,
+                date = LocalDate.now(zone).toEpochDay(),
+                startTime = now,
+                endTime = null,
+            ),
+        )
+
+        routine?.items?.sortedBy { it.routineExercise.orderIndex }?.let { items ->
+            // 루틴에 저장된 슈퍼셋 묶음도 그대로 가져온다.
+            val groups = SupersetGroups.normalize(items.map { it.routineExercise.supersetGroup })
+            items.zip(groups)
+        }?.forEachIndexed { index, (item, group) ->
+            val workoutExerciseId = workoutDao.insertWorkoutExercise(
+                WorkoutExerciseEntity(
+                    workoutId = workoutId,
+                    exerciseId = item.exercise.id,
+                    orderIndex = index,
+                    restSeconds = item.routineExercise.restSeconds ?: item.exercise.defaultRestSeconds,
+                    supersetGroup = group,
+                ),
+            )
+            val lastSets = workoutDao.getLastPerformedSets(item.exercise.id, workoutId)
+            val plannedSets = max(1, item.routineExercise.defaultSets)
+            workoutDao.insertSets(
+                buildPlannedSets(workoutExerciseId, plannedSets, lastSets, item.exercise.trackingType),
+            )
+        }
+        return workoutId
+    }
+
+    /** 지난 기록을 기본값으로 채운 계획 세트를 만든다. */
+    private fun buildPlannedSets(
+        workoutExerciseId: Long,
+        plannedSetCount: Int,
+        lastSets: List<WorkoutSetEntity>,
+        trackingType: ExerciseTrackingType,
+    ): List<WorkoutSetEntity> = (1..plannedSetCount).map { setNumber ->
+        // 지난번 같은 번호의 세트 -> 없으면 지난번 마지막 세트 -> 그것도 없으면 0
+        val reference = lastSets.getOrNull(setNumber - 1) ?: lastSets.lastOrNull()
+        WorkoutSetEntity(
+            workoutExerciseId = workoutExerciseId,
+            setNumber = setNumber,
+            weightKg = reference?.weightKg ?: 0.0,
+            reps = reference?.reps ?: 0,
+            durationSeconds = reference?.durationSeconds ?: 0,
+            completed = false,
+        ).keepOnlyFieldsOf(trackingType)
+    }
+
+    override suspend fun addExerciseToWorkout(workoutId: Long, exerciseId: Long): Long {
+        val exercise = exerciseDao.getById(exerciseId) ?: return -1
+        val order = workoutDao.nextExerciseOrder(workoutId)
+        val workoutExerciseId = workoutDao.insertWorkoutExercise(
+            WorkoutExerciseEntity(
+                workoutId = workoutId,
+                exerciseId = exerciseId,
+                orderIndex = order,
+                restSeconds = exercise.defaultRestSeconds,
+            ),
+        )
+        val lastSets = workoutDao.getLastPerformedSets(exerciseId, workoutId)
+        val plannedCount = max(1, lastSets.size)
+        workoutDao.insertSets(
+            buildPlannedSets(workoutExerciseId, plannedCount, lastSets, exercise.trackingType),
+        )
+        return workoutExerciseId
+    }
+
+    override suspend fun removeWorkoutExercise(workoutExerciseId: Long) {
+        val workoutId = workoutDao.getWorkoutIdOfExercise(workoutExerciseId)
+        workoutDao.deleteWorkoutExercise(workoutExerciseId)
+        // 묶음 한가운데를 지우면 남은 운동이 혼자가 될 수 있다. 묶음을 다시 정리한다.
+        if (workoutId != null) normalizeSupersets(workoutId)
+    }
+
+    override suspend fun linkSupersetWithPrevious(workoutExerciseId: Long) =
+        editSupersets(workoutExerciseId) { groups, index -> SupersetGroups.linkWithPrevious(groups, index) }
+
+    override suspend fun unlinkSuperset(workoutExerciseId: Long) =
+        editSupersets(workoutExerciseId) { groups, index -> SupersetGroups.unlink(groups, index) }
+
+    private suspend fun editSupersets(
+        workoutExerciseId: Long,
+        edit: (groups: List<Int>, index: Int) -> List<Int>,
+    ) {
+        val workoutId = workoutDao.getWorkoutIdOfExercise(workoutExerciseId) ?: return
+        val rows = workoutDao.getWorkoutExercises(workoutId)
+        val index = rows.indexOfFirst { it.id == workoutExerciseId }
+        if (index < 0) return
+        saveSupersets(rows, edit(rows.map { it.supersetGroup }, index))
+    }
+
+    private suspend fun normalizeSupersets(workoutId: Long) {
+        val rows = workoutDao.getWorkoutExercises(workoutId)
+        saveSupersets(rows, SupersetGroups.normalize(rows.map { it.supersetGroup }))
+    }
+
+    private suspend fun saveSupersets(rows: List<WorkoutExerciseEntity>, groups: List<Int>) {
+        rows.zip(groups).forEach { (row, group) ->
+            if (row.supersetGroup != group) workoutDao.updateWorkoutExercise(row.copy(supersetGroup = group))
+        }
+    }
+
+    override suspend fun addSet(workoutExerciseId: Long): Long {
+        val sets = workoutDao.getSets(workoutExerciseId)
+        val last = sets.lastOrNull()
+        val trackingType = workoutDao.getTrackingTypeOfWorkoutExercise(workoutExerciseId)
+            ?: ExerciseTrackingType.WEIGHT_REPS
+        return workoutDao.insertSet(
+            WorkoutSetEntity(
+                workoutExerciseId = workoutExerciseId,
+                setNumber = (last?.setNumber ?: 0) + 1,
+                weightKg = last?.weightKg ?: 0.0,
+                reps = last?.reps ?: 0,
+                durationSeconds = last?.durationSeconds ?: 0,
+                setType = last?.setType ?: SetType.NORMAL,
+                completed = false,
+            ).keepOnlyFieldsOf(trackingType),
+        )
+    }
+
+    /** 세트 종류를 바꾼다(본세트 <-> 워밍업 등). */
+    override suspend fun setSetType(setId: Long, setType: SetType) {
+        val stored = workoutDao.getSet(setId) ?: return
+        workoutDao.updateSet(stored.copy(setType = setType))
+        recomputeRecordsIfFinished(workoutDao.getSetOwner(setId))
+    }
+
+    override suspend fun removeSet(setId: Long) {
+        val set = workoutDao.getSet(setId) ?: return
+        // 지우고 나면 어느 기록의 세트였는지 알 수 없으므로 먼저 확인해 둔다.
+        val owner = workoutDao.getSetOwner(setId)
+        workoutDao.deleteSet(set)
+        workoutDao.renumberSets(set.workoutExerciseId)
+        recomputeRecordsIfFinished(owner)
+    }
+
+    /**
+     * 끝난 기록을 고쳤으면 그 종목의 PR 을 다시 계산한다.
+     * 진행 중인 세션은 아직 PR 이 없고, 끝낼 때 계산하므로 건너뛴다.
+     */
+    private suspend fun recomputeRecordsIfFinished(owner: SetOwner?) {
+        if (owner?.endTime == null) return
+        recomputePersonalRecords(owner.exerciseId)
+    }
+
+    /**
+     * 재계산은 한 번에 하나씩 한다. 기록 상세는 입력할 때마다 저장하므로 재계산이 겹칠 수
+     * 있는데, 먼저 읽은 쪽이 나중에 쓰면 오래된 PR 이 남는다. 순서대로 돌리면 마지막
+     * 재계산이 마지막 수정 뒤의 상태를 읽는다.
+     */
+    private val recomputeLock = Mutex()
+
+    private suspend fun recomputePersonalRecords(exerciseId: Long) = recomputeLock.withLock {
+        val exercise = exerciseDao.getById(exerciseId) ?: return@withLock
+        val perWorkout = PersonalRecordCalculator.replay(
+            history = workoutDao.getCompletedSetHistory(exerciseId),
+            exerciseId = exercise.id,
+            exerciseName = exercise.name,
+            trackingType = exercise.trackingType,
+        )
+        val endTimes = workoutDao.getEndTimes(perWorkout.map { it.first })
+            .associate { it.id to it.endTime }
+        personalRecordDao.replaceForExercise(
+            exerciseId,
+            perWorkout.flatMap { (workoutId, records) ->
+                records.map { record ->
+                    PersonalRecordEntity(
+                        workoutId = workoutId,
+                        exerciseId = record.exerciseId,
+                        type = record.type.name,
+                        value = record.value,
+                        previousValue = record.previousValue,
+                        reps = record.reps,
+                        weightKg = record.weightKg,
+                        achievedAt = endTimes[workoutId] ?: 0L,
+                    )
+                }
+            },
+        )
+    }
+
+    override suspend fun updateSet(set: WorkoutSet, workoutExerciseId: Long) {
+        val stored = workoutDao.getSet(set.id) ?: return
+        workoutDao.updateSet(
+            stored.copy(
+                weightKg = set.weightKg,
+                reps = set.reps,
+                completed = set.completed,
+                completedAt = if (set.completed) stored.completedAt ?: System.currentTimeMillis() else null,
+            ),
+        )
+    }
+
+    override suspend fun setCompleted(
+        setId: Long,
+        weightKg: Double,
+        reps: Int,
+        completed: Boolean,
+        durationSeconds: Int,
+    ) {
+        val stored = workoutDao.getSet(setId) ?: return
+        val trackingType = workoutDao.getTrackingTypeOfSet(setId) ?: ExerciseTrackingType.WEIGHT_REPS
+        workoutDao.updateSet(
+            stored.copy(
+                weightKg = weightKg,
+                reps = reps,
+                durationSeconds = durationSeconds,
+                completed = completed,
+                // 이미 완료된 세트의 중량/횟수를 고쳐도 최초 완료 시각은 유지한다
+                // (updateSet 과 같은 규칙).
+                completedAt = if (completed) stored.completedAt ?: System.currentTimeMillis() else null,
+            ).keepOnlyFieldsOf(trackingType),
+        )
+        recomputeRecordsIfFinished(workoutDao.getSetOwner(setId))
+    }
+
+    override suspend fun getLastPerformance(exerciseId: Long, excludeWorkoutId: Long): List<WorkoutSet> =
+        workoutDao.getLastPerformedSets(exerciseId, excludeWorkoutId).map { it.toDomain() }
+
+    override suspend fun finishWorkout(workoutId: Long): WorkoutSummary = sessionLock.withLock {
+        finishWorkoutLocked(workoutId)
+    }
+
+    private suspend fun finishWorkoutLocked(workoutId: Long): WorkoutSummary {
+        val detail = workoutDao.getWorkoutDetail(workoutId)
+            ?: return WorkoutSummary(workoutId, "", 0, 0, 0, 0, 0.0)
+        val workout = detail.toDomain()
+
+        // 이미 끝난 운동이면 아무것도 바꾸지 않는다. 다시 계산하면 끝난 시각이 늦춰지고
+        // PR 이 한 번 더 저장된다.
+        if (detail.workout.endTime != null) {
+            return workout.toSummary(
+                durationSeconds = detail.workout.durationSeconds,
+                personalRecords = observeWorkoutRecords(workoutId).first(),
+            )
+        }
+
+        // PR 은 endTime 을 채우기 전에 계산한다.
+        // 이력 조회가 endTime IS NOT NULL 조건을 쓰므로 진행 중인 세션이 자동으로 제외된다.
+        // 같은 종목을 한 세션에 두 번 넣을 수 있으므로 종목 단위로 합쳐서 계산한다.
+        // 블록마다 따로 계산하면 같은 기준선과 두 번 비교해 PR 이 중복으로 생긴다.
+        val personalRecords = buildList {
+            workout.exercises
+                .filter { it.completedSets.isNotEmpty() }
+                .groupBy { it.exercise.id }
+                .forEach { (exerciseId, records) ->
+                    val history = workoutDao.getCompletedSetHistory(exerciseId)
+                    addAll(
+                        PersonalRecordCalculator.newRecords(
+                            exerciseId = exerciseId,
+                            exerciseName = records.first().exercise.name,
+                            previous = PersonalRecordCalculator.fromHistory(history),
+                            session = PersonalRecordCalculator.fromSession(
+                                records.flatMap { it.sets },
+                            ),
+                            trackingType = records.first().exercise.trackingType,
+                        ),
+                    )
+                }
+        }
+
+        // 완료하지 않은 세트와, 한 세트도 하지 않은 운동은 기록에서 정리한다.
+        workout.exercises.forEach { record ->
+            if (record.completedSets.isEmpty()) {
+                workoutDao.deleteWorkoutExercise(record.id)
+            } else {
+                workoutDao.deleteIncompleteSets(record.id)
+                workoutDao.renumberSets(record.id)
+            }
+        }
+
+        // 새로 세운 기록을 저장해 둔다. 화면이 다시 만들어져도 PR 표시가 유지된다.
+        // 앞선 종료가 PR 만 저장하고 끊겼을 수 있다. 지우고 다시 넣어 두 벌이 되지 않게 한다.
+        personalRecordDao.deleteByWorkout(workoutId)
+        if (personalRecords.isNotEmpty()) {
+            val achievedAt = System.currentTimeMillis()
+            personalRecordDao.insertAll(
+                personalRecords.map { record ->
+                    PersonalRecordEntity(
+                        workoutId = workoutId,
+                        exerciseId = record.exerciseId,
+                        type = record.type.name,
+                        value = record.value,
+                        previousValue = record.previousValue,
+                        reps = record.reps,
+                        weightKg = record.weightKg,
+                        achievedAt = achievedAt,
+                    )
+                },
+            )
+        }
+
+        val end = System.currentTimeMillis()
+        val duration = ((end - workout.startTime) / 1000).coerceAtLeast(0)
+        workoutDao.updateWorkout(
+            detail.workout.copy(endTime = end, durationSeconds = duration),
+        )
+
+        return workout.toSummary(durationSeconds = duration, personalRecords = personalRecords)
+    }
+
+    private fun Workout.toSummary(durationSeconds: Long, personalRecords: List<PersonalRecord>) =
+        WorkoutSummary(
+            workoutId = id,
+            routineName = displayName,
+            durationSeconds = durationSeconds,
+            exerciseCount = performedExerciseCount,
+            totalSets = totalCompletedSets,
+            totalReps = totalReps,
+            totalVolumeKg = totalVolume,
+            personalRecords = personalRecords,
+            memo = memo,
+        )
+
+    override suspend fun discardWorkout(workoutId: Long) = workoutDao.deleteWorkout(workoutId)
+
+    override suspend fun updateMemo(workoutId: Long, memo: String?) =
+        workoutDao.updateMemo(workoutId, memo?.takeIf { it.isNotBlank() })
+
+    override suspend fun deleteWorkout(workoutId: Long) {
+        val finished = workoutDao.getWorkout(workoutId)?.endTime != null
+        val exerciseIds = if (finished) workoutDao.getExerciseIdsInWorkout(workoutId) else emptyList()
+        workoutDao.deleteWorkout(workoutId)
+        // 지운 기록이 기준이던 뒤 기록들의 PR 이 달라질 수 있다.
+        exerciseIds.forEach { recomputePersonalRecords(it) }
+    }
+
+    override fun observeWorkoutRecords(workoutId: Long): Flow<List<PersonalRecord>> =
+        personalRecordDao.observeByWorkout(workoutId).map { rows ->
+            // 예전 버전이 남긴 중복 행이 있을 수 있다. 화면은 (종목, 종류)로 구분하므로
+            // 여기서 한 번 더 걸러 같은 짝이 두 번 나오지 않게 한다.
+            rows.distinctBy { it.exerciseId to it.type }.map { row ->
+                PersonalRecord(
+                    exerciseId = row.exerciseId,
+                    exerciseName = row.exerciseName,
+                    type = runCatching { PersonalRecordType.valueOf(row.type) }
+                        .getOrDefault(PersonalRecordType.MAX_WEIGHT),
+                    value = row.value,
+                    previousValue = row.previousValue,
+                    reps = row.reps,
+                    weightKg = row.weightKg,
+                )
+            }
+        }
+
+    override fun observeExerciseHistory(exerciseId: Long): Flow<List<ExerciseSession>> =
+        workoutDao.observeExerciseHistory(exerciseId).map { rows ->
+            // 쿼리가 최신순으로 주므로 groupBy 의 순서(처음 나온 순)가 곧 최신순이다.
+            rows.groupBy { it.workoutId }.map { (workoutId, sets) ->
+                val first = sets.first()
+                ExerciseSession(
+                    workoutId = workoutId,
+                    date = LocalDate.ofEpochDay(first.date),
+                    startTime = first.startTime,
+                    routineName = first.routineName,
+                    sets = sets.map { row ->
+                        WorkoutSet(
+                            id = row.setId,
+                            setNumber = row.setNumber,
+                            weightKg = row.weightKg,
+                            reps = row.reps,
+                            completed = true,
+                            durationSeconds = row.durationSeconds,
+                            setType = row.setType,
+                        )
+                    },
+                )
+            }
+        }
+
+    override fun observeExercisesWithHistory(): Flow<List<ExerciseHistorySummary>> =
+        workoutDao.observeExercisesWithHistory().map { rows ->
+            rows.map { row ->
+                ExerciseHistorySummary(
+                    exerciseId = row.exerciseId,
+                    name = row.name,
+                    bodyPart = row.bodyPart,
+                    trackingType = row.trackingType,
+                    sessionCount = row.sessionCount,
+                    lastDate = LocalDate.ofEpochDay(row.lastDate),
+                )
+            }
+        }
+
+    override suspend fun getPersonalRecords(exerciseId: Long): List<PersonalRecord> {
+        val exercise = exerciseDao.getById(exerciseId) ?: return emptyList()
+        val bests = PersonalRecordCalculator.fromHistory(workoutDao.getCompletedSetHistory(exerciseId))
+        return PersonalRecordCalculator.currentRecords(exerciseId, exercise.name, bests, exercise.trackingType)
+    }
+}
+
+/**
+ * 종목의 기록 방식에서 쓰지 않는 칸을 0 으로 비운다.
+ *
+ * 화면은 그 칸을 숨기므로 사용자가 볼 수도 지울 수도 없다. 예전에 +10kg 로 기록한
+ * 풀업이 "횟수" 운동이 된 뒤에도 10kg 가 복사되면, 보이지 않는 값이 볼륨에 들어간다.
+ */
+internal fun WorkoutSetEntity.keepOnlyFieldsOf(trackingType: ExerciseTrackingType) = copy(
+    weightKg = if (trackingType.usesWeight) weightKg else 0.0,
+    reps = if (trackingType.usesReps) reps else 0,
+    durationSeconds = if (trackingType.usesDuration) durationSeconds else 0,
+)
