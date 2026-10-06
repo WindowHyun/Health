@@ -155,7 +155,55 @@ versionName = "0.2.0" // 사람이 읽는 버전.
 
 ---
 
-## 7. 빌드 기록
+## 7. GitHub Actions 로 빌드
+
+`.github/workflows/android.yml` 이 푸시 · PR 마다 테스트와 APK 빌드를 하고, `v` 로 시작하는 태그를 올리면
+서명된 APK 를 **GitHub Release** 에 붙입니다.
+
+| 언제 | 하는 일 | 결과물 |
+| --- | --- | --- |
+| `main` · `claude/**` 푸시, PR | 단위 테스트 + 린트, 디버그/릴리즈 APK 빌드 | Actions 실행 화면의 Artifacts (30일 보관) |
+| `v0.9.2` 같은 태그 푸시 | 위와 같음 + 태그와 `versionName` 이 같은지 확인 | Releases 에 서명된 `health-0.9.2.apk` |
+| Actions 탭 > Run workflow | 수동 실행 | Artifacts |
+
+### 서명 시크릿 넣기 (최초 1회)
+
+서명 키는 저장소에 없으므로 GitHub 에 시크릿으로 넣어야 합니다.
+저장소 **Settings > Secrets and variables > Actions > New repository secret** 에서 네 개를 만듭니다.
+
+| 시크릿 이름 | 값 |
+| --- | --- |
+| `HEALTH_KEYSTORE_BASE64` | 키스토어를 한 줄 base64 로 바꾼 값 (아래 명령) |
+| `HEALTH_STORE_PASSWORD` | 키스토어 비밀번호 |
+| `HEALTH_KEY_ALIAS` | 키 별칭 (위 예시는 `health`) |
+| `HEALTH_KEY_PASSWORD` | 키 비밀번호 |
+
+```bash
+base64 -w0 health-release.jks        # macOS 는 base64 -i health-release.jks
+```
+
+> ⚠️ **지금 폰에 깔린 앱과 같은 키스토어를 넣어야** Actions 가 만든 APK 를 그 위에 업데이트로 설치할 수 있습니다.
+> 다른 키로 서명하면 폰에서 "서명이 달라 설치할 수 없다"고 나오고, 지우고 새로 깔면 기록이 사라집니다
+> (미리 설정의 백업 파일 만들기로 저장해 두세요).
+
+시크릿이 없으면 릴리즈 APK 는 **서명 없이**(`health-<버전>-unsigned.apk`) 만들어지고, 태그 릴리즈는 실패합니다.
+포크에서 온 PR 도 시크릿을 받지 못하므로 같은 방식으로 동작합니다.
+
+### 릴리즈 올리는 순서
+
+```bash
+# 1) app/build.gradle.kts 의 versionCode / versionName 을 올리고 CHANGELOG.md 를 쓴 뒤 커밋·푸시
+# 2) 태그를 붙여 올린다 (태그 이름 = v + versionName)
+git tag v0.9.2
+git push origin v0.9.2
+```
+
+Actions 가 끝나면 Releases 페이지에서 APK 를 받을 수 있습니다.
+디버그 APK(`health-<버전>-debug.apk`)는 앱 ID 가 달라(`.debug`) 릴리즈 앱과 따로 설치됩니다.
+
+---
+
+## 8. 빌드 기록
 
 ### v0.3.0 (versionCode 3) — 걸음 수 + 지도
 

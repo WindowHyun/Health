@@ -207,6 +207,10 @@ APK 만 만들려면:
 # -> app/build/outputs/apk/release/app-release.apk
 ```
 
+GitHub Actions(`.github/workflows/android.yml`)가 푸시마다 테스트와 APK 빌드를 하고,
+`v0.9.2` 같은 태그를 올리면 서명된 APK 를 Releases 에 붙입니다.
+서명 시크릿 설정은 [docs/RELEASE.md](docs/RELEASE.md#7-github-actions-로-빌드) 를 참고하세요.
+
 버전별 변경 내용은 [CHANGELOG.md](CHANGELOG.md) 를 참고하세요.
 
 ---
