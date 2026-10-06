@@ -25,23 +25,23 @@ concurrency:
 permissions:
   contents: read
 
+# Android SDK 는 GitHub 의 ubuntu 이미지에 이미 들어 있다(라이선스도 동의된 상태).
+# 빠진 구성요소는 Gradle 이 알아서 내려받는다.
 env:
   GRADLE_OPTS: -Dorg.gradle.daemon=false
 
 jobs:
   test:
     name: 단위 테스트 · 린트
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-
-      - uses: android-actions/setup-android@v3
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -60,20 +60,18 @@ jobs:
 
   apk:
     name: APK 빌드
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
       version: ${{ steps.version.outputs.name }}
       signed: ${{ steps.signing.outputs.signed }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-
-      - uses: android-actions/setup-android@v3
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -151,7 +149,7 @@ jobs:
     name: GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [test, apk]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
