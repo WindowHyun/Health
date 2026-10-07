@@ -18,7 +18,9 @@ import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.domain.repository.WorkoutRepository
 import com.windowhyun.health.ui.gym.ExerciseManager
 import com.windowhyun.health.ui.gym.RepositoryExerciseManager
+import com.windowhyun.health.shared.WatchCommand
 import com.windowhyun.health.ui.navigation.Routes
+import com.windowhyun.health.wear.WatchLink
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -67,6 +69,8 @@ class WorkoutSessionViewModel internal constructor(
      * 테스트에서는 직접 넣는다.
      */
     private val clock: () -> Long,
+    /** 휴식 타이머를 시계에 보여 주고, 시계에서 온 조작을 받는 다리. */
+    private val watchLink: WatchLink = WatchLink(),
 ) : ViewModel() {
 
     @Inject
@@ -76,6 +80,7 @@ class WorkoutSessionViewModel internal constructor(
         settingsRepository: SettingsRepository,
         restTimerNotifier: RestTimerNotifier,
         savedStateHandle: SavedStateHandle,
+        watchLink: WatchLink,
     ) : this(
         workoutRepository,
         exerciseRepository,
@@ -83,6 +88,7 @@ class WorkoutSessionViewModel internal constructor(
         restTimerNotifier,
         savedStateHandle,
         SystemClock::elapsedRealtime,
+        watchLink,
     )
 
     private val workoutId: Long = savedStateHandle[Routes.ARG_WORKOUT_ID] ?: 0L
@@ -124,6 +130,22 @@ class WorkoutSessionViewModel internal constructor(
     init {
         loadLastPerformance()
         startElapsedTicker()
+        listenToWatch()
+    }
+
+    /** 시계에서 누른 휴식 타이머 버튼을 폰 화면에서 누른 것과 똑같이 처리한다. */
+    private fun listenToWatch() {
+        viewModelScope.launch {
+            watchLink.restCommands.collect { command ->
+                when (command) {
+                    WatchCommand.REST_SKIP -> stopRestTimer()
+                    WatchCommand.REST_ADD -> adjustRestTimer(REST_WATCH_STEP_SECONDS)
+                    WatchCommand.REST_SUB -> adjustRestTimer(-REST_WATCH_STEP_SECONDS)
+                    WatchCommand.REST_TOGGLE_PAUSE -> toggleRestPause()
+                    else -> Unit
+                }
+            }
+        }
     }
 
     /** 세션에 들어 있는 각 종목의 지난 기록을 한 번 읽어 둔다. */
@@ -268,6 +290,18 @@ class WorkoutSessionViewModel internal constructor(
         _restTimer.value = RestTimerState(visible = true, totalSeconds = total, remainingSeconds = total)
         scheduleRestAlarm()
         runRestLoop()
+        publishRestToWatch()
+    }
+
+    /** 지금 휴식 타이머 상태를 시계에 알린다. 타이머가 없으면 "없음"을 알려 시계 화면을 치운다. */
+    private fun publishRestToWatch() {
+        val state = _restTimer.value
+        if (!state.visible) {
+            watchLink.clearRest()
+            return
+        }
+        val remaining = if (state.paused) restPausedLeftMillis else restEndsAt - clock()
+        watchLink.publishRest(state.totalSeconds, remaining, state.paused)
     }
 
     /** 화면에 보이는 숫자만 갱신한다. 알림과 진동은 알람이 맡는다. */
@@ -290,6 +324,7 @@ class WorkoutSessionViewModel internal constructor(
                     _restTimer.update { it.copy(remainingSeconds = 0) }
                     if (now - since >= REST_AFTERGLOW_MILLIS) {
                         _restTimer.update { it.copy(visible = false) }
+                        publishRestToWatch()
                         return@launch
                     }
                 }
@@ -332,6 +367,7 @@ class WorkoutSessionViewModel internal constructor(
                 totalSeconds = maxOf(it.totalSeconds, remainingSeconds),
             )
         }
+        publishRestToWatch()
     }
 
     fun toggleRestPause() {
@@ -349,6 +385,7 @@ class WorkoutSessionViewModel internal constructor(
             _restTimer.update { it.copy(paused = false) }
             scheduleRestAlarm()
         }
+        publishRestToWatch()
     }
 
     fun stopRestTimer() {
@@ -356,6 +393,7 @@ class WorkoutSessionViewModel internal constructor(
         restTimerJob = null
         restTimerNotifier.cancel()
         _restTimer.value = RestTimerState()
+        publishRestToWatch()
     }
 
     private fun ceilSeconds(millis: Long): Int = ((millis + 999) / 1_000).toInt()
@@ -387,10 +425,15 @@ class WorkoutSessionViewModel internal constructor(
         super.onCleared()
         restTimerJob?.cancel()
         tickerJob?.cancel()
+        // 화면이 사라지면 타이머도 멈추므로 시계에 남은 휴식 화면도 치운다.
+        watchLink.clearRest()
     }
 
     private companion object {
         const val REST_TICK_MILLIS = 250L
         const val REST_AFTERGLOW_MILLIS = 2_000L
+
+        /** 시계의 +15초 / -15초 버튼이 더하고 빼는 만큼. */
+        const val REST_WATCH_STEP_SECONDS = 15
     }
 }

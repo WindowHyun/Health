@@ -3,15 +3,22 @@ package com.windowhyun.health
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import com.windowhyun.health.wear.WatchStatePublisher
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 /** Hilt 엔트리 포인트. 알림 채널도 여기서 한 번만 만든다. */
 @HiltAndroidApp
 class HealthApplication : Application() {
 
+    @Inject
+    lateinit var watchStatePublisher: WatchStatePublisher
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        // 시계가 있으면 러닝 상태와 휴식 타이머를 계속 올려 보낸다. 없어도 아무 일 없다.
+        watchStatePublisher.start()
     }
 
     private fun createNotificationChannels() {

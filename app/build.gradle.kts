@@ -36,8 +36,8 @@ android {
         applicationId = "com.windowhyun.health"
         minSdk = 26
         targetSdk = 35
-        versionCode = 22
-        versionName = "0.9.2"
+        versionCode = 23
+        versionName = "0.10.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -147,6 +147,11 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
 
     implementation(libs.play.services.location)
+
+    // 시계(Wear OS)와 상태 · 명령을 주고받는다.
+    implementation(project(":shared"))
+    implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     // 지도. API 키가 필요 없고 타일을 기기에 캐시해 둔다.
     implementation(libs.osmdroid.android)

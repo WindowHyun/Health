@@ -90,6 +90,22 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!--
+            시계(Wear OS) 앱이 보낸 명령(러닝 일시정지 · 종료, 휴식 타이머 조작)을 받는다.
+            Google Play 서비스가 연결된 시계의 같은 앱에서 온 메시지만 이 서비스로 넘겨 준다.
+        -->
+        <service
+            android:name=".wear.WatchCommandService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/health/cmd/"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>

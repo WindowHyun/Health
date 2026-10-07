@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Health"
 include(":app")
+include(":shared")
+include(":wear")

@@ -158,12 +158,12 @@ versionName = "0.2.0" // 사람이 읽는 버전.
 ## 7. GitHub Actions 로 빌드
 
 `.github/workflows/android.yml` 이 푸시 · PR 마다 테스트와 APK 빌드를 하고, `v` 로 시작하는 태그를 올리면
-서명된 APK 를 **GitHub Release** 에 붙입니다.
+서명된 APK(폰 앱 + 시계 앱)를 **GitHub Release** 에 붙입니다.
 
 | 언제 | 하는 일 | 결과물 |
 | --- | --- | --- |
 | `main` · `claude/**` 푸시, PR | 단위 테스트 + 린트, 디버그/릴리즈 APK 빌드 | Actions 실행 화면의 Artifacts (30일 보관) |
-| `v0.9.2` 같은 태그 푸시 | 위와 같음 + 태그와 `versionName` 이 같은지 확인 | Releases 에 서명된 `health-0.9.2.apk` |
+| `v0.10.0` 같은 태그 푸시 | 위와 같음 + 태그와 `versionName` 이 같은지 확인 | Releases 에 서명된 `health-0.10.0.apk`(폰), `health-wear-0.10.0.apk`(시계) |
 | Actions 탭 > Run workflow | 수동 실행 | Artifacts |
 
 ### 서명 시크릿 넣기 (최초 1회)
@@ -194,8 +194,8 @@ base64 -w0 health-release.jks        # macOS 는 base64 -i health-release.jks
 ```bash
 # 1) app/build.gradle.kts 의 versionCode / versionName 을 올리고 CHANGELOG.md 를 쓴 뒤 커밋·푸시
 # 2) 태그를 붙여 올린다 (태그 이름 = v + versionName)
-git tag v0.9.2
-git push origin v0.9.2
+git tag v0.10.0
+git push origin v0.10.0
 ```
 
 Actions 가 끝나면 Releases 페이지에서 APK 를 받을 수 있습니다.

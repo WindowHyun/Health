@@ -49,6 +49,7 @@ class SessionScreenshotTest {
         viewModel = WorkoutSessionViewModel(
             fixture.workouts, fixture.exercises, fixture.settings, RestTimerNotifier(context),
             SavedStateHandle(mapOf(Routes.ARG_WORKOUT_ID to workoutId)),
+            com.windowhyun.health.wear.WatchLink(),
         )
         viewModel.startRestTimer(90)
     }
