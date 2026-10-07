@@ -15,7 +15,13 @@ on:
     branches: [main, "claude/**"]
     tags: ["v*"]
   pull_request:
+  # Actions 탭에서 수동으로 실행. release 를 켜면 태그 없이도 그 커밋으로 릴리즈(v<versionName>)를 만든다.
   workflow_dispatch:
+    inputs:
+      release:
+        description: "서명된 APK 로 GitHub Release 를 만든다 (v<versionName> 태그를 이 커밋에 만든다)"
+        type: boolean
+        default: false
 
 # 같은 브랜치에 연달아 푸시하면 앞선 실행은 취소한다. 태그(릴리즈)는 취소하지 않는다.
 concurrency:
@@ -161,16 +167,17 @@ jobs:
 
   release:
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
     needs: [test, apk]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: 태그와 앱 버전이 같은지, 서명되었는지 확인
+      - name: 앱 버전 · 서명 확인
         run: |
           expected="v${{ needs.apk.outputs.version }}"
-          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+          # 태그로 시작한 실행은 태그와 앱 버전이 같아야 한다. 수동 실행은 앱 버전으로 태그를 만든다.
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$expected" ]; then
             echo "::error::태그($GITHUB_REF_NAME)와 앱 버전($expected)이 다릅니다. app/build.gradle.kts 의 versionName 을 확인하세요."
             exit 1
           fi
@@ -187,6 +194,8 @@ jobs:
       # 릴리즈에는 서명된 APK(폰 · 시계) 두 개만 붙인다(디버그 APK 는 Actions 결과물에서 받는다).
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.apk.outputs.version }}
+          target_commitish: ${{ github.sha }}
           files: |
             out/health-${{ needs.apk.outputs.version }}.apk
             out/health-wear-${{ needs.apk.outputs.version }}.apk
