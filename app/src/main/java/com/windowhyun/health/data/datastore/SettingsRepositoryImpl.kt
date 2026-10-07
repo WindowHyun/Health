@@ -37,6 +37,9 @@ class SettingsRepositoryImpl @Inject constructor(
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val RUN_VIBRATION_CUES = booleanPreferencesKey("run_vibration_cues")
+        val RUN_VOICE_CUES = booleanPreferencesKey("run_voice_cues")
+        val WEEKLY_WORKOUT_GOAL = intPreferencesKey("weekly_workout_goal")
+        val WEEKLY_RUN_GOAL_METERS = intPreferencesKey("weekly_run_goal_meters")
         val AUTO_PAUSE_RUN = booleanPreferencesKey("auto_pause_run")
         val AUTO_BACKUP_FOLDER = stringPreferencesKey("auto_backup_folder")
         val AUTO_BACKUP_DAYS = intPreferencesKey("auto_backup_every_days")
@@ -66,6 +69,9 @@ class SettingsRepositoryImpl @Inject constructor(
             } ?: defaults.themeMode,
             keepScreenOnDuringWorkout = prefs[Keys.KEEP_SCREEN_ON] ?: defaults.keepScreenOnDuringWorkout,
             runVibrationCues = prefs[Keys.RUN_VIBRATION_CUES] ?: defaults.runVibrationCues,
+            runVoiceCues = prefs[Keys.RUN_VOICE_CUES] ?: defaults.runVoiceCues,
+            weeklyWorkoutGoal = prefs[Keys.WEEKLY_WORKOUT_GOAL] ?: defaults.weeklyWorkoutGoal,
+            weeklyRunGoalMeters = prefs[Keys.WEEKLY_RUN_GOAL_METERS] ?: defaults.weeklyRunGoalMeters,
             autoPauseRun = prefs[Keys.AUTO_PAUSE_RUN] ?: defaults.autoPauseRun,
             autoBackupFolderUri = prefs[Keys.AUTO_BACKUP_FOLDER],
             autoBackupEveryDays = prefs[Keys.AUTO_BACKUP_DAYS] ?: defaults.autoBackupEveryDays,
@@ -100,6 +106,9 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.THEME_MODE] = updated.themeMode.name
             prefs[Keys.KEEP_SCREEN_ON] = updated.keepScreenOnDuringWorkout
             prefs[Keys.RUN_VIBRATION_CUES] = updated.runVibrationCues
+            prefs[Keys.RUN_VOICE_CUES] = updated.runVoiceCues
+            prefs[Keys.WEEKLY_WORKOUT_GOAL] = updated.weeklyWorkoutGoal
+            prefs[Keys.WEEKLY_RUN_GOAL_METERS] = updated.weeklyRunGoalMeters
             prefs[Keys.AUTO_PAUSE_RUN] = updated.autoPauseRun
             prefs.putOrRemove(Keys.AUTO_BACKUP_FOLDER, updated.autoBackupFolderUri)
             prefs[Keys.AUTO_BACKUP_DAYS] = updated.autoBackupEveryDays

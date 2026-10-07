@@ -2,6 +2,7 @@ package com.windowhyun.health.service
 
 import android.content.Context
 import com.windowhyun.health.domain.model.RunGoal
+import com.windowhyun.health.domain.model.RunInterval
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -13,7 +14,7 @@ import javax.inject.Singleton
 class RunServiceController @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : RunControl {
-    fun start(goal: RunGoal) = RunTrackingService.start(context, goal)
+    fun start(goal: RunGoal, interval: RunInterval? = null) = RunTrackingService.start(context, goal, interval)
 
     override fun pause() = RunTrackingService.sendAction(context, RunTrackingService.ACTION_PAUSE)
 

@@ -22,6 +22,7 @@ import com.windowhyun.health.core.util.formatDistance
 import com.windowhyun.health.core.util.formatDuration
 import com.windowhyun.health.data.tracking.RunTracker
 import com.windowhyun.health.domain.model.RunGoal
+import com.windowhyun.health.domain.model.RunInterval
 import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.repository.LocationTracker
@@ -55,6 +56,8 @@ class RunTrackingService : LifecycleService() {
 
     @Inject lateinit var haptics: RunHaptics
 
+    @Inject lateinit var voice: RunVoice
+
     private var locationJob: Job? = null
     private var stepJob: Job? = null
     private var tickerJob: Job? = null
@@ -70,7 +73,8 @@ class RunTrackingService : LifecycleService() {
                     ?.let { runCatching { RunGoalType.valueOf(it) }.getOrNull() }
                     ?: RunGoalType.FREE
                 val goalValue = intent.getDoubleExtra(EXTRA_GOAL_VALUE, 0.0)
-                startTracking(RunGoal(goalType, goalValue))
+                val interval = intervalFrom(intent)
+                startTracking(RunGoal(goalType, goalValue), interval)
             }
 
             // 기록 중이 아닐 때 온 명령(목표 달성으로 막 끝난 직후 등)은 할 일이 없다.
@@ -94,12 +98,12 @@ class RunTrackingService : LifecycleService() {
         return START_NOT_STICKY
     }
 
-    private fun startTracking(goal: RunGoal) {
+    private fun startTracking(goal: RunGoal, interval: RunInterval?) {
         if (locationJob != null) return
 
         startForegroundWithNotification(buildNotification(distanceText = "0.00km", durationText = "0:00"))
 
-        lifecycleScope.launch { runTracker.start(goal) }
+        lifecycleScope.launch { runTracker.start(goal, interval) }
 
         locationJob = lifecycleScope.launch {
             locationTracker.locationUpdates(LOCATION_INTERVAL_MILLIS)
@@ -125,8 +129,14 @@ class RunTrackingService : LifecycleService() {
         // 진동 설정은 시작할 때 한 번 읽어 둔다. 목표 달성 직후 서비스가 내려가므로, 그때 설정을
         // 읽느라 멈추면 진동이 나기 전에 끝난다.
         cueJob = lifecycleScope.launch {
-            val vibrate = settingsRepository.current().runVibrationCues
-            runTracker.cues.collect { cue -> if (vibrate) haptics.vibrate(cue) }
+            val settings = settingsRepository.current()
+            val vibrate = settings.runVibrationCues
+            val speak = settings.runVoiceCues
+            if (speak) voice.prepare()
+            runTracker.cues.collect { cue ->
+                if (vibrate) haptics.vibrate(cue)
+                if (speak) RunVoiceScript.sentenceFor(cue, settings.distanceUnit)?.let(voice::speak)
+            }
         }
 
         notificationJob = lifecycleScope.launch {
@@ -164,6 +174,8 @@ class RunTrackingService : LifecycleService() {
         notificationJob?.cancel()
         notificationJob = null
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        // 마지막 안내(목표 달성 등)는 끝까지 읽고 내려간다.
+        voice.release()
         stopSelf()
     }
 
@@ -286,15 +298,35 @@ class RunTrackingService : LifecycleService() {
 
         private const val EXTRA_GOAL_TYPE = "goal_type"
         private const val EXTRA_GOAL_VALUE = "goal_value"
+        private const val EXTRA_INTERVAL_RUN = "interval_run_seconds"
+        private const val EXTRA_INTERVAL_WALK = "interval_walk_seconds"
+        private const val EXTRA_INTERVAL_ROUNDS = "interval_rounds"
 
-        fun start(context: Context, goal: RunGoal) {
-            val intent = Intent(context, RunTrackingService::class.java).apply {
+        internal fun intervalFrom(intent: Intent): RunInterval? {
+            val rounds = intent.getIntExtra(EXTRA_INTERVAL_ROUNDS, 0)
+            if (rounds <= 0) return null
+            return RunInterval(
+                runSeconds = intent.getIntExtra(EXTRA_INTERVAL_RUN, RunInterval.DEFAULT_RUN_SECONDS),
+                walkSeconds = intent.getIntExtra(EXTRA_INTERVAL_WALK, RunInterval.DEFAULT_WALK_SECONDS),
+                rounds = rounds,
+            )
+        }
+
+        fun start(context: Context, goal: RunGoal, interval: RunInterval? = null) {
+            ContextCompat.startForegroundService(context, startIntent(context, goal, interval))
+        }
+
+        internal fun startIntent(context: Context, goal: RunGoal, interval: RunInterval?): Intent =
+            Intent(context, RunTrackingService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_GOAL_TYPE, goal.type.name)
                 putExtra(EXTRA_GOAL_VALUE, goal.value)
+                if (interval != null) {
+                    putExtra(EXTRA_INTERVAL_RUN, interval.runSeconds)
+                    putExtra(EXTRA_INTERVAL_WALK, interval.walkSeconds)
+                    putExtra(EXTRA_INTERVAL_ROUNDS, interval.rounds)
+                }
             }
-            ContextCompat.startForegroundService(context, intent)
-        }
 
         /**
          * 일시정지 · 재개 · 종료. 앱 화면에서만 누르므로(앱이 앞에 있음) 일반 시작으로 보낸다.

@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -195,6 +196,36 @@ fun RunActiveScreen(
     }
 }
 
+/**
+ * 인터벌 구간 띠. 달리기는 라임 면, 걷기는 옅은 면으로 한눈에 구분하고 글자도 함께 바꾼다.
+ * 구간이 끝나면 "인터벌 끝"이 뜨고 러닝은 그대로 이어진다.
+ */
+@Composable
+private fun IntervalBanner(progress: com.windowhyun.health.domain.model.IntervalProgress) {
+    val running = progress.phase == com.windowhyun.health.domain.model.IntervalPhase.RUN && !progress.finished
+    val container = if (running) MaterialTheme.healthColors.accent else MaterialTheme.colorScheme.surfaceVariant
+    val content = if (running) MaterialTheme.healthColors.onAccent else MaterialTheme.colorScheme.onSurface
+    val title = if (progress.finished) "인터벌 끝" else "${progress.phase.label} ${progress.round}/${progress.rounds}"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .background(container)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleLarge, color = content)
+        if (!progress.finished) {
+            Text(
+                text = formatDuration(progress.secondsLeft.toLong()),
+                style = MaterialTheme.typography.headlineSmall,
+                color = content,
+            )
+        }
+    }
+}
+
 /** 목표 대비 진행. 가는 구분선 위에 라임 선을 굵게 얹는다. */
 @Composable
 private fun GoalProgress(progress: Float, modifier: Modifier = Modifier) {
@@ -222,6 +253,10 @@ private fun MetricsPane(state: RunActiveUiState, modifier: Modifier = Modifier) 
     val unit = state.settings.distanceUnit
     Column(modifier = modifier.fillMaxWidth()) {
         Spacer(Modifier.height(8.dp))
+        tracking.intervalProgress?.let { progress ->
+            IntervalBanner(progress)
+            Spacer(Modifier.height(12.dp))
+        }
         BigMetric(
             label = "거리",
             number = formatDistanceValue(tracking.distanceMeters, unit),

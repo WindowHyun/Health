@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import com.windowhyun.health.domain.model.IntervalPhase
 import com.windowhyun.health.domain.model.RunCue
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -17,6 +18,7 @@ import javax.inject.Singleton
  * - 이어 가기: 짧게 세 번
  * - 자동 일시정지: 길게 한 번
  * - 목표 달성: 길게 세 번(마지막이 가장 길다)
+ * - 인터벌 달리기 시작: 짧게 네 번 / 걷기 시작: 아주 길게 한 번 / 인터벌 끝: 중간 길이 네 번(마지막이 가장 길다)
  */
 @Singleton
 class RunHaptics @Inject constructor(
@@ -40,6 +42,11 @@ internal fun RunCue.vibrationPattern(): LongArray = when (this) {
     RunCue.AutoResumed -> longArrayOf(0, 120, 80, 120, 80, 120)
     RunCue.AutoPaused -> longArrayOf(0, 500)
     RunCue.GoalReached -> longArrayOf(0, 400, 150, 400, 150, 700)
+    is RunCue.IntervalChanged -> when (phase) {
+        IntervalPhase.RUN -> longArrayOf(0, 200, 80, 200, 80, 200, 80, 200)
+        IntervalPhase.WALK -> longArrayOf(0, 900)
+    }
+    RunCue.IntervalsFinished -> longArrayOf(0, 300, 100, 300, 100, 300, 100, 600)
 }
 
 /** 러닝 알림에 붙는 버튼. 기록 중이면 일시정지, 멈춰 있으면 계속, 그리고 항상 종료. */

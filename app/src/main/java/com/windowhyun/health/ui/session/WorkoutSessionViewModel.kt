@@ -8,6 +8,7 @@ import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
 import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.core.notification.RestTimerNotifier
+import com.windowhyun.health.domain.usecase.SetCarryOver
 import com.windowhyun.health.domain.usecase.SupersetGroups
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Exercise
@@ -34,6 +35,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 /** 운동 진행 화면 상태. */
@@ -173,10 +176,26 @@ class WorkoutSessionViewModel internal constructor(
 
     // ---------- 세트 조작 ----------
 
-    /** 중량/횟수/시간만 갱신(완료 상태는 그대로). */
+    // 글자를 칠 때마다 값이 들어오므로, 앞 입력의 저장이 끝난 뒤에 다음 것을 처리해야 뒤 세트가 순서대로 따라간다.
+    private val setEditLock = Mutex()
+
+    /**
+     * 중량/횟수/시간만 갱신(완료 상태는 그대로).
+     * 아직 안 한 세트의 무게를 바꾸면, 같은 무게였던 뒤 세트도 같이 바뀐다([SetCarryOver]).
+     */
     fun updateSetValues(set: WorkoutSet, weightKg: Double, reps: Int, durationSeconds: Int) {
         viewModelScope.launch {
-            workoutRepository.setCompleted(set.id, weightKg, reps, set.completed, durationSeconds)
+            setEditLock.withLock {
+                // 화면에서 넘어온 set 은 한 글자 전 값일 수 있어서 저장된 값을 새로 읽는다.
+                val stored = workoutRepository.getWorkout(workoutId)
+                    ?.exercises?.firstOrNull { record -> record.sets.any { it.id == set.id } }
+                    ?.sets
+                val before = stored?.firstOrNull { it.id == set.id } ?: set
+                workoutRepository.setCompleted(set.id, weightKg, reps, before.completed, durationSeconds)
+                SetCarryOver.followers(stored.orEmpty(), before, weightKg).forEach { later ->
+                    workoutRepository.setCompleted(later.id, weightKg, later.reps, false, later.durationSeconds)
+                }
+            }
         }
     }
 

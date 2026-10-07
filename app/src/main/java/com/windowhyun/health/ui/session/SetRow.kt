@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -31,6 +33,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -63,6 +67,11 @@ fun SetRow(
     onCycleSetType: (() -> Unit)? = null,
     /** 완료 버튼과 완료 색칠을 보일지. 끝난 기록을 고치는 화면에서는 끈다. */
     showComplete: Boolean = true,
+    /**
+     * 지금 할 세트라면 입력칸 아래에 ± 버튼을 보인다. 무게와 횟수를 숫자판 없이 한 번씩 눌러 맞춘다.
+     * 운동 중에 숫자판을 열고 닫는 것이 가장 번거로워서, 늘 하던 만큼만 더하고 빼면 되게 한다.
+     */
+    quickAdjust: Boolean = false,
 ) {
     // set.id 가 같은 동안에는 화면 입력값을 유지한다.
     var weightText by remember(set.id) {
@@ -95,29 +104,42 @@ fun SetRow(
         else -> reps() > 0
     }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(background, MaterialTheme.shapes.small)
-            .padding(horizontal = 4.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        SetNumberChip(set = set, onCycleSetType = onCycleSetType)
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(background, MaterialTheme.shapes.small)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SetNumberChip(set = set, onCycleSetType = onCycleSetType)
 
-        when (trackingType) {
-            ExerciseTrackingType.WEIGHT_REPS -> {
-                NumberField(
-                    value = weightText,
-                    onValueChange = {
-                        weightText = it.filter { ch -> ch.isDigit() || ch == '.' }
-                        onValuesChange(weightKg(), reps(), duration())
-                    },
-                    suffix = weightUnit.label,
-                    label = "${set.setNumber}세트 중량",
-                    modifier = Modifier.weight(1f),
-                )
-                NumberField(
+            when (trackingType) {
+                ExerciseTrackingType.WEIGHT_REPS -> {
+                    NumberField(
+                        value = weightText,
+                        onValueChange = {
+                            weightText = it.filter { ch -> ch.isDigit() || ch == '.' }
+                            onValuesChange(weightKg(), reps(), duration())
+                        },
+                        suffix = weightUnit.label,
+                        label = "${set.setNumber}세트 중량",
+                        modifier = Modifier.weight(1f),
+                    )
+                    NumberField(
+                        value = repsText,
+                        onValueChange = {
+                            repsText = it.filter { ch -> ch.isDigit() }
+                            onValuesChange(weightKg(), reps(), duration())
+                        },
+                        suffix = "회",
+                        label = "${set.setNumber}세트 횟수",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                ExerciseTrackingType.REPS_ONLY -> NumberField(
                     value = repsText,
                     onValueChange = {
                         repsText = it.filter { ch -> ch.isDigit() }
@@ -125,60 +147,133 @@ fun SetRow(
                     },
                     suffix = "회",
                     label = "${set.setNumber}세트 횟수",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(2f),
+                )
+
+                ExerciseTrackingType.TIME -> {
+                    NumberField(
+                        value = minutesText,
+                        onValueChange = {
+                            minutesText = it.filter { ch -> ch.isDigit() }.take(3)
+                            onValuesChange(weightKg(), reps(), duration())
+                        },
+                        suffix = "분",
+                        label = "${set.setNumber}세트 시간(분)",
+                        modifier = Modifier.weight(1f),
+                    )
+                    NumberField(
+                        value = secondsText,
+                        onValueChange = {
+                            secondsText = it.filter { ch -> ch.isDigit() }.take(4)
+                            onValuesChange(weightKg(), reps(), duration())
+                        },
+                        suffix = "초",
+                        label = "${set.setNumber}세트 시간(초)",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            if (showComplete) {
+                CompleteButton(
+                    completed = set.completed,
+                    enabled = set.completed || hasValue,
+                    onClick = { onToggleCompleted(weightKg(), reps(), duration()) },
                 )
             }
 
-            ExerciseTrackingType.REPS_ONLY -> NumberField(
-                value = repsText,
-                onValueChange = {
-                    repsText = it.filter { ch -> ch.isDigit() }
+            IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "세트 삭제",
+                    tint = MaterialTheme.colorScheme.outline,
+                )
+            }
+        }
+
+        if (quickAdjust && !set.completed) {
+            QuickAdjustRow(
+                trackingType = trackingType,
+                weightUnit = weightUnit,
+                onWeight = { delta ->
+                    val next = (weightText.toDoubleOrNull() ?: 0.0) + delta
+                    weightText = formatWeightValue(next.coerceAtLeast(0.0))
                     onValuesChange(weightKg(), reps(), duration())
                 },
-                suffix = "회",
-                label = "${set.setNumber}세트 횟수",
-                modifier = Modifier.weight(2f),
+                onReps = { delta ->
+                    repsText = ((reps() + delta).coerceAtLeast(0)).let { if (it > 0) it.toString() else "" }
+                    onValuesChange(weightKg(), reps(), duration())
+                },
+                onSeconds = { delta ->
+                    val total = (duration() + delta).coerceAtLeast(0)
+                    minutesText = if (total >= 60) (total / 60).toString() else ""
+                    secondsText = if (total > 0) (total % 60).toString() else ""
+                    onValuesChange(weightKg(), reps(), duration())
+                },
             )
+        }
+    }
+}
+
+/** 한 번 누를 때 바뀌는 무게(표시 단위 기준). 바벨 원판 한 쌍의 가장 작은 단위에 맞춘다. */
+internal fun quickWeightStep(unit: WeightUnit): Double = when (unit) {
+    WeightUnit.KG -> 2.5
+    WeightUnit.LB -> 5.0
+}
+
+internal const val QUICK_SECONDS_STEP = 5
+
+@Composable
+private fun QuickAdjustRow(
+    trackingType: ExerciseTrackingType,
+    weightUnit: WeightUnit,
+    onWeight: (Double) -> Unit,
+    onReps: (Int) -> Unit,
+    onSeconds: (Int) -> Unit,
+) {
+    val step = quickWeightStep(weightUnit)
+    val stepText = formatWeightValue(step)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 48.dp, top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        when (trackingType) {
+            ExerciseTrackingType.WEIGHT_REPS -> {
+                QuickChip("−$stepText", "무게 $stepText${weightUnit.label} 줄이기") { onWeight(-step) }
+                QuickChip("+$stepText", "무게 $stepText${weightUnit.label} 늘리기") { onWeight(step) }
+                QuickChip("−1회", "횟수 1회 줄이기") { onReps(-1) }
+                QuickChip("+1회", "횟수 1회 늘리기") { onReps(1) }
+            }
+
+            ExerciseTrackingType.REPS_ONLY -> {
+                QuickChip("−1회", "횟수 1회 줄이기") { onReps(-1) }
+                QuickChip("+1회", "횟수 1회 늘리기") { onReps(1) }
+            }
 
             ExerciseTrackingType.TIME -> {
-                NumberField(
-                    value = minutesText,
-                    onValueChange = {
-                        minutesText = it.filter { ch -> ch.isDigit() }.take(3)
-                        onValuesChange(weightKg(), reps(), duration())
-                    },
-                    suffix = "분",
-                    label = "${set.setNumber}세트 시간(분)",
-                    modifier = Modifier.weight(1f),
-                )
-                NumberField(
-                    value = secondsText,
-                    onValueChange = {
-                        secondsText = it.filter { ch -> ch.isDigit() }.take(4)
-                        onValuesChange(weightKg(), reps(), duration())
-                    },
-                    suffix = "초",
-                    label = "${set.setNumber}세트 시간(초)",
-                    modifier = Modifier.weight(1f),
-                )
+                QuickChip("−${QUICK_SECONDS_STEP}초", "시간 ${QUICK_SECONDS_STEP}초 줄이기") { onSeconds(-QUICK_SECONDS_STEP) }
+                QuickChip("+${QUICK_SECONDS_STEP}초", "시간 ${QUICK_SECONDS_STEP}초 늘리기") { onSeconds(QUICK_SECONDS_STEP) }
             }
         }
+    }
+}
 
-        if (showComplete) {
-            CompleteButton(
-                completed = set.completed,
-                enabled = set.completed || hasValue,
-                onClick = { onToggleCompleted(weightKg(), reps(), duration()) },
-            )
-        }
-
-        IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = "세트 삭제",
-                tint = MaterialTheme.colorScheme.outline,
-            )
-        }
+@Composable
+private fun QuickChip(label: String, description: String, onClick: () -> Unit) {
+    val shape = MaterialTheme.shapes.small
+    Box(
+        modifier = Modifier
+            .height(36.dp)
+            .clip(shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .semantics { contentDescription = description }
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge)
     }
 }
 

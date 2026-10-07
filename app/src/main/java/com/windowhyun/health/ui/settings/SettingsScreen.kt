@@ -1,5 +1,6 @@
 package com.windowhyun.health.ui.settings
 
+import kotlin.math.roundToInt
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -145,6 +146,15 @@ fun SettingsScreen(
             }
 
             item {
+                SwitchRow(
+                    title = "음성 안내",
+                    subtitle = "구간마다 거리 · 페이스 · 시간을 읽어 주고, 목표 달성과 인터벌 전환도 알려 줍니다. 이어폰을 끼고 달릴 때 편합니다.",
+                    checked = settings.runVoiceCues,
+                    onCheckedChange = viewModel::setRunVoiceCues,
+                )
+            }
+
+            item {
                 StepperRow(
                     title = "자동 Lap 거리",
                     value = "${settings.autoLapMeters}m",
@@ -160,6 +170,34 @@ fun SettingsScreen(
                     value = formatWeight(settings.bodyWeightKg, settings.weightUnit),
                     onMinus = { viewModel.setBodyWeightKg(settings.bodyWeightKg - 0.5) },
                     onPlus = { viewModel.setBodyWeightKg(settings.bodyWeightKg + 0.5) },
+                )
+            }
+
+            item { SettingSectionTitle("주간 목표") }
+
+            item {
+                StepperRow(
+                    title = "헬스",
+                    subtitle = "정하면 홈에서 이번 주 진행을 볼 수 있습니다.",
+                    value = if (settings.weeklyWorkoutGoal == 0) "끔" else "주 ${settings.weeklyWorkoutGoal}회",
+                    onMinus = { viewModel.setWeeklyWorkoutGoal(settings.weeklyWorkoutGoal - 1) },
+                    onPlus = { viewModel.setWeeklyWorkoutGoal(settings.weeklyWorkoutGoal + 1) },
+                )
+            }
+
+            item {
+                val unit = settings.distanceUnit
+                // 한 번에 5(km 또는 mile)씩. 목표는 늘 미터로 저장한다.
+                val step = unit.toMeters(WEEKLY_RUN_STEP).roundToInt()
+                StepperRow(
+                    title = "러닝 거리",
+                    value = if (settings.weeklyRunGoalMeters == 0) {
+                        "끔"
+                    } else {
+                        "주 ${unit.fromMeters(settings.weeklyRunGoalMeters.toDouble()).roundToInt()}${unit.label}"
+                    },
+                    onMinus = { viewModel.setWeeklyRunGoalMeters(settings.weeklyRunGoalMeters - step) },
+                    onPlus = { viewModel.setWeeklyRunGoalMeters(settings.weeklyRunGoalMeters + step) },
                 )
             }
 
@@ -490,3 +528,6 @@ private fun <T> ChipRow(
         }
     }
 }
+
+/** 러닝 목표를 한 번에 올리고 내리는 양(km 또는 mile). */
+private const val WEEKLY_RUN_STEP = 5.0

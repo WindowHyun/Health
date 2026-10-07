@@ -276,6 +276,9 @@ private fun AppSettings.toBackup() = BackupSettings(
     keepScreenOnDuringWorkout = keepScreenOnDuringWorkout,
     runVibrationCues = runVibrationCues,
     autoPauseRun = autoPauseRun,
+    runVoiceCues = runVoiceCues,
+    weeklyWorkoutGoal = weeklyWorkoutGoal,
+    weeklyRunGoalMeters = weeklyRunGoalMeters,
 )
 
 /**
@@ -294,6 +297,9 @@ private fun BackupSettings.toSettings(current: AppSettings) = current.copy(
     keepScreenOnDuringWorkout = keepScreenOnDuringWorkout,
     runVibrationCues = runVibrationCues,
     autoPauseRun = autoPauseRun,
+    runVoiceCues = runVoiceCues,
+    weeklyWorkoutGoal = weeklyWorkoutGoal,
+    weeklyRunGoalMeters = weeklyRunGoalMeters,
 )
 
 private inline fun <reified T : Enum<T>> enumOrNull(name: String): T? =

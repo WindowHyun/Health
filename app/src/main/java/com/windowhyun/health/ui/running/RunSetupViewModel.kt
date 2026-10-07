@@ -6,6 +6,7 @@ import com.windowhyun.health.data.tracking.RunTracker
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.RunGoal
 import com.windowhyun.health.domain.model.RunGoalType
+import com.windowhyun.health.domain.model.RunInterval
 import com.windowhyun.health.domain.model.RunTrackingState
 import com.windowhyun.health.domain.repository.LocationTracker
 import com.windowhyun.health.domain.repository.SettingsRepository
@@ -27,6 +28,9 @@ data class RunSetupUiState(
     val goalDistanceKm: Double = 5.0,
     /** 목표 시간(분). */
     val goalDurationMinutes: Int = 30,
+    /** 달리기/걷기를 번갈아 하는 인터벌 러닝. 끄면 일반 러닝. */
+    val intervalEnabled: Boolean = false,
+    val interval: RunInterval = RunInterval(),
     val hasLocationPermission: Boolean = false,
     val gpsEnabled: Boolean = false,
     val stepSensorAvailable: Boolean = false,
@@ -35,6 +39,9 @@ data class RunSetupUiState(
     val tracking: RunTrackingState = RunTrackingState(),
 ) {
     val canStart: Boolean get() = hasLocationPermission && gpsEnabled && !tracking.isActive
+
+    /** 인터벌을 켰을 때만 계획을 돌려준다. */
+    fun toInterval(): RunInterval? = interval.takeIf { intervalEnabled }
 
     fun toGoal(): RunGoal = when (goalType) {
         RunGoalType.FREE -> RunGoal(RunGoalType.FREE, 0.0)
@@ -86,10 +93,24 @@ class RunSetupViewModel @Inject constructor(
         it.copy(goalDurationMinutes = (it.goalDurationMinutes + deltaMinutes).coerceIn(5, 600))
     }
 
+    fun setIntervalEnabled(enabled: Boolean) = selection.update { it.copy(intervalEnabled = enabled) }
+
+    fun changeIntervalRun(deltaSeconds: Int) = selection.update {
+        it.copy(interval = it.interval.copy(runSeconds = (it.interval.runSeconds + deltaSeconds).coerceIn(RunInterval.MIN_SECONDS, RunInterval.MAX_SECONDS)))
+    }
+
+    fun changeIntervalWalk(deltaSeconds: Int) = selection.update {
+        it.copy(interval = it.interval.copy(walkSeconds = (it.interval.walkSeconds + deltaSeconds).coerceIn(RunInterval.MIN_SECONDS, RunInterval.MAX_SECONDS)))
+    }
+
+    fun changeIntervalRounds(delta: Int) = selection.update {
+        it.copy(interval = it.interval.copy(rounds = (it.interval.rounds + delta).coerceIn(RunInterval.MIN_ROUNDS, RunInterval.MAX_ROUNDS)))
+    }
+
     /** Foreground Service 를 띄워 기록을 시작한다. */
     fun startRun() {
         val state = uiState.value
         if (!state.canStart) return
-        runServiceController.start(state.toGoal())
+        runServiceController.start(state.toGoal(), state.toInterval())
     }
 }

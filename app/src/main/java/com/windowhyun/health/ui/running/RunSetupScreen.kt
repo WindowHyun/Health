@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -47,7 +48,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.designsystem.theme.healthColors
+import com.windowhyun.health.core.util.formatDuration
 import com.windowhyun.health.domain.model.RunGoalType
+import com.windowhyun.health.domain.model.RunInterval
 import com.windowhyun.health.ui.components.HealthButton
 import com.windowhyun.health.ui.components.HealthOutlinedButton
 import com.windowhyun.health.ui.components.MetricValue
@@ -167,6 +170,17 @@ fun RunSetupScreen(
             }
 
             item {
+                IntervalSection(
+                    enabled = state.intervalEnabled,
+                    interval = state.interval,
+                    onEnabledChange = viewModel::setIntervalEnabled,
+                    onRunChange = viewModel::changeIntervalRun,
+                    onWalkChange = viewModel::changeIntervalWalk,
+                    onRoundsChange = viewModel::changeIntervalRounds,
+                )
+            }
+
+            item {
                 Column {
                     Text(
                         text = "자동 Lap: ${state.settings.autoLapMeters}m 마다",
@@ -270,6 +284,66 @@ private fun GpsStatusCard(
                 compact = true,
                 modifier = Modifier.padding(top = 12.dp),
             ) { Text("위치 설정 열기", color = content) }
+        }
+    }
+}
+
+/**
+ * 인터벌 설정. 켜면 달리기와 걷기가 바뀔 때마다 진동(과 음성)으로 알려 준다.
+ * 화면을 볼 필요 없이 몸으로 구간을 알 수 있어서, 운동 중 조작을 늘리지 않는다.
+ */
+@Composable
+private fun IntervalSection(
+    enabled: Boolean,
+    interval: RunInterval,
+    onEnabledChange: (Boolean) -> Unit,
+    onRunChange: (Int) -> Unit,
+    onWalkChange: (Int) -> Unit,
+    onRoundsChange: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("인터벌", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = "달리기와 걷기를 번갈아 합니다. 바뀔 때마다 진동으로 알려 줍니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = onEnabledChange)
+        }
+        if (enabled) {
+            GoalStepper(
+                label = "달리기",
+                number = formatDuration(interval.runSeconds.toLong()),
+                unit = "",
+                onMinus = { onRunChange(-10) },
+                onPlus = { onRunChange(10) },
+            )
+            GoalStepper(
+                label = "걷기",
+                number = formatDuration(interval.walkSeconds.toLong()),
+                unit = "",
+                onMinus = { onWalkChange(-10) },
+                onPlus = { onWalkChange(10) },
+            )
+            GoalStepper(
+                label = "반복",
+                number = "${interval.rounds}",
+                unit = "회",
+                onMinus = { onRoundsChange(-1) },
+                onPlus = { onRoundsChange(1) },
+            )
+            Text(
+                text = "총 ${formatDuration(interval.totalSeconds.toLong())}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

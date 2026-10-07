@@ -4,8 +4,10 @@ import android.os.SystemClock
 import com.windowhyun.health.core.util.estimateRunCalories
 import com.windowhyun.health.core.util.haversineMeters
 import com.windowhyun.health.domain.model.LocationSample
+import com.windowhyun.health.domain.model.IntervalProgress
 import com.windowhyun.health.domain.model.RunCue
 import com.windowhyun.health.domain.model.RunGoal
+import com.windowhyun.health.domain.model.RunInterval
 import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.model.RunTrackingState
 import com.windowhyun.health.domain.repository.RunRepository
@@ -77,8 +79,15 @@ class RunTracker internal constructor(
     private var pauseAnchor: LocationSample? = null
     private var goalCueSent = false
 
-    /** 러닝을 시작한다. 이미 진행 중이면 아무것도 하지 않는다. */
-    suspend fun start(goal: RunGoal) {
+    // 인터벌: 마지막으로 알린 (구간, 라운드)와 끝났음을 알렸는지.
+    private var lastIntervalKey: Int? = null
+    private var intervalFinishedCueSent = false
+
+    /**
+     * 러닝을 시작한다. 이미 진행 중이면 아무것도 하지 않는다.
+     * [interval] 을 주면 달리기/걷기 구간을 알려 준다(기록과 거리 계산은 그대로).
+     */
+    suspend fun start(goal: RunGoal, interval: RunInterval? = null) {
         mutex.withLock {
             if (_state.value.isActive) return
             val settings = settingsRepository.current()
@@ -93,12 +102,16 @@ class RunTracker internal constructor(
             pauseAnchor = null
             lastMovementAt = lastClockAt
             goalCueSent = false
+            lastIntervalKey = null
+            intervalFinishedCueSent = false
 
             val runId = runRepository.startRun(goal.type, goal.value)
             _state.value = RunTrackingState(
                 status = RunStatus.TRACKING,
                 runId = runId,
                 goal = goal,
+                interval = interval,
+                intervalProgress = interval?.progressAt(0),
                 startTime = System.currentTimeMillis(),
                 stepCountAvailable = stepCounter.isAvailable() && stepCounter.hasPermission(),
             )
@@ -126,7 +139,14 @@ class RunTracker internal constructor(
             noteMovement(sample)
             accumulator.onLocation(sample).forEach { lap ->
                 runRepository.appendLap(_state.value.runId, lap)
-                _cues.tryEmit(RunCue.LapCompleted(lap.lapNumber))
+                _cues.tryEmit(
+                    RunCue.LapCompleted(
+                        lapNumber = lap.lapNumber,
+                        lap = lap,
+                        totalDistanceMeters = accumulator.distanceMeters,
+                        totalDurationSeconds = accumulator.elapsedSeconds,
+                    ),
+                )
             }
             publish(accumulator, lastAccuracy = sample.accuracyMeters)
             _state.update { it.copy(signalLost = false) }
@@ -163,6 +183,8 @@ class RunTracker internal constructor(
                 _cues.tryEmit(RunCue.GoalReached)
             }
 
+            updateInterval(current.interval, accumulator.elapsedSeconds)
+
             // 첫 위치를 받은 뒤에만 센다. 신호를 못 받는 중에는 멈춘 것인지 알 수 없다.
             if (autoPauseEnabled && current.lastAccuracyMeters != null && !signalLost &&
                 clock() - lastMovementAt >= AUTO_PAUSE_MILLIS
@@ -175,6 +197,26 @@ class RunTracker internal constructor(
                 ticksSinceFlush = 0
                 flush(accumulator)
             }
+        }
+    }
+
+    /** 인터벌 진행을 갱신하고, 구간이 바뀐 순간 한 번만 알린다. [mutex] 를 잡은 채로 부른다. */
+    private fun updateInterval(interval: RunInterval?, elapsedSeconds: Long) {
+        interval ?: return
+        val progress: IntervalProgress = interval.progressAt(elapsedSeconds)
+        _state.update { it.copy(intervalProgress = progress) }
+        if (progress.finished) {
+            if (!intervalFinishedCueSent) {
+                intervalFinishedCueSent = true
+                _cues.tryEmit(RunCue.IntervalsFinished)
+            }
+            return
+        }
+        // 구간 번호를 하나의 수로 만들어 구간이 바뀌었는지만 본다(달리기 = 짝수, 걷기 = 홀수 자리).
+        val key = progress.round * 2 + progress.phase.ordinal
+        if (key != lastIntervalKey) {
+            lastIntervalKey = key
+            _cues.tryEmit(RunCue.IntervalChanged(progress.phase, progress.round, progress.rounds))
         }
     }
 

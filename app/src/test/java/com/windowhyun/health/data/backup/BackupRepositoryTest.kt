@@ -195,6 +195,22 @@ class BackupRepositoryTest {
         assertThat(restored.distanceUnit).isEqualTo(DistanceUnit.KM)
     }
 
+    /** 새로 생긴 설정(주간 목표 · 음성 안내)도 백업에 들어가야 기기를 바꿔도 다시 정하지 않는다. */
+    @Test
+    fun `restores weekly goals and the voice setting`() = runTest(dispatcher) {
+        seedRecords()
+        settings.update { it.copy(weeklyWorkoutGoal = 4, weeklyRunGoalMeters = 25_000, runVoiceCues = false) }
+        val bytes = exportBytes()
+        settings.update { it.copy(weeklyWorkoutGoal = 0, weeklyRunGoalMeters = 0, runVoiceCues = true) }
+
+        backup.restoreBackup(ByteArrayInputStream(bytes))
+
+        val restored = settings.settings.first()
+        assertThat(restored.weeklyWorkoutGoal).isEqualTo(4)
+        assertThat(restored.weeklyRunGoalMeters).isEqualTo(25_000)
+        assertThat(restored.runVoiceCues).isFalse()
+    }
+
     /** 복원은 합치기가 아니라 대체다. 같은 기록이 두 벌로 늘어나면 안 된다. */
     @Test
     fun `replaces existing records instead of duplicating them`() = runTest(dispatcher) {

@@ -56,6 +56,7 @@ import com.windowhyun.health.domain.model.Routine
 import com.windowhyun.health.domain.model.Run
 import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.model.Workout
+import com.windowhyun.health.domain.usecase.GoalProgress
 import com.windowhyun.health.ui.components.AccentButton
 import com.windowhyun.health.ui.components.Hairline
 import com.windowhyun.health.ui.components.MetricValue
@@ -103,7 +104,7 @@ fun HomeScreen(
 
             item {
                 Spacer(Modifier.height(28.dp))
-                WeekSummary(state)
+                WeekSummary(state, onOpenSettings)
             }
 
             // 값을 먼저 꺼내 둔다. 카드 안에서 state 를 다시 읽으면, 운동이 끝나 값이 비는 순간
@@ -228,7 +229,7 @@ private fun Header(today: LocalDate, onOpenSettings: () -> Unit) {
 
 /** 이번 주 요약: 세 값을 가는 세로선으로 나누고, 그 아래에 요일별로 운동한 날을 막대로 보여 준다. */
 @Composable
-private fun WeekSummary(state: HomeUiState) {
+private fun WeekSummary(state: HomeUiState, onOpenSettings: () -> Unit) {
     val weekly = state.weekly
     val (distance, distanceUnit) = distanceParts(weekly.runDistanceMeters, state.settings.distanceUnit)
     val hours = weekly.totalDurationSeconds / 3600
@@ -254,6 +255,81 @@ private fun WeekSummary(state: HomeUiState) {
         }
         Spacer(Modifier.height(20.dp))
         WeekStrip(today = state.today, activeDays = weekly.activeDays)
+        Spacer(Modifier.height(16.dp))
+        WeeklyGoals(state, onOpenSettings)
+    }
+}
+
+/**
+ * 주간 목표 진행. 목표를 하나도 안 정했으면 정하러 가는 작은 문구만 둔다(홈을 어지럽히지 않는다).
+ * 달성하면 막대가 라임으로 가득 차고 글자도 "달성"으로 바뀐다(색에만 기대지 않는다).
+ */
+@Composable
+private fun WeeklyGoals(state: HomeUiState, onOpenSettings: () -> Unit) {
+    val settings = state.settings
+    val workout = GoalProgress.of(state.weekly.workoutCount.toDouble(), settings.weeklyWorkoutGoal.toDouble())
+    val run = GoalProgress.of(state.weekly.runDistanceMeters, settings.weeklyRunGoalMeters.toDouble())
+
+    if (workout == null && run == null) {
+        Text(
+            text = "이번 주 목표 정하기",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .clickable(role = Role.Button, onClick = onOpenSettings)
+                .padding(vertical = 8.dp),
+        )
+        return
+    }
+
+    val unit = settings.distanceUnit
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (workout != null) {
+            GoalRow(
+                label = "헬스",
+                text = "${workout.current.toInt()} / ${workout.goal.toInt()}회",
+                progress = workout,
+            )
+        }
+        if (run != null) {
+            val current = String.format(Locale.US, "%.1f", unit.fromMeters(run.current))
+            val goal = unit.fromMeters(run.goal).let { String.format(Locale.US, "%.0f", it) }
+            GoalRow(label = "러닝", text = "$current / $goal${unit.label}", progress = run)
+        }
+    }
+}
+
+@Composable
+private fun GoalRow(label: String, text: String, progress: GoalProgress) {
+    val colors = MaterialTheme.healthColors
+    val summary = if (progress.achieved) "$label 목표 달성, $text" else "$label $text"
+    Column(modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = summary }) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = if (progress.achieved) "달성 · $text" else text,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (progress.achieved) FontWeight.ExtraBold else FontWeight.Medium,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress.fraction)
+                    .height(6.dp)
+                    .background(colors.accent),
+            )
+        }
     }
 }
 

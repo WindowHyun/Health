@@ -61,6 +61,9 @@ data class BackupSettings(
     val keepScreenOnDuringWorkout: Boolean = true,
     val runVibrationCues: Boolean = true,
     val autoPauseRun: Boolean = true,
+    val runVoiceCues: Boolean = true,
+    val weeklyWorkoutGoal: Int = 0,
+    val weeklyRunGoalMeters: Int = 0,
 )
 
 @Serializable

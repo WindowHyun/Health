@@ -48,5 +48,18 @@ class SettingsViewModel @Inject constructor(
 
     fun setRunVibrationCues(enabled: Boolean) = update { it.copy(runVibrationCues = enabled) }
 
+    fun setRunVoiceCues(enabled: Boolean) = update { it.copy(runVoiceCues = enabled) }
+
+    fun setWeeklyWorkoutGoal(count: Int) =
+        update { it.copy(weeklyWorkoutGoal = count.coerceIn(0, MAX_WEEKLY_WORKOUTS)) }
+
+    fun setWeeklyRunGoalMeters(meters: Int) =
+        update { it.copy(weeklyRunGoalMeters = meters.coerceIn(0, MAX_WEEKLY_RUN_METERS)) }
+
     fun setAutoPauseRun(enabled: Boolean) = update { it.copy(autoPauseRun = enabled) }
+
+    companion object {
+        const val MAX_WEEKLY_WORKOUTS = 14
+        const val MAX_WEEKLY_RUN_METERS = 500_000
+    }
 }

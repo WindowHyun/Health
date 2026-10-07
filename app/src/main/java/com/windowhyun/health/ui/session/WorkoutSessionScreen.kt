@@ -329,9 +329,12 @@ private fun ExerciseBlock(
 
         Spacer(Modifier.height(12.dp))
 
+        // 지금 할 세트(처음으로 안 끝낸 세트)에만 ± 버튼을 보인다.
+        val currentSetId = record.sets.firstOrNull { !it.completed }?.id
         record.sets.forEach { set ->
             SetRow(
                 set = set,
+                quickAdjust = set.id == currentSetId,
                 weightUnit = weightUnit,
                 trackingType = record.exercise.trackingType,
                 onValuesChange = { weightKg, reps, duration ->
