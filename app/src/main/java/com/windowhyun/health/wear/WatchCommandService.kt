@@ -17,6 +17,6 @@ class WatchCommandService : WearableListenerService() {
     lateinit var handler: WatchCommandHandler
 
     override fun onMessageReceived(event: MessageEvent) {
-        WatchCommand.fromPath(event.path)?.let { handler.handle(it) }
+        WatchCommand.fromPath(event.path)?.let { handler.handle(it, event.data) }
     }
 }

@@ -41,4 +41,19 @@ internal object WatchFormat {
 
     /** 휴식 남은 초 → "1:05". */
     fun restClock(seconds: Int): String = duration(seconds.toLong())
+
+    /** 세트 무게. 예) 62.5kg -> "62.5kg", 파운드면 "138lb". 정수면 소수점을 뗀다. */
+    fun weight(kg: Double, useLb: Boolean): String {
+        val value = if (useLb) kg * 2.2046226218 else kg
+        val rounded = (value * 10).roundToLong() / 10.0
+        val text = if (rounded == Math.floor(rounded)) rounded.toLong().toString() else String.format(Locale.US, "%.1f", rounded)
+        return text + if (useLb) "lb" else "kg"
+    }
+
+    /** 세트 값을 한 줄로. 무게 운동 "62.5kg × 8", 횟수만 "8회", 시간 "0:45". */
+    fun setValue(workout: com.windowhyun.health.shared.WorkoutSnapshot): String = when (workout.kind) {
+        com.windowhyun.health.shared.WatchSetKind.WEIGHT_REPS -> "${weight(workout.weightKg, workout.useLb)} × ${workout.reps}"
+        com.windowhyun.health.shared.WatchSetKind.REPS_ONLY -> "${workout.reps}회"
+        com.windowhyun.health.shared.WatchSetKind.TIME -> duration(workout.durationSeconds.toLong())
+    }
 }

@@ -45,4 +45,27 @@ class WatchFormatTest {
         assertThat(WatchFormat.restClock(90)).isEqualTo("1:30")
         assertThat(WatchFormat.restClock(0)).isEqualTo("0:00")
     }
+
+    @Test
+    fun `weights drop a useless decimal and follow the unit`() {
+        assertThat(WatchFormat.weight(60.0, useLb = false)).isEqualTo("60kg")
+        assertThat(WatchFormat.weight(62.5, useLb = false)).isEqualTo("62.5kg")
+        assertThat(WatchFormat.weight(0.0, useLb = false)).isEqualTo("0kg")
+        // 61.235kg = 135.0lb
+        assertThat(WatchFormat.weight(61.235, useLb = true)).isEqualTo("135lb")
+        assertThat(WatchFormat.weight(62.5, useLb = true)).isEqualTo("137.8lb")
+    }
+
+    @Test
+    fun `a set reads the way the exercise is recorded`() {
+        val base = com.windowhyun.health.shared.WorkoutSnapshot(active = true, weightKg = 62.5, reps = 8, durationSeconds = 45)
+
+        assertThat(WatchFormat.setValue(base.copy(kind = com.windowhyun.health.shared.WatchSetKind.WEIGHT_REPS)))
+            .isEqualTo("62.5kg × 8")
+        assertThat(WatchFormat.setValue(base.copy(kind = com.windowhyun.health.shared.WatchSetKind.REPS_ONLY)))
+            .isEqualTo("8회")
+        assertThat(WatchFormat.setValue(base.copy(kind = com.windowhyun.health.shared.WatchSetKind.TIME)))
+            .isEqualTo("0:45")
+        assertThat(WatchFormat.setValue(base.copy(useLb = true))).isEqualTo("137.8lb × 8")
+    }
 }

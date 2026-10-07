@@ -6,6 +6,9 @@
     <!-- 휴식이 끝났을 때 손목을 울린다. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- 워치페이스의 "진행 중" 칩(알림). 안드로이드 13 기반 Wear OS 4 부터는 권한이 필요하다. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -21,6 +24,34 @@
         <meta-data
             android:name="com.google.android.wearable.standalone"
             android:value="false" />
+
+        <!-- 폰이 올린 러닝 · 세트 · 휴식 상태가 바뀌면 앱이 꺼져 있어도 깨어나 칩과 타일을 맞춘다. -->
+        <service
+            android:name=".PhoneStateListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/health/"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
+        <!-- 시계 타일: 지금 러닝이나 세트를 보여 준다. -->
+        <service
+            android:name=".HealthTileService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <!-- 타일 목록에서 보이는 미리보기 -->
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview" />
+        </service>
 
         <activity
             android:name=".WatchActivity"

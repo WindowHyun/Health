@@ -33,7 +33,7 @@ class ExerciseSeedTest {
         db = Room.inMemoryDatabaseBuilder(context, HealthDatabase::class.java)
             .addCallback(ExerciseSeedCallback)
             .allowMainThreadQueries()
-            .build()
+            .build().also { it.openHelper.writableDatabase } // 먼저 열어 둔다: 닫을 때 여는 중이면 서로 기다려 멈춘다
     }
 
     @After

@@ -5,7 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.di.ApplicationScope
 import com.windowhyun.health.domain.model.AppSettings
+import com.windowhyun.health.domain.model.HealthConnectAvailability
+import com.windowhyun.health.domain.model.HealthConnectGateway
+import com.windowhyun.health.domain.model.HeartRateSummary
 import com.windowhyun.health.domain.model.Run
+import com.windowhyun.health.domain.model.UnavailableHealthConnect
 import com.windowhyun.health.domain.repository.RunRepository
 import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.ui.navigation.Routes
@@ -29,6 +33,8 @@ data class RunDetailUiState(
     val editingMemo: Boolean = false,
     val loading: Boolean = true,
     val deleted: Boolean = false,
+    /** Health Connect 에서 가져온 이 러닝 시간대의 심박. 허용하지 않았거나 기록이 없으면 null. */
+    val heartRate: HeartRateSummary? = null,
 )
 
 /**
@@ -46,6 +52,7 @@ class RunDetailViewModel @Inject constructor(
      * 뒤로 가기와 함께 취소되므로, 쓰기는 앱 수명의 스코프에서 한다.
      */
     @ApplicationScope private val appScope: CoroutineScope,
+    private val healthConnect: HealthConnectGateway = UnavailableHealthConnect,
 ) : ViewModel() {
 
     private val runId: Long = savedStateHandle[Routes.ARG_RUN_ID] ?: 0L
@@ -63,14 +70,33 @@ class RunDetailViewModel @Inject constructor(
         viewModelScope.launch { reload() }
     }
 
+    /**
+     * 시계 · 다른 앱이 Health Connect 에 남긴 이 러닝 시간대의 심박. 허용하지 않았거나 읽을 수 없으면 조용히 건너뛴다
+     * (심박이 없다고 러닝 상세가 안 열리면 안 된다).
+     */
+    private suspend fun loadHeartRate(run: Run): HeartRateSummary? {
+        val end = run.endTime ?: return null
+        return try {
+            if (healthConnect.availability() != HealthConnectAvailability.AVAILABLE) return null
+            if (!healthConnect.permissionState().canReadHeartRate) return null
+            healthConnect.heartRate(run.startTime, end)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private suspend fun reload() {
         val run = runRepository.getRun(runId)
+        val heartRate = run?.let { loadHeartRate(it) }
         local.update {
             it.copy(
                 run = run,
                 memo = run?.memo.orEmpty(),
                 memoDirty = false,
                 loading = false,
+                heartRate = heartRate,
                 // 기록이 사라졌다면(다른 화면에서 삭제) 머무를 이유가 없다.
                 deleted = run == null,
             )

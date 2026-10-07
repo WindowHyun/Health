@@ -31,8 +31,8 @@ android {
         applicationId = "com.windowhyun.health"
         minSdk = 30
         targetSdk = 34
-        versionCode = 23
-        versionName = "0.10.0"
+        versionCode = 24
+        versionName = "0.11.0"
     }
 
     signingConfigs {
@@ -109,6 +109,10 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.wear.compose.material)
     implementation(libs.androidx.wear.compose.foundation)
+    implementation(libs.androidx.wear.ongoing)
+    implementation(libs.androidx.wear.tiles)
+    implementation(libs.androidx.wear.protolayout)
+    implementation(libs.androidx.concurrent.futures)
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

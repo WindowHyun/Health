@@ -17,6 +17,7 @@ import kotlin.math.ceil
 object WearProtocol {
     const val PATH_RUN_STATE = "/health/run_state"
     const val PATH_REST_STATE = "/health/rest_state"
+    const val PATH_WORKOUT_STATE = "/health/workout_state"
     const val COMMAND_PREFIX = "/health/cmd/"
 
     /** 이 시간 넘게 새 상태가 안 오면 폰과 끊겼을 수 있다고 알린다. 폰은 진행 중에 이보다 자주 보낸다. */
@@ -97,6 +98,50 @@ data class RestSnapshot(
     }
 }
 
+/** 헬스 세트를 기록하는 방식. 시계는 세트 값을 어떻게 보여 줄지만 알면 된다. */
+@Serializable
+enum class WatchSetKind { WEIGHT_REPS, REPS_ONLY, TIME }
+
+/**
+ * 헬스 운동 중 "지금 할 세트". 시계에서 이 세트를 완료할 수 있게 한다.
+ *
+ * 세션 화면이 열려 있는 동안만 올라온다(세트 기록과 휴식 타이머를 그 화면이 처리한다).
+ */
+@Serializable
+data class WorkoutSnapshot(
+    val active: Boolean = false,
+    /** 지금 할 세트의 번호(DB id). 시계가 완료를 누를 때 함께 보내, 그사이 폰에서 이미 끝낸 세트를 또 끝내지 않게 한다. */
+    val setId: Long = 0,
+    val exerciseName: String = "",
+    /** 이 종목에서 몇 번째 세트인가(1부터). */
+    val setNumber: Int = 0,
+    /** 이 종목의 전체 세트 수. */
+    val setCount: Int = 0,
+    val weightKg: Double = 0.0,
+    val reps: Int = 0,
+    val durationSeconds: Int = 0,
+    val kind: WatchSetKind = WatchSetKind.WEIGHT_REPS,
+    /** 사용자가 파운드를 쓰는지. */
+    val useLb: Boolean = false,
+    /** 모든 세트를 끝냈다. 종료는 폰에서 한다. */
+    val allDone: Boolean = false,
+    val sentAtMillis: Long = 0,
+) {
+    /** 완료를 누를 수 있는 세트인가. 값이 비어 있으면 폰에서도 완료할 수 없다. */
+    val canComplete: Boolean
+        get() = active && !allDone && setId != 0L && when (kind) {
+            WatchSetKind.TIME -> durationSeconds > 0
+            else -> reps > 0
+        }
+
+    /** 폰이 한동안 새 정보를 안 보냈다(세션 화면이 꺼졌거나 앱이 죽었다). 지나간 세트를 계속 보여 주지 않는다. */
+    fun isStale(nowMillis: Long): Boolean = active && nowMillis - sentAtMillis > WearProtocol.STALE_MILLIS
+
+    companion object {
+        val None = WorkoutSnapshot()
+    }
+}
+
 /** 시계가 폰에 보내는 명령. */
 @Serializable
 enum class WatchCommand(val key: String) {
@@ -107,6 +152,12 @@ enum class WatchCommand(val key: String) {
     @SerialName("rest_add") REST_ADD("rest_add"),
     @SerialName("rest_sub") REST_SUB("rest_sub"),
     @SerialName("rest_toggle_pause") REST_TOGGLE_PAUSE("rest_toggle_pause"),
+
+    /** 폰이 쉬는 중일 때 자유 러닝을 시작한다. */
+    @SerialName("run_start") RUN_START("run_start"),
+
+    /** 지금 할 세트를 완료한다. 내용(payload)에 세트 번호를 실어 보낸다. */
+    @SerialName("set_complete") SET_COMPLETE("set_complete"),
     ;
 
     val path: String get() = WearProtocol.COMMAND_PREFIX + key
@@ -129,9 +180,22 @@ object WearCodec {
 
     fun encode(snapshot: RestSnapshot): ByteArray = json.encodeToString(RestSnapshot.serializer(), snapshot).toByteArray()
 
+    fun encode(snapshot: WorkoutSnapshot): ByteArray =
+        json.encodeToString(WorkoutSnapshot.serializer(), snapshot).toByteArray()
+
+    /** 세트 완료 명령의 내용. 세트 번호를 글자로 적는다. */
+    fun encodeSetId(setId: Long): ByteArray = setId.toString().toByteArray()
+
+    /** 세트 완료 명령의 내용을 읽는다. 비었거나 숫자가 아니면 null. */
+    fun decodeSetId(bytes: ByteArray?): Long? =
+        bytes?.takeIf { it.isNotEmpty() }?.decodeToString()?.trim()?.toLongOrNull()
+
     fun decodeRun(bytes: ByteArray?): RunSnapshot? = decode(bytes) { json.decodeFromString(RunSnapshot.serializer(), it) }
 
     fun decodeRest(bytes: ByteArray?): RestSnapshot? = decode(bytes) { json.decodeFromString(RestSnapshot.serializer(), it) }
+
+    fun decodeWorkout(bytes: ByteArray?): WorkoutSnapshot? =
+        decode(bytes) { json.decodeFromString(WorkoutSnapshot.serializer(), it) }
 
     private inline fun <T> decode(bytes: ByteArray?, parse: (String) -> T): T? {
         if (bytes == null || bytes.isEmpty()) return null

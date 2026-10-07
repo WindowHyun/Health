@@ -2,6 +2,7 @@ package com.windowhyun.health.wear
 
 import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.WatchCommand
+import com.windowhyun.health.shared.WorkoutSnapshot
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -56,6 +57,34 @@ class WatchLink internal constructor(
 
     fun clearRest() {
         _rest.value = RestSnapshot.None
+    }
+
+    private val _workout = MutableStateFlow(WorkoutSnapshot.None)
+
+    /** 시계에 보낼 "지금 할 세트". 세션 화면이 열려 있는 동안만 있다. */
+    val workout: StateFlow<WorkoutSnapshot> = _workout.asStateFlow()
+
+    private val _setCompletions = MutableSharedFlow<Long>(extraBufferCapacity = 4)
+
+    /** 시계에서 완료하라고 한 세트 번호. 세션 화면이 처리한다. */
+    val setCompletions: SharedFlow<Long> = _setCompletions.asSharedFlow()
+
+    fun publishWorkout(snapshot: WorkoutSnapshot) {
+        _workout.value = snapshot.copy(sentAtMillis = wallClock())
+    }
+
+    fun clearWorkout() {
+        _workout.value = WorkoutSnapshot.None
+    }
+
+    /**
+     * 시계가 누른 세트 완료를 세션에 넘긴다. 시계가 보고 있던 세트가 지금 할 세트와 다르면
+     * (그사이 폰에서 먼저 끝냈다) 다음 세트를 잘못 끝내지 않도록 무시한다.
+     */
+    fun emitSetCompletion(setId: Long): Boolean {
+        val current = _workout.value
+        if (!current.canComplete || current.setId != setId) return false
+        return _setCompletions.tryEmit(setId)
     }
 
     /** 휴식 타이머 명령을 세션에 넘긴다. 휴식이 없는데 온 명령은 무시한다. */

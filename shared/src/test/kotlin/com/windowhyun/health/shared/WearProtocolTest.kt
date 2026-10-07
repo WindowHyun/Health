@@ -195,4 +195,75 @@ class WearProtocolTest {
         assertThat(WearCodec.decodeRun("""{"status":"FLYING"}""".toByteArray())).isNull()
         assertThat(WearCodec.decodeRest("[1,2,3]".toByteArray())).isNull()
     }
+
+    // ----- 헬스 세트 -----
+
+    private fun workout(
+        kind: WatchSetKind = WatchSetKind.WEIGHT_REPS,
+        reps: Int = 8,
+        seconds: Int = 0,
+        setId: Long = 7,
+        active: Boolean = true,
+        allDone: Boolean = false,
+    ) = WorkoutSnapshot(
+        active = active, setId = setId, exerciseName = "벤치프레스", setNumber = 2, setCount = 4,
+        weightKg = 62.5, reps = reps, durationSeconds = seconds, kind = kind, allDone = allDone,
+    )
+
+    @Test
+    fun `a weighted set can be completed once it has reps`() {
+        assertThat(workout(reps = 8).canComplete).isTrue()
+        assertThat(workout(reps = 0).canComplete).isFalse()
+    }
+
+    @Test
+    fun `a timed set needs a duration instead of reps`() {
+        assertThat(workout(kind = WatchSetKind.TIME, reps = 0, seconds = 45).canComplete).isTrue()
+        assertThat(workout(kind = WatchSetKind.TIME, reps = 10, seconds = 0).canComplete).isFalse()
+    }
+
+    @Test
+    fun `nothing can be completed without an active set`() {
+        assertThat(WorkoutSnapshot.None.canComplete).isFalse()
+        assertThat(workout(active = false).canComplete).isFalse()
+        assertThat(workout(setId = 0).canComplete).isFalse()
+        assertThat(workout(allDone = true).canComplete).isFalse()
+    }
+
+    @Test
+    fun `a workout snapshot survives encoding`() {
+        val original = workout(kind = WatchSetKind.REPS_ONLY).copy(useLb = true, sentAtMillis = 1_700_000_000_000)
+
+        assertThat(WearCodec.decodeWorkout(WearCodec.encode(original))).isEqualTo(original)
+    }
+
+    @Test
+    fun `the set to complete travels as text and unreadable content is no set`() {
+        assertThat(WearCodec.decodeSetId(WearCodec.encodeSetId(123_456_789_012))).isEqualTo(123_456_789_012)
+        assertThat(WearCodec.decodeSetId(null)).isNull()
+        assertThat(WearCodec.decodeSetId(ByteArray(0))).isNull()
+        assertThat(WearCodec.decodeSetId("abc".toByteArray())).isNull()
+    }
+
+    @Test
+    fun `new commands have their own paths`() {
+        assertThat(WatchCommand.fromPath("/health/cmd/run_start")).isEqualTo(WatchCommand.RUN_START)
+        assertThat(WatchCommand.fromPath("/health/cmd/set_complete")).isEqualTo(WatchCommand.SET_COMPLETE)
+    }
+
+    @Test
+    fun `garbage workout state never throws`() {
+        assertThat(WearCodec.decodeWorkout(null)).isNull()
+        assertThat(WearCodec.decodeWorkout("nope".toByteArray())).isNull()
+        assertThat(WearCodec.decodeWorkout("""{"kind":"SWIMMING"}""".toByteArray())).isNull()
+    }
+
+    @Test
+    fun `a set from a quiet phone goes stale only while active`() {
+        val snapshot = workout().copy(sentAtMillis = 1_000_000)
+
+        assertThat(snapshot.isStale(1_000_000 + WearProtocol.STALE_MILLIS)).isFalse()
+        assertThat(snapshot.isStale(1_000_000 + WearProtocol.STALE_MILLIS + 1)).isTrue()
+        assertThat(WorkoutSnapshot.None.isStale(9_999_999_999)).isFalse()
+    }
 }

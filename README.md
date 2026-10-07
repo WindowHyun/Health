@@ -21,7 +21,7 @@
 | 위치 | Fused Location Provider + Foreground Service |
 | 지도 | osmdroid (OpenStreetMap, API 키 불필요) |
 | 걸음 수 | 기기 걸음 센서 (TYPE_STEP_COUNTER) |
-| 건강 데이터 | Health Connect *(Phase 4)* |
+| 건강 데이터 | Health Connect (끝난 운동 내보내기 · 체중 · 심박 읽기) |
 | minSdk | **26** (Health Connect 클라이언트 요구사항) |
 | targetSdk / compileSdk | 35 |
 
@@ -155,7 +155,7 @@ run ──┬── run_lap
 | **Phase 1** | Room DB · 운동 종목 · 루틴 · 운동 진행 · 세트 기록 · 휴식 타이머 · 운동 저장 · PR · 과거 기록 | ✅ 완료 |
 | **Phase 2** | GPS 권한 · Foreground Service · 러닝 기록 · 거리/페이스 · 자동 Lap · 경로 · 러닝 저장 | ✅ 완료 |
 | Phase 3 | 캘린더 · 종목별 성장 그래프 · 종목별 전체 이력 | ✅ v0.6.0 (주/월 통계는 예정) |
-| Phase 4 | Health Connect · UI/UX 개선 | ⬜ 예정 |
+| Phase 4 | Health Connect · UI/UX 개선 | ✅ 완료 (v0.11.0) |
 
 Phase 사이에, 다른 운동 앱과 비교해 빠져 있던 것 중 개인 앱에 꼭 필요한
 항목을 우선순위대로 채웠습니다(v0.4.0). 남은 목록은

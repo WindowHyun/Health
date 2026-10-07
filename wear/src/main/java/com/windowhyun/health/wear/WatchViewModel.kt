@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
 import com.windowhyun.health.shared.WatchCommand
+import com.windowhyun.health.shared.WearCodec
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,6 +56,11 @@ class WatchViewModel internal constructor(
             }
         }
         viewModelScope.launch {
+            source.workout.catch { }.collect { snapshot ->
+                _state.update { it.copy(workout = snapshot, nowMillis = clock()) }
+            }
+        }
+        viewModelScope.launch {
             while (true) {
                 delay(TICK_MILLIS)
                 tick()
@@ -77,6 +83,32 @@ class WatchViewModel internal constructor(
         viewModelScope.launch {
             val delivered = source.send(command)
             _state.update { it.copy(sendFailed = !delivered) }
+        }
+    }
+
+    /**
+     * 지금 보이는 세트를 완료한다. 어느 세트인지 번호를 함께 보내, 그사이 폰에서 먼저 끝냈다면
+     * 폰이 무시하게 한다(다음 세트가 엉뚱하게 끝나지 않도록).
+     */
+    fun completeSet() {
+        val workout = _state.value.workout
+        if (!workout.canComplete) return
+        viewModelScope.launch {
+            val delivered = source.send(WatchCommand.SET_COMPLETE, WearCodec.encodeSetId(workout.setId))
+            _state.update { it.copy(sendFailed = !delivered) }
+        }
+    }
+
+    /** 폰에서 자유 러닝을 시작해 달라고 요청한다. 폰이 눈앞에 없으면 폰 알림에서 확인을 기다린다. */
+    fun startRun() {
+        viewModelScope.launch {
+            val delivered = source.send(WatchCommand.RUN_START)
+            _state.update {
+                it.copy(
+                    sendFailed = !delivered,
+                    startRequestedAtMillis = if (delivered) clock() else 0,
+                )
+            }
         }
     }
 

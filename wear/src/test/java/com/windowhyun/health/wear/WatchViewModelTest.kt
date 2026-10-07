@@ -5,6 +5,8 @@ import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
 import com.windowhyun.health.shared.WatchCommand
 import com.windowhyun.health.shared.WatchRunStatus
+import com.windowhyun.health.shared.WearCodec
+import com.windowhyun.health.shared.WorkoutSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -29,13 +31,17 @@ class WatchViewModelTest {
     private class FakeSource : WatchDataSource {
         val runFlow = MutableSharedFlow<RunSnapshot>(replay = 1)
         val restFlow = MutableSharedFlow<RestSnapshot>(replay = 1)
+        val workoutFlow = MutableSharedFlow<WorkoutSnapshot>(replay = 1)
         val sent = mutableListOf<WatchCommand>()
+        val payloads = mutableListOf<ByteArray>()
         var delivers = true
 
         override val run = runFlow
         override val rest = restFlow
-        override suspend fun send(command: WatchCommand): Boolean {
+        override val workout = workoutFlow
+        override suspend fun send(command: WatchCommand, payload: ByteArray): Boolean {
             sent += command
+            payloads += payload
             return delivers
         }
     }
@@ -255,6 +261,103 @@ class WatchViewModelTest {
             advanceTimeBy(60_000)
 
             assertThat(haptics.count).isEqualTo(0)
+        }
+    }
+
+    // ----- 헬스 세트 / 러닝 시작 -----
+
+    private fun workout(setId: Long = 11, reps: Int = 8, sentAt: Long = wall) = WorkoutSnapshot(
+        active = true, setId = setId, exerciseName = "벤치프레스", setNumber = 2, setCount = 4,
+        weightKg = 62.5, reps = reps, sentAtMillis = sentAt,
+    )
+
+    @Test
+    fun `the current set shows once the phone sends it`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.workoutFlow.emit(workout())
+            runCurrent()
+
+            assertThat(viewModel.state.value.screen).isEqualTo(WatchScreen.WORKOUT)
+            assertThat(viewModel.state.value.workout.exerciseName).isEqualTo("벤치프레스")
+        }
+    }
+
+    /** 어느 세트를 끝내는지 번호를 실어 보낸다. 폰이 그사이 끝낸 세트를 또 끝내지 않게 하려는 것이다. */
+    @Test
+    fun `completing a set sends which set it is`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.workoutFlow.emit(workout(setId = 11))
+            runCurrent()
+
+            viewModel.completeSet()
+            runCurrent()
+
+            assertThat(source.sent).containsExactly(WatchCommand.SET_COMPLETE)
+            assertThat(WearCodec.decodeSetId(source.payloads.single())).isEqualTo(11L)
+        }
+    }
+
+    @Test
+    fun `an empty set is not sent`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.workoutFlow.emit(workout(reps = 0))
+            runCurrent()
+
+            viewModel.completeSet()
+            runCurrent()
+
+            assertThat(source.sent).isEmpty()
+        }
+    }
+
+    @Test
+    fun `completing with no set on screen sends nothing`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            viewModel.completeSet()
+            runCurrent()
+
+            assertThat(source.sent).isEmpty()
+        }
+    }
+
+    @Test
+    fun `a set that could not be sent is reported`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.workoutFlow.emit(workout())
+            runCurrent()
+            source.delivers = false
+
+            viewModel.completeSet()
+            runCurrent()
+
+            assertThat(viewModel.state.value.sendFailed).isTrue()
+        }
+    }
+
+    @Test
+    fun `asking the phone to start a run is remembered for a moment`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            viewModel.startRun()
+            runCurrent()
+
+            assertThat(source.sent).containsExactly(WatchCommand.RUN_START)
+            assertThat(viewModel.state.value.startPending).isTrue()
+
+            advanceTimeBy(START_HINT_MILLIS + 1_000)
+            assertThat(viewModel.state.value.startPending).isFalse()
+        }
+    }
+
+    @Test
+    fun `a start that never reached the phone shows no waiting hint`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.delivers = false
+
+            viewModel.startRun()
+            runCurrent()
+
+            assertThat(viewModel.state.value.sendFailed).isTrue()
+            assertThat(viewModel.state.value.startPending).isFalse()
         }
     }
 }

@@ -56,6 +56,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
     backupViewModel: BackupViewModel = hiltViewModel(),
+    healthConnectViewModel: HealthConnectViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
 
@@ -212,10 +213,110 @@ fun SettingsScreen(
                 )
             }
 
+            item { SettingSectionTitle("Health Connect") }
+            item { HealthConnectSection(healthConnectViewModel) }
+
             item { SettingSectionTitle("데이터") }
             item { DataSection(backupViewModel) }
         }
     }
+}
+
+/**
+ * Health Connect 연동. 끝난 러닝과 헬스 운동을 다른 건강 앱과 나눌 수 있게 내보내고,
+ * 원하면 Health Connect 의 최근 체중을 가져와 러닝 칼로리 계산에 쓴다.
+ * 시계 · 다른 앱이 남긴 심박은 러닝 상세에서 보여 준다.
+ */
+@Composable
+private fun HealthConnectSection(viewModel: HealthConnectViewModel) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val requestPermissions = rememberLauncherForActivityResult(
+        androidx.health.connect.client.PermissionController.createRequestPermissionResultContract(),
+    ) { granted -> viewModel.onPermissionResult(granted) }
+
+    // 허용 화면이나 Health Connect 설정에서 돌아오면 권한이 바뀌었을 수 있다.
+    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.refresh() }
+
+    when (state.availability) {
+        com.windowhyun.health.domain.model.HealthConnectAvailability.UNAVAILABLE -> Text(
+            text = "이 기기에서는 Health Connect 를 쓸 수 없습니다.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+
+        com.windowhyun.health.domain.model.HealthConnectAvailability.NEEDS_UPDATE -> Column {
+            Text(
+                text = "Health Connect 앱을 설치하거나 업데이트해야 합니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 6.dp),
+            )
+            TextButton(onClick = { openHealthConnectInStore(context) }) { Text("설치 · 업데이트") }
+        }
+
+        com.windowhyun.health.domain.model.HealthConnectAvailability.AVAILABLE -> Column {
+            SwitchRow(
+                title = "Health Connect 로 내보내기",
+                subtitle = healthConnectStatus(state),
+                checked = state.exporting,
+                onCheckedChange = { on ->
+                    if (!on) {
+                        viewModel.setExportEnabled(false)
+                    } else if (state.permissions.canWrite) {
+                        viewModel.setExportEnabled(true)
+                    } else {
+                        requestPermissions.launch(viewModel.permissionsToRequest)
+                    }
+                },
+            )
+            if (state.exporting) {
+                SwitchRow(
+                    title = "체중 가져오기",
+                    subtitle = "Health Connect 의 최근 체중을 러닝 칼로리 계산에 씁니다. 설정의 체중이 그 값으로 바뀝니다.",
+                    checked = state.weightImporting,
+                    onCheckedChange = { on ->
+                        if (!on) {
+                            viewModel.setImportWeight(false)
+                        } else if (state.permissions.canReadWeight) {
+                            viewModel.setImportWeight(true)
+                        } else {
+                            requestPermissions.launch(viewModel.permissionsToRequest)
+                            viewModel.setImportWeight(true)
+                        }
+                    },
+                )
+                TextButton(onClick = viewModel::syncNow, enabled = !state.syncing) {
+                    Text(if (state.syncing) "동기화 중..." else "지금 동기화")
+                }
+            }
+        }
+    }
+}
+
+/** 스위치 아래 한 줄: 지금 어떤 상태인지(권한 · 실패 · 마지막 동기화). */
+internal fun healthConnectStatus(state: HealthConnectUiState): String = when {
+    state.permissionDenied || state.needsPermission ->
+        "권한이 꺼져 있습니다. 켜면 허용 화면이 열립니다."
+    state.lastError != null -> "동기화하지 못했습니다: ${state.lastError}"
+    state.exporting && state.lastSyncAt > 0 -> "마지막 동기화 ${formatBackupTime(state.lastSyncAt)}"
+    state.exporting -> "끝난 러닝과 헬스 운동을 보냅니다."
+    else -> "끝난 러닝 · 헬스 운동을 다른 건강 앱과 나눕니다. 켜면 허용 화면이 열립니다."
+}
+
+private fun openHealthConnectInStore(context: android.content.Context) {
+    val packageName = "com.google.android.apps.healthdata"
+    val market = android.content.Intent(
+        android.content.Intent.ACTION_VIEW,
+        Uri.parse("market://details?id=$packageName"),
+    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    val web = android.content.Intent(
+        android.content.Intent.ACTION_VIEW,
+        Uri.parse("https://play.google.com/store/apps/details?id=$packageName"),
+    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(market) }.onFailure { runCatching { context.startActivity(web) } }
 }
 
 /**

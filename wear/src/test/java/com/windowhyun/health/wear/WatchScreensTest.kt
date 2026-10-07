@@ -12,6 +12,8 @@ import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
 import com.windowhyun.health.shared.WatchCommand
 import com.windowhyun.health.shared.WatchRunStatus
+import com.windowhyun.health.shared.WatchSetKind
+import com.windowhyun.health.shared.WorkoutSnapshot
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -62,6 +64,8 @@ class WatchScreensTest {
         var requestStop = 0
         var confirmStop = 0
         var cancelStop = 0
+        var completeSet = 0
+        var startRun = 0
     }
 
     private fun show(state: WatchUiState, taps: Taps = Taps(), shot: String? = null): Taps {
@@ -72,6 +76,8 @@ class WatchScreensTest {
                 onRequestStop = { taps.requestStop++ },
                 onConfirmStop = { taps.confirmStop++ },
                 onCancelStop = { taps.cancelStop++ },
+                onCompleteSet = { taps.completeSet++ },
+                onStartRun = { taps.startRun++ },
             )
         }
         compose.waitForIdle()
@@ -93,7 +99,7 @@ class WatchScreensTest {
     fun `idle tells the user what to do`() {
         show(WatchUiState(), shot = "watch_idle")
 
-        compose.onNodeWithText("폰에서 운동이나 러닝을 시작하면 여기에 나타나요.").assertIsDisplayed()
+        compose.onNodeWithText("폰에서 운동을 시작하면 여기에 나타나요.").assertIsDisplayed()
     }
 
     @Test
@@ -101,6 +107,83 @@ class WatchScreensTest {
         show(WatchUiState(run = run(WatchRunStatus.FINISHED)))
 
         compose.onNodeWithText("러닝이 끝났어요. 결과는 폰에서 확인하세요.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `idle can start a run`() {
+        val taps = show(WatchUiState())
+
+        compose.onNodeWithText("러닝 시작").performClick()
+
+        assertThat(taps.startRun).isEqualTo(1)
+    }
+
+    @Test
+    fun `after asking for a run the watch says it asked`() {
+        show(WatchUiState(startRequestedAtMillis = 1_000, nowMillis = 2_000))
+
+        compose.onNodeWithText("폰에 요청했어요. 폰 알림에서 '러닝 시작'을 눌러야 할 수 있어요.").assertIsDisplayed()
+    }
+
+    // ----- 헬스 세트 -----
+
+    private fun workout(
+        reps: Int = 8,
+        kind: WatchSetKind = WatchSetKind.WEIGHT_REPS,
+        seconds: Int = 0,
+        allDone: Boolean = false,
+    ) = WorkoutSnapshot(
+        active = true, setId = 4, exerciseName = "벤치프레스", setNumber = 2, setCount = 4,
+        weightKg = 62.5, reps = reps, durationSeconds = seconds, kind = kind, allDone = allDone, sentAtMillis = sentAt,
+    )
+
+    @Test
+    fun `the set screen shows the exercise and the values`() {
+        show(WatchUiState(workout = workout(), nowMillis = sentAt), shot = "watch_workout")
+
+        compose.onNodeWithText("벤치프레스 · 2/4세트").assertIsDisplayed()
+        compose.onNodeWithText("62.5kg × 8").assertIsDisplayed()
+        compose.onNodeWithText("완료").assertIsDisplayed()
+    }
+
+    @Test
+    fun `done completes the set`() {
+        val taps = show(WatchUiState(workout = workout(), nowMillis = sentAt))
+
+        compose.onNodeWithText("완료").performClick()
+
+        assertThat(taps.completeSet).isEqualTo(1)
+    }
+
+    @Test
+    fun `a timed set shows the time`() {
+        show(WatchUiState(workout = workout(kind = WatchSetKind.TIME, reps = 0, seconds = 45), nowMillis = sentAt))
+
+        compose.onNodeWithText("0:45").assertIsDisplayed()
+        compose.onNodeWithText("완료").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a set without reps asks for them on the phone`() {
+        show(WatchUiState(workout = workout(reps = 0), nowMillis = sentAt))
+
+        compose.onNodeWithText("폰에서 값을 입력해 주세요.").assertIsDisplayed()
+        compose.onNodeWithText("완료").assertDoesNotExist()
+    }
+
+    @Test
+    fun `when every set is done the watch points to the phone`() {
+        show(WatchUiState(workout = workout(allDone = true), nowMillis = sentAt))
+
+        compose.onNodeWithText("모든 세트 완료").assertIsDisplayed()
+        compose.onNodeWithText("운동 종료는 폰에서 해 주세요.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a failed send is shown on the set screen`() {
+        show(WatchUiState(workout = workout(), nowMillis = sentAt, sendFailed = true))
+
+        compose.onNodeWithText("폰에 보내지 못했어요").assertIsDisplayed()
     }
 
     // ----- 러닝 -----

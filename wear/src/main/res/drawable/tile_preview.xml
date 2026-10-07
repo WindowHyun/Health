@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 타일 미리보기: 어두운 바탕에 라임 제목과 두 줄의 값. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path
+        android:fillColor="#121212"
+        android:pathData="M0,0h192v192h-192z" />
+    <path
+        android:fillColor="#C6F432"
+        android:pathData="M72,62h48v8h-48z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M56,84h80v18h-80z" />
+    <path
+        android:fillColor="#9B9B9B"
+        android:pathData="M68,114h56v8h-56z" />
+</vector>

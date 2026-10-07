@@ -41,6 +41,10 @@ class SettingsRepositoryImpl @Inject constructor(
         val WEEKLY_WORKOUT_GOAL = intPreferencesKey("weekly_workout_goal")
         val WEEKLY_RUN_GOAL_METERS = intPreferencesKey("weekly_run_goal_meters")
         val AUTO_PAUSE_RUN = booleanPreferencesKey("auto_pause_run")
+        val HEALTH_CONNECT_ENABLED = booleanPreferencesKey("health_connect_enabled")
+        val HEALTH_CONNECT_IMPORT_WEIGHT = booleanPreferencesKey("health_connect_import_weight")
+        val HEALTH_CONNECT_LAST_SYNC_AT = longPreferencesKey("health_connect_last_sync_at")
+        val HEALTH_CONNECT_LAST_ERROR = stringPreferencesKey("health_connect_last_error")
         val AUTO_BACKUP_FOLDER = stringPreferencesKey("auto_backup_folder")
         val AUTO_BACKUP_DAYS = intPreferencesKey("auto_backup_every_days")
         val LAST_AUTO_BACKUP_AT = longPreferencesKey("last_auto_backup_at")
@@ -73,6 +77,10 @@ class SettingsRepositoryImpl @Inject constructor(
             weeklyWorkoutGoal = prefs[Keys.WEEKLY_WORKOUT_GOAL] ?: defaults.weeklyWorkoutGoal,
             weeklyRunGoalMeters = prefs[Keys.WEEKLY_RUN_GOAL_METERS] ?: defaults.weeklyRunGoalMeters,
             autoPauseRun = prefs[Keys.AUTO_PAUSE_RUN] ?: defaults.autoPauseRun,
+            healthConnectEnabled = prefs[Keys.HEALTH_CONNECT_ENABLED] ?: defaults.healthConnectEnabled,
+            healthConnectImportWeight = prefs[Keys.HEALTH_CONNECT_IMPORT_WEIGHT] ?: defaults.healthConnectImportWeight,
+            healthConnectLastSyncAt = prefs[Keys.HEALTH_CONNECT_LAST_SYNC_AT] ?: defaults.healthConnectLastSyncAt,
+            healthConnectLastError = prefs[Keys.HEALTH_CONNECT_LAST_ERROR],
             autoBackupFolderUri = prefs[Keys.AUTO_BACKUP_FOLDER],
             autoBackupEveryDays = prefs[Keys.AUTO_BACKUP_DAYS] ?: defaults.autoBackupEveryDays,
             lastAutoBackupAt = prefs[Keys.LAST_AUTO_BACKUP_AT] ?: defaults.lastAutoBackupAt,
@@ -110,6 +118,10 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.WEEKLY_WORKOUT_GOAL] = updated.weeklyWorkoutGoal
             prefs[Keys.WEEKLY_RUN_GOAL_METERS] = updated.weeklyRunGoalMeters
             prefs[Keys.AUTO_PAUSE_RUN] = updated.autoPauseRun
+            prefs[Keys.HEALTH_CONNECT_ENABLED] = updated.healthConnectEnabled
+            prefs[Keys.HEALTH_CONNECT_IMPORT_WEIGHT] = updated.healthConnectImportWeight
+            prefs[Keys.HEALTH_CONNECT_LAST_SYNC_AT] = updated.healthConnectLastSyncAt
+            prefs.putOrRemove(Keys.HEALTH_CONNECT_LAST_ERROR, updated.healthConnectLastError)
             prefs.putOrRemove(Keys.AUTO_BACKUP_FOLDER, updated.autoBackupFolderUri)
             prefs[Keys.AUTO_BACKUP_DAYS] = updated.autoBackupEveryDays
             prefs[Keys.LAST_AUTO_BACKUP_AT] = updated.lastAutoBackupAt

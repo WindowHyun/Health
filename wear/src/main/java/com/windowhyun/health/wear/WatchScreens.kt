@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -14,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.CompactChip
@@ -41,12 +43,15 @@ fun WatchApp(
     onRequestStop: () -> Unit,
     onConfirmStop: () -> Unit,
     onCancelStop: () -> Unit,
+    onCompleteSet: () -> Unit = {},
+    onStartRun: () -> Unit = {},
 ) {
     MaterialTheme {
         when (state.screen) {
             WatchScreen.REST -> RestScreen(state, onCommand)
             WatchScreen.RUN -> RunScreen(state, onCommand, onRequestStop, onConfirmStop, onCancelStop)
-            WatchScreen.IDLE -> IdleScreen(state)
+            WatchScreen.WORKOUT -> WorkoutScreen(state, onCompleteSet)
+            WatchScreen.IDLE -> IdleScreen(state, onStartRun)
         }
     }
 }
@@ -64,7 +69,7 @@ private fun StatusLine(text: String, warning: Boolean) {
 }
 
 @Composable
-private fun IdleScreen(state: WatchUiState) {
+private fun IdleScreen(state: WatchUiState, onStartRun: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -74,18 +79,92 @@ private fun IdleScreen(state: WatchUiState) {
     ) {
         Text(text = "Health", color = Lime, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
         Text(
-            text = "폰에서 운동이나 러닝을 시작하면 여기에 나타나요.",
+            text = when {
+                state.sendFailed -> "폰에 보내지 못했어요"
+                state.startPending -> "폰에 요청했어요. 폰 알림에서 '러닝 시작'을 눌러야 할 수 있어요."
+                state.run.status == WatchRunStatus.FINISHED -> "러닝이 끝났어요. 결과는 폰에서 확인하세요."
+                else -> "폰에서 운동을 시작하면 여기에 나타나요."
+            },
             textAlign = TextAlign.Center,
-            color = Muted,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(top = 6.dp),
+            color = if (state.sendFailed) Danger else Muted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
         )
-        if (state.run.status == WatchRunStatus.FINISHED) {
+        Chip(
+            onClick = onStartRun,
+            label = {
+                Text(
+                    text = "러닝 시작",
+                    fontWeight = FontWeight.Bold,
+                    color = OnLime,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            colors = ChipDefaults.primaryChipColors(backgroundColor = Lime),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
+ * 헬스 중 지금 할 세트. 이름과 값을 크게 보여 주고, 끝내면 "완료" 한 번이다.
+ * 값이 비어 있으면(횟수 0) 폰에서도 완료할 수 없어서 버튼 대신 안내만 둔다.
+ */
+@Composable
+private fun WorkoutScreen(state: WatchUiState, onCompleteSet: () -> Unit) {
+    val workout = state.workout
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (workout.allDone) {
+            Text(text = "모든 세트 완료", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Lime)
             Text(
-                text = "러닝이 끝났어요. 결과는 폰에서 확인하세요.",
+                text = "운동 종료는 폰에서 해 주세요.",
+                color = Muted,
+                fontSize = 12.sp,
                 textAlign = TextAlign.Center,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 10.dp),
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            return@Column
+        }
+        StatusLine(
+            text = if (state.sendFailed) "폰에 보내지 못했어요" else "${workout.exerciseName} · ${workout.setNumber}/${workout.setCount}세트",
+            warning = state.sendFailed,
+        )
+        Text(
+            text = WatchFormat.setValue(workout),
+            fontSize = 28.sp,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+        if (workout.canComplete) {
+            Chip(
+                onClick = onCompleteSet,
+                label = {
+                    Text(
+                        text = "완료",
+                        fontWeight = FontWeight.Bold,
+                        color = OnLime,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
+                colors = ChipDefaults.primaryChipColors(backgroundColor = Lime),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            Text(
+                text = "폰에서 값을 입력해 주세요.",
+                color = Muted,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
             )
         }
     }

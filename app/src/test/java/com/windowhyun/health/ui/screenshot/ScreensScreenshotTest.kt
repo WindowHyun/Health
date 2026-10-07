@@ -36,6 +36,10 @@ import com.windowhyun.health.ui.session.WorkoutSummaryScreen
 import com.windowhyun.health.ui.session.WorkoutSummaryViewModel
 import com.windowhyun.health.ui.settings.BackupViewModel
 import com.windowhyun.health.ui.settings.SettingsScreen
+import com.windowhyun.health.data.healthconnect.HealthConnectSyncer
+import com.windowhyun.health.domain.model.HealthConnectLedger
+import com.windowhyun.health.domain.model.UnavailableHealthConnect
+import com.windowhyun.health.ui.settings.HealthConnectViewModel
 import com.windowhyun.health.ui.settings.SettingsViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -188,7 +192,24 @@ class ScreensScreenshotTest {
             fixture.settings,
             AutoBackupManager(backupRepository, fixture.settings, FakeBackupFolder()),
         )
-        show(dark) { SettingsScreen(onBack = {}, viewModel = viewModel, backupViewModel = backup) }
+        val healthConnect = HealthConnectViewModel(
+            UnavailableHealthConnect,
+            fixture.settings,
+            HealthConnectSyncer(
+                UnavailableHealthConnect,
+                object : HealthConnectLedger {
+                    override suspend fun read() = emptyMap<String, String>()
+                    override suspend fun write(entries: Map<String, String>) = Unit
+                },
+                fixture.settings,
+                fixture.runs,
+                fixture.workouts,
+                CoroutineScope(Dispatchers.IO),
+            ),
+        )
+        show(dark) {
+            SettingsScreen(onBack = {}, viewModel = viewModel, backupViewModel = backup, healthConnectViewModel = healthConnect)
+        }
         if (autoBackup) {
             // 데이터 구역은 화면 아래쪽이라 그 자리까지 스크롤한 뒤 찍는다.
             compose.onNode(hasScrollAction()).performScrollToNode(hasText("자동 백업 · 켜짐"))

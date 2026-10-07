@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
 import com.windowhyun.health.core.model.ExerciseTrackingType
+import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.notification.RestTimerNotifier
+import com.windowhyun.health.domain.usecase.CurrentSetFinder
 import com.windowhyun.health.domain.usecase.SetCarryOver
 import com.windowhyun.health.domain.usecase.SupersetGroups
 import com.windowhyun.health.domain.model.AppSettings
@@ -20,6 +22,8 @@ import com.windowhyun.health.domain.repository.WorkoutRepository
 import com.windowhyun.health.ui.gym.ExerciseManager
 import com.windowhyun.health.ui.gym.RepositoryExerciseManager
 import com.windowhyun.health.shared.WatchCommand
+import com.windowhyun.health.shared.WorkoutSnapshot
+import com.windowhyun.health.wear.toSnapshot
 import com.windowhyun.health.ui.navigation.Routes
 import com.windowhyun.health.wear.WatchLink
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +36,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -61,6 +68,7 @@ sealed interface WorkoutSessionEvent {
  * 모든 변경은 즉시 DB 에 반영된다. 화면은 DB Flow 만 보고 그린다.
  */
 @HiltViewModel
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 class WorkoutSessionViewModel internal constructor(
     private val workoutRepository: WorkoutRepository,
     private val exerciseRepository: ExerciseRepository,
@@ -134,6 +142,42 @@ class WorkoutSessionViewModel internal constructor(
         loadLastPerformance()
         startElapsedTicker()
         listenToWatch()
+        publishWorkoutToWatch()
+    }
+
+    /** 지금 할 세트를 시계에 알린다. 세트를 끝내거나 값이 바뀔 때마다 새로 보낸다. */
+    private fun publishWorkoutToWatch() {
+        viewModelScope.launch {
+            combine(
+                workoutRepository.observeWorkoutDetail(workoutId),
+                settingsRepository.settings.map { it.weightUnit == WeightUnit.LB }.distinctUntilChanged(),
+            ) { workout, useLb -> workout?.toSnapshot(useLb) ?: WorkoutSnapshot.None }
+                // 무게를 한 글자씩 칠 때마다 시계로 보내지 않는다. 멈춘 값만 보낸다.
+                .debounce(WATCH_PUBLISH_DEBOUNCE_MILLIS)
+                .collect { snapshot ->
+                    if (snapshot.active) watchLink.publishWorkout(snapshot) else watchLink.clearWorkout()
+                }
+        }
+        viewModelScope.launch {
+            watchLink.setCompletions.collect { setId -> completeSetFromWatch(setId) }
+        }
+    }
+
+    /**
+     * 시계에서 누른 세트 완료. 폰에서 완료 버튼을 누른 것과 똑같이 처리해, 쉬는 시간도 그대로 시작된다.
+     * 시계가 보고 있던 세트가 지금 할 세트가 아니면(그사이 폰에서 끝냈다) 아무것도 하지 않는다.
+     */
+    private suspend fun completeSetFromWatch(setId: Long) {
+        val workout = workoutRepository.getWorkout(workoutId) ?: return
+        val current = CurrentSetFinder.find(workout.exercises) ?: return
+        val set = current.set
+        if (set.id != setId) return
+        val hasValue = when (current.record.exercise.trackingType) {
+            ExerciseTrackingType.TIME -> set.durationSeconds > 0
+            else -> set.reps > 0
+        }
+        if (!hasValue) return
+        toggleSetCompleted(set, set.weightKg, set.reps, set.durationSeconds, current.record.restSeconds)
     }
 
     /** 시계에서 누른 휴식 타이머 버튼을 폰 화면에서 누른 것과 똑같이 처리한다. */
@@ -444,13 +488,17 @@ class WorkoutSessionViewModel internal constructor(
         super.onCleared()
         restTimerJob?.cancel()
         tickerJob?.cancel()
-        // 화면이 사라지면 타이머도 멈추므로 시계에 남은 휴식 화면도 치운다.
+        // 화면이 사라지면 타이머도 멈추므로 시계에 남은 휴식 화면과 세트도 치운다.
         watchLink.clearRest()
+        watchLink.clearWorkout()
     }
 
     private companion object {
         const val REST_TICK_MILLIS = 250L
         const val REST_AFTERGLOW_MILLIS = 2_000L
+
+        /** 세트 값이 이만큼 가만히 있어야 시계로 보낸다. */
+        const val WATCH_PUBLISH_DEBOUNCE_MILLIS = 400L
 
         /** 시계의 +15초 / -15초 버튼이 더하고 빼는 만큼. */
         const val REST_WATCH_STEP_SECONDS = 15

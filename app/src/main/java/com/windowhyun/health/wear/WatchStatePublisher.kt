@@ -9,12 +9,14 @@ import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
 import com.windowhyun.health.shared.WearCodec
 import com.windowhyun.health.shared.WearProtocol
+import com.windowhyun.health.shared.WorkoutSnapshot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
@@ -71,6 +73,7 @@ class WatchStatePublisher internal constructor(
     private val scope: CoroutineScope,
     private val clock: () -> Long,
     private val heartbeat: Flow<Unit>,
+    private val workout: Flow<WorkoutSnapshot> = emptyFlow(),
 ) {
     @Inject
     constructor(
@@ -87,6 +90,7 @@ class WatchStatePublisher internal constructor(
         scope = scope,
         clock = System::currentTimeMillis,
         heartbeat = ticker(HEARTBEAT_CHECK_MILLIS),
+        workout = link.workout,
     )
 
     private var started = false
@@ -96,6 +100,7 @@ class WatchStatePublisher internal constructor(
         started = true
         scope.launch { publishRun() }
         scope.launch { publishRest() }
+        scope.launch { publishWorkout() }
     }
 
     private suspend fun publishRun() {
@@ -116,6 +121,25 @@ class WatchStatePublisher internal constructor(
             // 보낸 시각만 다른 것은 같은 상태다.
             if (last?.copy(sentAtMillis = 0) == next.copy(sentAtMillis = 0)) return@collect
             if (send(WearProtocol.PATH_REST_STATE, WearCodec.encode(next))) last = next
+        }
+    }
+
+    /**
+     * 지금 할 세트를 올린다. 값이 바뀔 때 보내고, 진행 중이면 가만히 있어도 주기적으로 다시 보낸다.
+     * 시계는 이 소식이 한동안 끊기면(폰 앱이 죽었다) 지나간 세트를 치우기 때문이다.
+     */
+    private suspend fun publishWorkout() {
+        var last: WorkoutSnapshot? = null
+        var lastSentAt = 0L
+        combine(workout, heartbeat.onStart { emit(Unit) }) { snapshot, _ -> snapshot }.collect { next ->
+            val now = clock()
+            val changed = last?.copy(sentAtMillis = 0) != next.copy(sentAtMillis = 0)
+            val heartbeatDue = next.active && now - lastSentAt >= WearProtocol.HEARTBEAT_MILLIS
+            if (!changed && !heartbeatDue) return@collect
+            if (send(WearProtocol.PATH_WORKOUT_STATE, WearCodec.encode(next.copy(sentAtMillis = now)))) {
+                last = next
+                lastSentAt = now
+            }
         }
     }
 

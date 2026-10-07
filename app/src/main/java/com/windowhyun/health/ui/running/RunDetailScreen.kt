@@ -119,6 +119,10 @@ fun RunDetailScreen(
                 RunStatGrid(run = run, distanceUnit = state.settings.distanceUnit)
             }
 
+            state.heartRate?.let { heartRate ->
+                item { HeartRateLine(heartRate) }
+            }
+
             item {
                 SectionLabel("이동 경로")
             }
@@ -208,4 +212,13 @@ fun RunDetailScreen(
             onDismiss = { showDeleteDialog = false },
         )
     }
+}
+
+/** Health Connect 에서 가져온 심박. 우리 시계 앱이 재는 것이 아니라 시계 · 다른 앱이 남긴 기록이다. */
+@Composable
+private fun HeartRateLine(heartRate: com.windowhyun.health.domain.model.HeartRateSummary) {
+    Text(
+        text = "심박 평균 ${heartRate.averageBpm} · 최대 ${heartRate.maxBpm} bpm",
+        style = MaterialTheme.typography.bodyMedium,
+    )
 }

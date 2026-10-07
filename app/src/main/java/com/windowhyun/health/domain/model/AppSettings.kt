@@ -32,6 +32,15 @@ data class AppSettings(
     val weeklyRunGoalMeters: Int = 0,
     /** 멈추면 러닝을 자동으로 일시정지하고, 다시 움직이면 이어 간다. */
     val autoPauseRun: Boolean = true,
+    // Health Connect. 허용한 권한이 기기마다 달라서 백업 파일에는 넣지 않는다.
+    /** 끝난 러닝 · 헬스 운동을 Health Connect 로 내보낸다. */
+    val healthConnectEnabled: Boolean = false,
+    /** Health Connect 의 최근 체중을 가져와 러닝 칼로리 계산에 쓴다. */
+    val healthConnectImportWeight: Boolean = false,
+    /** 마지막으로 맞추는 데 성공한 시각(epoch ms). 0 이면 아직 없다. */
+    val healthConnectLastSyncAt: Long = 0,
+    /** 마지막 시도가 실패했다면 그 이유. 성공하면 지운다. */
+    val healthConnectLastError: String? = null,
     // 자동 백업. 기기마다 다른 값이라 백업 파일에는 넣지 않는다.
     /** 자동 백업을 저장할 폴더(SAF 트리 URI). null 이면 자동 백업이 꺼져 있다. */
     val autoBackupFolderUri: String? = null,

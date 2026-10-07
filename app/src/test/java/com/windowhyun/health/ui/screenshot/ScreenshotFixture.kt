@@ -37,7 +37,7 @@ import java.time.LocalDate
 class ScreenshotFixture(context: Context) {
     val db: HealthDatabase = Room.inMemoryDatabaseBuilder(context, HealthDatabase::class.java)
         .allowMainThreadQueries()
-        .build()
+        .build().also { it.openHelper.writableDatabase } // 먼저 열어 둔다: 닫을 때 여는 중이면 서로 기다려 멈춘다
     val workouts = WorkoutRepositoryImpl(db.workoutDao(), db.routineDao(), db.exerciseDao(), db.personalRecordDao())
     val routines = RoutineRepositoryImpl(db.routineDao())
     val exercises = ExerciseRepositoryImpl(db.exerciseDao())

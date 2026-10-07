@@ -31,11 +31,24 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+        Health Connect. 끝난 러닝 · 헬스 운동을 내보내고(쓰기), 최근 체중과 러닝 시간대 심박을 읽는다(읽기).
+        사용자가 설정에서 연동을 켜고 허용했을 때만 쓰인다.
+    -->
+    <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
+    <uses-permission android:name="android.permission.health.WRITE_DISTANCE" />
+    <uses-permission android:name="android.permission.health.WRITE_STEPS" />
+    <uses-permission android:name="android.permission.health.WRITE_TOTAL_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+
     <!-- 러닝 음성 안내: Android 11+ 에서 음성 엔진(TextToSpeech)을 찾으려면 선언이 필요하다 -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- Health Connect 앱이 설치돼 있는지 보려면 필요하다 -->
+        <package android:name="com.google.android.apps.healthdata" />
     </queries>
 
     <!-- GPS 가 없는 기기에도 설치는 되도록(헬스 기능만 사용) -->
@@ -81,6 +94,27 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Health Connect 가 "이 앱이 왜 이 권한을 쓰는가"를 보여 줄 때 여는 화면(안드로이드 13 이하). -->
+        <activity
+            android:name=".HealthPermissionsRationaleActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+
+        <!-- 안드로이드 14 이상: 시스템 설정의 "권한 사용 내역"에서 같은 화면을 연다. -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity=".HealthPermissionsRationaleActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- 휴식 타이머 알람이 울리면 알림 · 진동을 낸다. -->
         <receiver

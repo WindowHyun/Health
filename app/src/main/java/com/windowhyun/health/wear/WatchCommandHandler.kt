@@ -5,6 +5,7 @@ import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.service.RunControl
 import com.windowhyun.health.service.RunServiceController
 import com.windowhyun.health.shared.WatchCommand
+import com.windowhyun.health.shared.WearCodec
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,16 +20,23 @@ class WatchCommandHandler internal constructor(
     private val runControl: RunControl,
     private val runStatus: () -> RunStatus,
     private val link: WatchLink,
+    private val runStarter: RunStarter = RunStarter.None,
 ) {
     @Inject
     constructor(
         runServiceController: RunServiceController,
         runTracker: RunTracker,
         link: WatchLink,
-    ) : this(runServiceController, { runTracker.state.value.status }, link)
+        runStarter: WatchRunStarter,
+    ) : this(runServiceController, { runTracker.state.value.status }, link, runStarter)
 
-    /** 명령을 실행했으면 true, 지금 상태에 맞지 않아 무시했으면 false. */
-    fun handle(command: WatchCommand): Boolean = when (command) {
+    /**
+     * 명령을 실행했으면 true, 지금 상태에 맞지 않아 무시했으면 false.
+     * [payload] 는 명령이 싣고 온 내용이다(세트 완료의 세트 번호).
+     */
+    fun handle(command: WatchCommand, payload: ByteArray? = null): Boolean = when (command) {
+        WatchCommand.RUN_START -> runStatus() == RunStatus.IDLE && runStarter.requestStart()
+        WatchCommand.SET_COMPLETE -> WearCodec.decodeSetId(payload)?.let { link.emitSetCompletion(it) } ?: false
         WatchCommand.RUN_PAUSE -> runIf(runStatus() == RunStatus.TRACKING) { runControl.pause() }
         WatchCommand.RUN_RESUME -> runIf(runStatus() == RunStatus.PAUSED) { runControl.resume() }
         WatchCommand.RUN_STOP -> runIf(runStatus().let { it == RunStatus.TRACKING || it == RunStatus.PAUSED }) {
@@ -41,7 +49,7 @@ class WatchCommandHandler internal constructor(
         -> link.emitRestCommand(command)
     }
 
-    private inline fun runIf(allowed: Boolean, action: () -> Unit): Boolean {
+    private inline fun runIf(allowed: Boolean, action: () -> Any?): Boolean {
         if (!allowed) return false
         action()
         return true

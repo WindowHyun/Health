@@ -28,6 +28,7 @@ import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.repository.LocationTracker
 import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.domain.repository.StepCounter
+import com.windowhyun.health.wear.WatchRunStarter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -100,6 +101,8 @@ class RunTrackingService : LifecycleService() {
 
     private fun startTracking(goal: RunGoal, interval: RunInterval?) {
         if (locationJob != null) return
+        // 시계에서 부탁해 둔 "러닝 시작" 알림이 남아 있으면 치운다.
+        NotificationManagerCompat.from(this).cancel(WatchRunStarter.NOTIFICATION_ID)
 
         startForegroundWithNotification(buildNotification(distanceText = "0.00km", durationText = "0:00"))
 

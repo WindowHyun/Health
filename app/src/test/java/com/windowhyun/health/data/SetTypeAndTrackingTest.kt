@@ -38,7 +38,7 @@ class SetTypeAndTrackingTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         db = Room.inMemoryDatabaseBuilder(context, HealthDatabase::class.java)
             .allowMainThreadQueries()
-            .build()
+            .build().also { it.openHelper.writableDatabase } // 먼저 열어 둔다: 닫을 때 여는 중이면 서로 기다려 멈춘다
         exercises = ExerciseRepositoryImpl(db.exerciseDao())
         workouts = WorkoutRepositoryImpl(
             workoutDao = db.workoutDao(),
@@ -186,7 +186,7 @@ class SetTypeAndTrackingTest {
             HealthDatabase::class.java,
         ).addCallback(com.windowhyun.health.data.seed.ExerciseSeedCallback)
             .allowMainThreadQueries()
-            .build()
+            .build().also { it.openHelper.writableDatabase } // 먼저 열어 둔다: 닫을 때 여는 중이면 서로 기다려 멈춘다
         try {
             val dao = seeded.exerciseDao()
             assertThat(dao.getByName("플랭크")!!.trackingType).isEqualTo(ExerciseTrackingType.TIME)
