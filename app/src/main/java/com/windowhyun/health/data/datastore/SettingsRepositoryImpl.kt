@@ -44,7 +44,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val AUTO_PAUSE_RUN = booleanPreferencesKey("auto_pause_run")
         val PIP_SPACE_ENABLED = booleanPreferencesKey("pip_space_enabled")
         val PIP_SPACE_POSITION = stringPreferencesKey("pip_space_position")
-        val PIP_SPACE_HEIGHT_DP = intPreferencesKey("pip_space_height_dp")
+        val PIP_SPACE_WIDTH_PERCENT = intPreferencesKey("pip_space_width_percent")
         val HEALTH_CONNECT_ENABLED = booleanPreferencesKey("health_connect_enabled")
         val HEALTH_CONNECT_IMPORT_WEIGHT = booleanPreferencesKey("health_connect_import_weight")
         val HEALTH_CONNECT_LAST_SYNC_AT = longPreferencesKey("health_connect_last_sync_at")
@@ -85,7 +85,7 @@ class SettingsRepositoryImpl @Inject constructor(
             pipSpacePosition = prefs[Keys.PIP_SPACE_POSITION]?.let { name ->
                 runCatching { PipSpacePosition.valueOf(name) }.getOrNull()
             } ?: defaults.pipSpacePosition,
-            pipSpaceHeightDp = prefs[Keys.PIP_SPACE_HEIGHT_DP] ?: defaults.pipSpaceHeightDp,
+            pipSpaceWidthPercent = prefs[Keys.PIP_SPACE_WIDTH_PERCENT] ?: defaults.pipSpaceWidthPercent,
             healthConnectEnabled = prefs[Keys.HEALTH_CONNECT_ENABLED] ?: defaults.healthConnectEnabled,
             healthConnectImportWeight = prefs[Keys.HEALTH_CONNECT_IMPORT_WEIGHT] ?: defaults.healthConnectImportWeight,
             healthConnectLastSyncAt = prefs[Keys.HEALTH_CONNECT_LAST_SYNC_AT] ?: defaults.healthConnectLastSyncAt,
@@ -129,7 +129,7 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.AUTO_PAUSE_RUN] = updated.autoPauseRun
             prefs[Keys.PIP_SPACE_ENABLED] = updated.pipSpaceEnabled
             prefs[Keys.PIP_SPACE_POSITION] = updated.pipSpacePosition.name
-            prefs[Keys.PIP_SPACE_HEIGHT_DP] = updated.pipSpaceHeightDp
+            prefs[Keys.PIP_SPACE_WIDTH_PERCENT] = updated.pipSpaceWidthPercent
             prefs[Keys.HEALTH_CONNECT_ENABLED] = updated.healthConnectEnabled
             prefs[Keys.HEALTH_CONNECT_IMPORT_WEIGHT] = updated.healthConnectImportWeight
             prefs[Keys.HEALTH_CONNECT_LAST_SYNC_AT] = updated.healthConnectLastSyncAt

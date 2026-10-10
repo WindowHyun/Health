@@ -62,7 +62,7 @@ class SettingsViewModel @Inject constructor(
 
     fun setPipSpacePosition(position: PipSpacePosition) = update { it.copy(pipSpacePosition = position) }
 
-    fun setPipSpaceHeightDp(heightDp: Int) = update { it.copy(pipSpaceHeightDp = PipSpace.clampHeight(heightDp)) }
+    fun setPipSpaceWidthPercent(percent: Int) = update { it.copy(pipSpaceWidthPercent = PipSpace.clampWidth(percent)) }
 
     fun setAutoPauseRun(enabled: Boolean) = update { it.copy(autoPauseRun = enabled) }
 

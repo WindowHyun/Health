@@ -94,24 +94,36 @@ class PipSpaceTest {
 
         assertThat(pip.enabled).isFalse()
         assertThat(pip.position).isEqualTo(PipSpacePosition.BOTTOM)
-        assertThat(pip.heightDp).isEqualTo(PipSpace.DEFAULT_HEIGHT_DP)
+        assertThat(pip.widthPercent).isEqualTo(PipSpace.DEFAULT_WIDTH_PERCENT)
     }
 
     @Test
-    fun `the height stays in a usable range`() {
-        assertThat(PipSpace.clampHeight(5)).isEqualTo(PipSpace.MIN_HEIGHT_DP)
-        assertThat(PipSpace.clampHeight(130)).isEqualTo(130)
-        assertThat(PipSpace.clampHeight(9_999)).isEqualTo(PipSpace.MAX_HEIGHT_DP)
+    fun `the size stays in a usable range`() {
+        assertThat(PipSpace.clampWidth(5)).isEqualTo(PipSpace.MIN_WIDTH_PERCENT)
+        assertThat(PipSpace.clampWidth(65)).isEqualTo(65)
+        assertThat(PipSpace.clampWidth(9_999)).isEqualTo(PipSpace.MAX_WIDTH_PERCENT)
         // 미리 정해 둔 크기는 모두 범위 안이고 작은 것부터 순서대로다.
         assertThat(PipSpace.PRESETS.map { it.second }).isInOrder()
-        PipSpace.PRESETS.forEach { (_, dp) -> assertThat(PipSpace.clampHeight(dp)).isEqualTo(dp) }
+        PipSpace.PRESETS.forEach { (_, percent) -> assertThat(PipSpace.clampWidth(percent)).isEqualTo(percent) }
+    }
+
+    /** 16:9 창의 가로가 화면의 90% 라면 세로는 그 9/16 이고, 가장자리 여백이 더해진다. */
+    @Test
+    fun `the height follows the width of the pip window`() {
+        val full = PipSpace(widthPercent = 90).heightDp(screenWidthDp = 400f)
+
+        assertThat(full).isWithin(0.01f).of(400f * 0.9f * 9f / 16f + PipSpace.MARGIN_DP)
+        // 같은 비율이면 화면이 좁은 폰에서는 더 작게 비운다.
+        assertThat(PipSpace(widthPercent = 90).heightDp(320f)).isLessThan(full)
+        // 가로가 작은 PiP 는 더 적게 비운다.
+        assertThat(PipSpace(widthPercent = 40).heightDp(400f)).isLessThan(full)
     }
 
     @Test
     fun `a stored value outside the range is brought back in`() = runBlocking<Unit> {
-        settings.update { it.copy(pipSpaceEnabled = true, pipSpaceHeightDp = 5) }
+        settings.update { it.copy(pipSpaceEnabled = true, pipSpaceWidthPercent = 5) }
 
-        assertThat(settings.current().pipSpace.heightDp).isEqualTo(PipSpace.MIN_HEIGHT_DP)
+        assertThat(settings.current().pipSpace.widthPercent).isEqualTo(PipSpace.MIN_WIDTH_PERCENT)
         assertThat(settings.current().pipSpace.enabled).isTrue()
     }
 
@@ -120,20 +132,20 @@ class PipSpaceTest {
         assertThat(settings.current().pipSpace).isEqualTo(PipSpace())
 
         settings.update {
-            it.copy(pipSpaceEnabled = true, pipSpacePosition = PipSpacePosition.TOP, pipSpaceHeightDp = 180)
+            it.copy(pipSpaceEnabled = true, pipSpacePosition = PipSpacePosition.TOP, pipSpaceWidthPercent = 90)
         }
 
-        assertThat(settings.current().pipSpace).isEqualTo(PipSpace(true, PipSpacePosition.TOP, 180))
+        assertThat(settings.current().pipSpace).isEqualTo(PipSpace(true, PipSpacePosition.TOP, 90))
     }
 
     @Test
-    fun `the settings screen cannot set a nonsense height`() = runBlocking<Unit> {
+    fun `the settings screen cannot set a nonsense size`() = runBlocking<Unit> {
         val viewModel = SettingsViewModel(settings)
 
-        viewModel.setPipSpaceHeightDp(10_000)
-        awaitSetting { it.pipSpaceHeightDp == PipSpace.MAX_HEIGHT_DP }
-        viewModel.setPipSpaceHeightDp(-5)
-        awaitSetting { it.pipSpaceHeightDp == PipSpace.MIN_HEIGHT_DP }
+        viewModel.setPipSpaceWidthPercent(10_000)
+        awaitSetting { it.pipSpaceWidthPercent == PipSpace.MAX_WIDTH_PERCENT }
+        viewModel.setPipSpaceWidthPercent(-5)
+        awaitSetting { it.pipSpaceWidthPercent == PipSpace.MIN_WIDTH_PERCENT }
         viewModel.setPipSpacePosition(PipSpacePosition.TOP)
         awaitSetting { it.pipSpacePosition == PipSpacePosition.TOP }
         viewModel.setPipSpaceEnabled(true)
@@ -163,16 +175,16 @@ class PipSpaceTest {
         val runs = RunRepositoryImpl(db.runDao())
         val runId = runs.startRun(RunGoalType.FREE, 0.0)
         runs.finishRun(runId, System.currentTimeMillis() + 5_000, 5_000.0, 1_500, 300.0, 280.0, 300, 4_000)
-        settings.update { it.copy(pipSpaceEnabled = true, pipSpaceHeightDp = 200, weeklyWorkoutGoal = 3) }
+        settings.update { it.copy(pipSpaceEnabled = true, pipSpaceWidthPercent = 90, weeklyWorkoutGoal = 3) }
         val bytes = ByteArrayOutputStream().also { backup.exportBackup(it) }.toByteArray()
 
-        settings.update { it.copy(pipSpaceEnabled = false, pipSpaceHeightDp = 90, weeklyWorkoutGoal = 0) }
+        settings.update { it.copy(pipSpaceEnabled = false, pipSpaceWidthPercent = 50, weeklyWorkoutGoal = 0) }
         backup.restoreBackup(ByteArrayInputStream(bytes))
 
         val restored = settings.current()
         assertThat(restored.weeklyWorkoutGoal).isEqualTo(3)
         assertThat(restored.pipSpaceEnabled).isFalse()
-        assertThat(restored.pipSpaceHeightDp).isEqualTo(90)
+        assertThat(restored.pipSpaceWidthPercent).isEqualTo(50)
     }
 
     // ----- 화면 배치 -----
@@ -220,9 +232,14 @@ class PipSpaceTest {
 
     private fun bounds(tag: String) = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot()
 
+    /** 이 테스트 화면의 너비(dp). 설정이 정한 % 로 비울 높이를 계산하는 데 쓴다. */
+    private val screenWidthDp = 400f
+
+    private fun expectedHeight(percent: Int) = PipSpace(widthPercent = percent).heightDp(screenWidthDp)
+
     @Test
     fun `off leaves the screen exactly as it was`() {
-        show(PipSpace(enabled = false, heightDp = 200))
+        show(PipSpace(enabled = false, widthPercent = 90))
 
         compose.onNodeWithTag(PIP_SPACE_TAG).assertDoesNotExistCompat()
         assertThat(bounds("content").height.value).isWithin(0.5f).of(800f)
@@ -230,11 +247,11 @@ class PipSpaceTest {
 
     @Test
     fun `at the bottom the blank space is the last thing and the app ends above it`() {
-        show(PipSpace(enabled = true, position = PipSpacePosition.BOTTOM, heightDp = 130))
+        show(PipSpace(enabled = true, position = PipSpacePosition.BOTTOM, widthPercent = 65))
 
         val band = bounds(PIP_SPACE_TAG)
         val content = bounds("content")
-        assertThat(band.height.value).isWithin(0.5f).of(130f)
+        assertThat(band.height.value).isWithin(0.5f).of(expectedHeight(65))
         assertThat(band.bottom.value).isWithin(0.5f).of(800f)
         assertThat(content.top.value).isWithin(0.5f).of(0f)
         assertThat(content.bottom.value).isWithin(0.5f).of(band.top.value)
@@ -242,51 +259,74 @@ class PipSpaceTest {
 
     @Test
     fun `at the top the blank space comes first and the app starts below it`() {
-        show(PipSpace(enabled = true, position = PipSpacePosition.TOP, heightDp = 130))
+        show(PipSpace(enabled = true, position = PipSpacePosition.TOP, widthPercent = 65))
 
         val band = bounds(PIP_SPACE_TAG)
         val content = bounds("content")
         assertThat(band.top.value).isWithin(0.5f).of(0f)
-        assertThat(band.height.value).isWithin(0.5f).of(130f)
+        assertThat(band.height.value).isWithin(0.5f).of(expectedHeight(65))
         assertThat(content.top.value).isWithin(0.5f).of(band.bottom.value)
         assertThat(content.bottom.value).isWithin(0.5f).of(800f)
     }
 
+    /** 사용자의 폰처럼 가로 90% 의 큰 PiP 가 위에 뜨는 경우: 화면 맨 위부터 PiP 아래까지 비워진다. */
     @Test
-    fun `the size follows the setting`() {
-        show(PipSpace(enabled = true, heightDp = 180))
+    fun `a big pip at the top is covered from the very top of the screen`() {
+        show(PipSpace(enabled = true, position = PipSpacePosition.TOP, widthPercent = 90))
 
-        assertThat(bounds(PIP_SPACE_TAG).height.value).isWithin(0.5f).of(180f)
+        val band = bounds(PIP_SPACE_TAG)
+        // 400dp 폭 화면: 가로 360dp -> 세로 202.5dp + 여백 12dp.
+        assertThat(band.top.value).isWithin(0.5f).of(0f)
+        assertThat(band.height.value).isWithin(0.5f).of(214.5f)
     }
 
-    /** 아래 자리를 켜면 하단 탭이 내비게이션 막대 여백을 한 번 더 두지 않고 자리 바로 위에 붙어야 한다. */
+    /** 같은 90% 라도 화면이 좁은 폰에서는 PiP 도 작아서 덜 비운다(실제 화면 폭으로 계산한다). */
     @Test
-    fun `the bottom space takes over the navigation bar height`() {
-        show(PipSpace(enabled = true, position = PipSpacePosition.BOTTOM, heightDp = 130))
+    @Config(qualifiers = "w320dp-h800dp-xxhdpi")
+    fun `the blank space follows the real screen width`() {
+        show(PipSpace(enabled = true, position = PipSpacePosition.TOP, widthPercent = 90))
+
+        // 320dp 폭: 가로 288dp -> 세로 162dp + 여백 12dp.
+        assertThat(bounds(PIP_SPACE_TAG).height.value).isWithin(0.5f).of(174f)
+    }
+
+    @Test
+    fun `the size follows the setting`() {
+        show(PipSpace(enabled = true, widthPercent = 40))
+        val small = bounds(PIP_SPACE_TAG).height.value
+        assertThat(small).isWithin(0.5f).of(expectedHeight(40))
+    }
+
+    /**
+     * 빈 자리는 화면 가장자리부터 재서 막대 영역도 안에 들어간다. 그래서 아래 자리를 켜면 하단 탭이 내비게이션 막대
+     * 여백을 한 번 더 두지 않고 자리 바로 위에 붙어야 한다.
+     */
+    @Test
+    fun `the bottom space includes the navigation bar and the tab sits right above it`() {
+        show(PipSpace(enabled = true, position = PipSpacePosition.BOTTOM, widthPercent = 65))
         giveSystemBars(topPx = 0, bottomPx = 144) // 144px = 48dp (xxhdpi 3x)
 
         val band = bounds(PIP_SPACE_TAG)
-        // 빈 자리는 제 높이(130dp)를 지키고, 그 아래 48dp 는 내비게이션 막대 몫이다.
-        assertThat(band.height.value).isWithin(0.5f).of(130f)
-        assertThat(band.bottom.value).isWithin(0.5f).of(800f - 48f)
+        assertThat(band.height.value).isWithin(0.5f).of(expectedHeight(65))
+        assertThat(band.bottom.value).isWithin(0.5f).of(800f)
         assertThat(bounds("tab").bottom.value).isWithin(0.5f).of(band.top.value)
     }
 
     @Test
-    fun `the top space takes over the status bar height`() {
-        show(PipSpace(enabled = true, position = PipSpacePosition.TOP, heightDp = 130))
+    fun `the top space includes the status bar and the title sits right below it`() {
+        show(PipSpace(enabled = true, position = PipSpacePosition.TOP, widthPercent = 65))
         giveSystemBars(topPx = 72, bottomPx = 0) // 72px = 24dp
 
         val band = bounds(PIP_SPACE_TAG)
-        assertThat(band.height.value).isWithin(0.5f).of(130f)
-        assertThat(band.top.value).isWithin(0.5f).of(24f)
+        assertThat(band.top.value).isWithin(0.5f).of(0f)
+        assertThat(band.height.value).isWithin(0.5f).of(expectedHeight(65))
         assertThat(bounds("title").top.value).isWithin(0.5f).of(band.bottom.value)
     }
 
     /** 반대쪽 막대 여백은 그대로 안쪽 화면이 지킨다. */
     @Test
     fun `the other bar is still respected inside`() {
-        show(PipSpace(enabled = true, position = PipSpacePosition.BOTTOM, heightDp = 130))
+        show(PipSpace(enabled = true, position = PipSpacePosition.BOTTOM, widthPercent = 65))
         giveSystemBars(topPx = 72, bottomPx = 144)
 
         assertThat(bounds("title").top.value).isWithin(0.5f).of(24f)
@@ -296,12 +336,12 @@ class PipSpaceTest {
     @Test
     fun `the app root turns the setting into blank space`() {
         val app = com.windowhyun.health.domain.model.AppSettings(
-            pipSpaceEnabled = true, pipSpacePosition = PipSpacePosition.BOTTOM, pipSpaceHeightDp = 150,
+            pipSpaceEnabled = true, pipSpacePosition = PipSpacePosition.BOTTOM, pipSpaceWidthPercent = 50,
         )
         compose.setContent { HealthRoot(app) { Box(Modifier.fillMaxSize().testTag("content")) } }
         compose.waitForIdle()
 
-        assertThat(bounds(PIP_SPACE_TAG).height.value).isWithin(0.5f).of(150f)
+        assertThat(bounds(PIP_SPACE_TAG).height.value).isWithin(0.5f).of(expectedHeight(50))
         assertThat(bounds("content").bottom.value).isWithin(0.5f).of(bounds(PIP_SPACE_TAG).top.value)
     }
 
@@ -359,14 +399,14 @@ class PipSpaceTest {
     /** 홈 버튼은 켜고 끌 뿐, 설정에서 맞춰 둔 크기와 위치는 그대로다. */
     @Test
     fun `the home button keeps the size and place you set`() {
-        runBlocking { settings.update { it.copy(pipSpacePosition = PipSpacePosition.TOP, pipSpaceHeightDp = 170) } }
+        runBlocking { settings.update { it.copy(pipSpacePosition = PipSpacePosition.TOP, pipSpaceWidthPercent = 85) } }
         val viewModel = home()
         showHome(viewModel)
 
         compose.onNodeWithContentDescription("PiP 자리 켜기").performClick()
         awaitUntil { viewModel.uiState.value.settings.pipSpaceEnabled }
 
-        assertThat(runBlocking { settings.current().pipSpace }).isEqualTo(PipSpace(true, PipSpacePosition.TOP, 170))
+        assertThat(runBlocking { settings.current().pipSpace }).isEqualTo(PipSpace(true, PipSpacePosition.TOP, 85))
     }
 }
 

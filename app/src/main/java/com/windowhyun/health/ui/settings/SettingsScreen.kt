@@ -198,20 +198,24 @@ fun SettingsScreen(
 
             item {
                 ChipRow(
-                    title = "크기",
-                    options = PipSpace.PRESETS.map { (label, dp) -> dp to label },
-                    selected = settings.pipSpaceHeightDp,
-                    onSelect = viewModel::setPipSpaceHeightDp,
+                    title = "PiP 크기",
+                    options = PipSpace.PRESETS.map { (label, percent) -> percent to label },
+                    selected = settings.pipSpaceWidthPercent,
+                    onSelect = viewModel::setPipSpaceWidthPercent,
                 )
             }
 
             item {
+                // 가로 비율에서 세로(16:9)를 계산해 보여 준다. 기기마다 화면 폭이 달라도 같은 % 가 어울린다.
+                val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.toFloat()
+                val heightDp = settings.pipSpace.heightDp(screenWidthDp).roundToInt()
                 StepperRow(
-                    title = "높이 맞추기",
-                    subtitle = "PiP 창의 위치와 크기는 앱이 알 수 없어서 직접 맞춰야 합니다. 켠 채로 조절하면 바로 반영됩니다.",
-                    value = "${settings.pipSpaceHeightDp}dp",
-                    onMinus = { viewModel.setPipSpaceHeightDp(settings.pipSpaceHeightDp - PipSpace.STEP_DP) },
-                    onPlus = { viewModel.setPipSpaceHeightDp(settings.pipSpaceHeightDp + PipSpace.STEP_DP) },
+                    title = "PiP 가로 크기",
+                    subtitle = "PiP 창의 가로가 화면 너비의 몇 %쯤인지 맞춰 주세요. 세로는 16:9 로 계산해 화면 끝에서 약 ${heightDp}dp 를 비웁니다. " +
+                        "PiP 창의 위치와 크기는 앱이 알 수 없어서 직접 맞춰야 합니다. 켠 채로 조절하면 바로 반영됩니다.",
+                    value = "${settings.pipSpaceWidthPercent}%",
+                    onMinus = { viewModel.setPipSpaceWidthPercent(settings.pipSpaceWidthPercent - PipSpace.STEP_PERCENT) },
+                    onPlus = { viewModel.setPipSpaceWidthPercent(settings.pipSpaceWidthPercent + PipSpace.STEP_PERCENT) },
                 )
             }
 

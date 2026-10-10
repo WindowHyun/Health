@@ -19,23 +19,34 @@ enum class PipSpacePosition(val label: String) {
 /**
  * 다른 앱의 PiP 창이 가리는 만큼 앱 화면 끝을 비워 두는 설정.
  * PiP 창의 위치와 크기는 앱이 알 수 없어서 사용자가 직접 맞춘다.
+ *
+ * 크기는 dp 대신 **PiP 창의 가로가 화면 너비의 몇 %인가**로 정한다. 유튜브 PiP 는 16:9 라서 가로만 알면 세로가
+ * 정해지고, 기기마다 화면 폭이 달라도 같은 값이 어울린다(작은 폰에서도 큰 폰에서도 "90%"는 90%다).
  */
 data class PipSpace(
     val enabled: Boolean = false,
     val position: PipSpacePosition = PipSpacePosition.BOTTOM,
-    val heightDp: Int = DEFAULT_HEIGHT_DP,
+    val widthPercent: Int = DEFAULT_WIDTH_PERCENT,
 ) {
+    /**
+     * 빈 자리의 높이(dp). **화면 가장자리부터** 잰다(상태 · 내비게이션 막대 영역 포함). PiP 는 막대 위에도 뜨기 때문이다.
+     * PiP 의 16:9 세로에 창이 가장자리에서 떨어진 여백([MARGIN_DP])을 더한다.
+     */
+    fun heightDp(screenWidthDp: Float): Float = screenWidthDp * widthPercent / 100f * 9f / 16f + MARGIN_DP
+
     companion object {
-        /** 유튜브 PiP 기본 크기(가로 약 200dp, 16:9)에 여유를 둔 높이. */
-        const val DEFAULT_HEIGHT_DP = 130
-        const val MIN_HEIGHT_DP = 60
-        const val MAX_HEIGHT_DP = 320
-        const val STEP_DP = 10
+        const val DEFAULT_WIDTH_PERCENT = 65
+        const val MIN_WIDTH_PERCENT = 30
+        const val MAX_WIDTH_PERCENT = 100
+        const val STEP_PERCENT = 5
 
-        /** 자주 쓰는 크기. 유튜브 PiP 를 작게 · 기본 · 크게 늘렸을 때에 맞춘다. */
-        val PRESETS: List<Pair<String, Int>> = listOf("작게" to 100, "보통" to 130, "크게" to 180)
+        /** PiP 창과 화면 가장자리 사이 여백 + 약간의 여유. */
+        const val MARGIN_DP = 12f
 
-        fun clampHeight(heightDp: Int): Int = heightDp.coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP)
+        /** 자주 쓰는 크기. 유튜브 PiP 를 작게 · 중간 · 가장 크게 늘렸을 때(가로 약 90%)에 맞춘다. */
+        val PRESETS: List<Pair<String, Int>> = listOf("작게" to 40, "보통" to 65, "크게" to 90)
+
+        fun clampWidth(widthPercent: Int): Int = widthPercent.coerceIn(MIN_WIDTH_PERCENT, MAX_WIDTH_PERCENT)
     }
 }
 
@@ -64,7 +75,7 @@ data class AppSettings(
     // PiP 자리. 화면 크기가 기기마다 달라서 백업 파일에는 넣지 않는다.
     val pipSpaceEnabled: Boolean = false,
     val pipSpacePosition: PipSpacePosition = PipSpacePosition.BOTTOM,
-    val pipSpaceHeightDp: Int = PipSpace.DEFAULT_HEIGHT_DP,
+    val pipSpaceWidthPercent: Int = PipSpace.DEFAULT_WIDTH_PERCENT,
     // Health Connect. 허용한 권한이 기기마다 달라서 백업 파일에는 넣지 않는다.
     /** 끝난 러닝 · 헬스 운동을 Health Connect 로 내보낸다. */
     val healthConnectEnabled: Boolean = false,
@@ -87,5 +98,5 @@ data class AppSettings(
     val autoBackupEnabled: Boolean get() = autoBackupFolderUri != null
 
     val pipSpace: PipSpace
-        get() = PipSpace(pipSpaceEnabled, pipSpacePosition, PipSpace.clampHeight(pipSpaceHeightDp))
+        get() = PipSpace(pipSpaceEnabled, pipSpacePosition, PipSpace.clampWidth(pipSpaceWidthPercent))
 }

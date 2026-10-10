@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
@@ -36,7 +37,8 @@ internal const val PIP_SPACE_TAG = "pip_space"
  *
  * - 아래: 하단 탭 **아래**에 빈 자리를 둔다. PiP 는 화면 맨 아래에 뜨기 때문에 탭이 아니라 이 자리를 덮는다.
  * - 위: 상단 바 **위**에 둔다.
- * - 시스템 막대(상태 · 내비게이션 막대) 높이는 이 자리가 대신 받아서, 안쪽 화면이 같은 여백을 한 번 더 두지 않는다.
+ * - 자리의 높이는 화면 가장자리부터 잰다. 시스템 막대(상태 · 내비게이션 막대) 영역도 이 안에 들어가므로, 안쪽 화면이
+ *   같은 여백을 한 번 더 두지 않는다.
  * - 꺼져 있으면 아무것도 바꾸지 않는다.
  */
 @Composable
@@ -50,8 +52,9 @@ fun PipSpaceHost(
         return
     }
     val atTop = pipSpace.position == PipSpacePosition.TOP
+    val heightDp = pipSpace.heightDp(LocalConfiguration.current.screenWidthDp.toFloat())
     Column(modifier = modifier.fillMaxSize()) {
-        if (atTop) PipSpaceBand(pipSpace.heightDp, atTop = true)
+        if (atTop) PipSpaceBand(heightDp, atTop = true)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -61,18 +64,20 @@ fun PipSpaceHost(
         ) {
             content()
         }
-        if (!atTop) PipSpaceBand(pipSpace.heightDp, atTop = false)
+        if (!atTop) PipSpaceBand(heightDp, atTop = false)
     }
 }
 
-/** 빈 자리. 바탕색 그대로 비워 두고, 점선 테두리와 작은 글자로 "일부러 비운 곳"임만 알린다. */
+/**
+ * 빈 자리. 바탕색 그대로 비워 두고, 점선 테두리와 작은 글자로 "일부러 비운 곳"임만 알린다.
+ * 높이는 **화면 가장자리부터** 잰 값이라 시스템 막대 영역도 이 안에 들어간다(PiP 는 막대 위에도 뜬다).
+ */
 @Composable
-private fun PipSpaceBand(heightDp: Int, atTop: Boolean) {
+private fun PipSpaceBand(heightDp: Float, atTop: Boolean) {
     val outline = MaterialTheme.colorScheme.outlineVariant
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .let { if (atTop) it.statusBarsPadding() else it.navigationBarsPadding() }
             .height(heightDp.dp)
             .testTag(PIP_SPACE_TAG)
             .drawBehind {
@@ -83,10 +88,12 @@ private fun PipSpaceBand(heightDp: Int, atTop: Boolean) {
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
+        // 글자는 막대 영역을 피해 보이는 쪽 가운데에 둔다.
         Text(
             text = "PiP 자리",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.let { if (atTop) it.statusBarsPadding() else it.navigationBarsPadding() },
         )
     }
 }
