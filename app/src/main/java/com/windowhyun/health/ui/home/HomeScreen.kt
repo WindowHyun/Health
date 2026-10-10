@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.PictureInPictureAlt
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -100,7 +101,14 @@ fun HomeScreen(
                 .padding(padding),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 32.dp),
         ) {
-            item { Header(state.today, onOpenSettings) }
+            item {
+                Header(
+                    today = state.today,
+                    pipSpaceEnabled = state.settings.pipSpaceEnabled,
+                    onTogglePipSpace = { viewModel.setPipSpaceEnabled(!state.settings.pipSpaceEnabled) },
+                    onOpenSettings = onOpenSettings,
+                )
+            }
 
             item {
                 Spacer(Modifier.height(28.dp))
@@ -202,7 +210,12 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Header(today: LocalDate, onOpenSettings: () -> Unit) {
+private fun Header(
+    today: LocalDate,
+    pipSpaceEnabled: Boolean,
+    onTogglePipSpace: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top,
@@ -221,8 +234,24 @@ private fun Header(today: LocalDate, onOpenSettings: () -> Unit) {
                 modifier = Modifier.offset(x = (-2).dp),
             )
         }
-        IconButton(onClick = onOpenSettings) {
-            Icon(Icons.Outlined.Settings, contentDescription = "설정")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // PiP 자리 켜기/끄기. 켜져 있으면 라임 면에 검은 아이콘으로 바뀐다(글자 설명도 함께 바뀐다).
+            val colors = MaterialTheme.healthColors
+            IconButton(
+                onClick = onTogglePipSpace,
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .background(if (pipSpaceEnabled) colors.accent else Color.Transparent),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.PictureInPictureAlt,
+                    contentDescription = if (pipSpaceEnabled) "PiP 자리 끄기" else "PiP 자리 켜기",
+                    tint = if (pipSpaceEnabled) colors.onAccent else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Outlined.Settings, contentDescription = "설정")
+            }
         }
     }
 }

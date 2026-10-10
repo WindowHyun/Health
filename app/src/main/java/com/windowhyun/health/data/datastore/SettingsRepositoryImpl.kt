@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.domain.model.AppSettings
+import com.windowhyun.health.domain.model.PipSpacePosition
 import com.windowhyun.health.domain.model.ThemeMode
 import com.windowhyun.health.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +42,9 @@ class SettingsRepositoryImpl @Inject constructor(
         val WEEKLY_WORKOUT_GOAL = intPreferencesKey("weekly_workout_goal")
         val WEEKLY_RUN_GOAL_METERS = intPreferencesKey("weekly_run_goal_meters")
         val AUTO_PAUSE_RUN = booleanPreferencesKey("auto_pause_run")
+        val PIP_SPACE_ENABLED = booleanPreferencesKey("pip_space_enabled")
+        val PIP_SPACE_POSITION = stringPreferencesKey("pip_space_position")
+        val PIP_SPACE_HEIGHT_DP = intPreferencesKey("pip_space_height_dp")
         val HEALTH_CONNECT_ENABLED = booleanPreferencesKey("health_connect_enabled")
         val HEALTH_CONNECT_IMPORT_WEIGHT = booleanPreferencesKey("health_connect_import_weight")
         val HEALTH_CONNECT_LAST_SYNC_AT = longPreferencesKey("health_connect_last_sync_at")
@@ -77,6 +81,11 @@ class SettingsRepositoryImpl @Inject constructor(
             weeklyWorkoutGoal = prefs[Keys.WEEKLY_WORKOUT_GOAL] ?: defaults.weeklyWorkoutGoal,
             weeklyRunGoalMeters = prefs[Keys.WEEKLY_RUN_GOAL_METERS] ?: defaults.weeklyRunGoalMeters,
             autoPauseRun = prefs[Keys.AUTO_PAUSE_RUN] ?: defaults.autoPauseRun,
+            pipSpaceEnabled = prefs[Keys.PIP_SPACE_ENABLED] ?: defaults.pipSpaceEnabled,
+            pipSpacePosition = prefs[Keys.PIP_SPACE_POSITION]?.let { name ->
+                runCatching { PipSpacePosition.valueOf(name) }.getOrNull()
+            } ?: defaults.pipSpacePosition,
+            pipSpaceHeightDp = prefs[Keys.PIP_SPACE_HEIGHT_DP] ?: defaults.pipSpaceHeightDp,
             healthConnectEnabled = prefs[Keys.HEALTH_CONNECT_ENABLED] ?: defaults.healthConnectEnabled,
             healthConnectImportWeight = prefs[Keys.HEALTH_CONNECT_IMPORT_WEIGHT] ?: defaults.healthConnectImportWeight,
             healthConnectLastSyncAt = prefs[Keys.HEALTH_CONNECT_LAST_SYNC_AT] ?: defaults.healthConnectLastSyncAt,
@@ -118,6 +127,9 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.WEEKLY_WORKOUT_GOAL] = updated.weeklyWorkoutGoal
             prefs[Keys.WEEKLY_RUN_GOAL_METERS] = updated.weeklyRunGoalMeters
             prefs[Keys.AUTO_PAUSE_RUN] = updated.autoPauseRun
+            prefs[Keys.PIP_SPACE_ENABLED] = updated.pipSpaceEnabled
+            prefs[Keys.PIP_SPACE_POSITION] = updated.pipSpacePosition.name
+            prefs[Keys.PIP_SPACE_HEIGHT_DP] = updated.pipSpaceHeightDp
             prefs[Keys.HEALTH_CONNECT_ENABLED] = updated.healthConnectEnabled
             prefs[Keys.HEALTH_CONNECT_IMPORT_WEIGHT] = updated.healthConnectImportWeight
             prefs[Keys.HEALTH_CONNECT_LAST_SYNC_AT] = updated.healthConnectLastSyncAt

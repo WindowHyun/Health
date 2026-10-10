@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.domain.model.AppSettings
+import com.windowhyun.health.domain.model.PipSpace
+import com.windowhyun.health.domain.model.PipSpacePosition
 import com.windowhyun.health.domain.model.ThemeMode
 import com.windowhyun.health.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -55,6 +57,12 @@ class SettingsViewModel @Inject constructor(
 
     fun setWeeklyRunGoalMeters(meters: Int) =
         update { it.copy(weeklyRunGoalMeters = meters.coerceIn(0, MAX_WEEKLY_RUN_METERS)) }
+
+    fun setPipSpaceEnabled(enabled: Boolean) = update { it.copy(pipSpaceEnabled = enabled) }
+
+    fun setPipSpacePosition(position: PipSpacePosition) = update { it.copy(pipSpacePosition = position) }
+
+    fun setPipSpaceHeightDp(heightDp: Int) = update { it.copy(pipSpaceHeightDp = PipSpace.clampHeight(heightDp)) }
 
     fun setAutoPauseRun(enabled: Boolean) = update { it.copy(autoPauseRun = enabled) }
 

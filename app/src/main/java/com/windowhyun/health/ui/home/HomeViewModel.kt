@@ -131,6 +131,11 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** 홈 오른쪽 위 버튼: PiP 자리를 켜고 끈다(크기와 위치는 설정에서 맞춘 값 그대로). */
+    fun setPipSpaceEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.update { it.copy(pipSpaceEnabled = enabled) } }
+    }
+
     companion object {
         private const val RECENT_LIMIT = 3
     }

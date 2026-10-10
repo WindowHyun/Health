@@ -56,7 +56,7 @@ Play 스토어에 올리지 않았으므로 **ADB 로 시계에 직접 설치**�
 ```bash
 # 시계의 Wi-Fi 디버깅 화면에 나온 IP 와 포트를 씁니다
 adb connect 192.168.0.23:5555
-adb install -r health-wear-0.11.0.apk
+adb install -r health-wear-0.11.1.apk
 ```
 
 * 갤럭시 워치는 "Wi-Fi 디버깅" 화면에서 **새 기기 페어링**(페어링 코드와 포트가 따로 나옴)을

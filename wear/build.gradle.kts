@@ -31,8 +31,8 @@ android {
         applicationId = "com.windowhyun.health"
         minSdk = 30
         targetSdk = 34
-        versionCode = 24
-        versionName = "0.11.0"
+        versionCode = 25
+        versionName = "0.11.1"
     }
 
     signingConfigs {

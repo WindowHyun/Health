@@ -44,6 +44,8 @@ import com.windowhyun.health.core.model.DistanceUnit
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatWeight
 import com.windowhyun.health.domain.model.AppSettings
+import com.windowhyun.health.domain.model.PipSpace
+import com.windowhyun.health.domain.model.PipSpacePosition
 import com.windowhyun.health.domain.model.ThemeMode
 import java.time.Instant
 import java.time.ZoneId
@@ -171,6 +173,45 @@ fun SettingsScreen(
                     value = formatWeight(settings.bodyWeightKg, settings.weightUnit),
                     onMinus = { viewModel.setBodyWeightKg(settings.bodyWeightKg - 0.5) },
                     onPlus = { viewModel.setBodyWeightKg(settings.bodyWeightKg + 0.5) },
+                )
+            }
+
+            item { SettingSectionTitle("PiP 자리") }
+
+            item {
+                SwitchRow(
+                    title = "PiP 자리 비우기",
+                    subtitle = "유튜브 같은 앱을 PiP(작은 창)로 띄우면 화면 아래나 위를 덮습니다. 켜면 그 크기만큼 앱 화면 끝을 비워 버튼과 숫자가 가려지지 않게 합니다. 홈 화면 오른쪽 위 버튼으로도 켜고 끌 수 있습니다.",
+                    checked = settings.pipSpaceEnabled,
+                    onCheckedChange = viewModel::setPipSpaceEnabled,
+                )
+            }
+
+            item {
+                ChipRow(
+                    title = "비울 곳",
+                    options = PipSpacePosition.entries.map { it to it.label },
+                    selected = settings.pipSpacePosition,
+                    onSelect = viewModel::setPipSpacePosition,
+                )
+            }
+
+            item {
+                ChipRow(
+                    title = "크기",
+                    options = PipSpace.PRESETS.map { (label, dp) -> dp to label },
+                    selected = settings.pipSpaceHeightDp,
+                    onSelect = viewModel::setPipSpaceHeightDp,
+                )
+            }
+
+            item {
+                StepperRow(
+                    title = "높이 맞추기",
+                    subtitle = "PiP 창의 위치와 크기는 앱이 알 수 없어서 직접 맞춰야 합니다. 켠 채로 조절하면 바로 반영됩니다.",
+                    value = "${settings.pipSpaceHeightDp}dp",
+                    onMinus = { viewModel.setPipSpaceHeightDp(settings.pipSpaceHeightDp - PipSpace.STEP_DP) },
+                    onPlus = { viewModel.setPipSpaceHeightDp(settings.pipSpaceHeightDp + PipSpace.STEP_DP) },
                 )
             }
 

@@ -10,6 +10,35 @@ enum class ThemeMode(val label: String) {
     DARK("다크"),
 }
 
+/** PiP(작은 창으로 띄운 유튜브 등)가 뜨는 쪽. 앱 화면의 이 끝에 빈 자리를 만든다. */
+enum class PipSpacePosition(val label: String) {
+    TOP("위"),
+    BOTTOM("아래"),
+}
+
+/**
+ * 다른 앱의 PiP 창이 가리는 만큼 앱 화면 끝을 비워 두는 설정.
+ * PiP 창의 위치와 크기는 앱이 알 수 없어서 사용자가 직접 맞춘다.
+ */
+data class PipSpace(
+    val enabled: Boolean = false,
+    val position: PipSpacePosition = PipSpacePosition.BOTTOM,
+    val heightDp: Int = DEFAULT_HEIGHT_DP,
+) {
+    companion object {
+        /** 유튜브 PiP 기본 크기(가로 약 200dp, 16:9)에 여유를 둔 높이. */
+        const val DEFAULT_HEIGHT_DP = 130
+        const val MIN_HEIGHT_DP = 60
+        const val MAX_HEIGHT_DP = 320
+        const val STEP_DP = 10
+
+        /** 자주 쓰는 크기. 유튜브 PiP 를 작게 · 기본 · 크게 늘렸을 때에 맞춘다. */
+        val PRESETS: List<Pair<String, Int>> = listOf("작게" to 100, "보통" to 130, "크게" to 180)
+
+        fun clampHeight(heightDp: Int): Int = heightDp.coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP)
+    }
+}
+
 /** DataStore 에 저장되는 사용자 설정. */
 data class AppSettings(
     val defaultRestSeconds: Int = 60,
@@ -32,6 +61,10 @@ data class AppSettings(
     val weeklyRunGoalMeters: Int = 0,
     /** 멈추면 러닝을 자동으로 일시정지하고, 다시 움직이면 이어 간다. */
     val autoPauseRun: Boolean = true,
+    // PiP 자리. 화면 크기가 기기마다 달라서 백업 파일에는 넣지 않는다.
+    val pipSpaceEnabled: Boolean = false,
+    val pipSpacePosition: PipSpacePosition = PipSpacePosition.BOTTOM,
+    val pipSpaceHeightDp: Int = PipSpace.DEFAULT_HEIGHT_DP,
     // Health Connect. 허용한 권한이 기기마다 달라서 백업 파일에는 넣지 않는다.
     /** 끝난 러닝 · 헬스 운동을 Health Connect 로 내보낸다. */
     val healthConnectEnabled: Boolean = false,
@@ -52,4 +85,7 @@ data class AppSettings(
     val lastAutoBackupError: String? = null,
 ) {
     val autoBackupEnabled: Boolean get() = autoBackupFolderUri != null
+
+    val pipSpace: PipSpace
+        get() = PipSpace(pipSpaceEnabled, pipSpacePosition, PipSpace.clampHeight(pipSpaceHeightDp))
 }
