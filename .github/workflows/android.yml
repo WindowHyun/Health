@@ -132,12 +132,32 @@ jobs:
 
       - name: 서명 확인
         if: steps.signing.outputs.signed == 'true'
+        env:
+          # 공개해도 되는 값이다(인증서 지문). 이 키로 서명되지 않은 APK 는 릴리즈에 올리지 않는다.
+          # 서명 키를 바꾸면(앱을 지우고 다시 깔아야 한다) 이 값도 바꿔야 한다.
+          EXPECTED_SIGNER_SHA256: 2d1048151df37b97dcf82cf6c24a584ee79db0a002794956eda2c1c6d78a67df
         run: |
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)
+          echo "apksigner: $apksigner"
+          failed=0
           for apk in app/build/outputs/apk/release/app-release.apk wear/build/outputs/apk/release/wear-release.apk; do
             echo "== $apk"
-            "$apksigner" verify --print-certs "$apk" | grep -E "Signer #1 certificate SHA-256"
+            if [ ! -f "$apk" ]; then
+              echo "::error::$apk 가 없습니다. 서명 설정이 적용되지 않아 서명 안 된 APK 만 만들어졌을 수 있습니다."
+              ls -la "$(dirname "$apk")" || true
+              failed=1
+              continue
+            fi
+            # 출력을 그대로 보여 주고(문제가 생겼을 때 로그로 알 수 있게), 지문만 따로 뽑아 비교한다.
+            output=$("$apksigner" verify --verbose --print-certs "$apk" 2>&1) || { echo "$output"; echo "::error::$apk 서명 검증에 실패했습니다."; failed=1; continue; }
+            echo "$output"
+            actual=$(echo "$output" | grep -i "SHA-256 digest" | head -n1 | grep -oiE '[0-9a-f]{64}' | head -n1 | tr 'A-F' 'a-f')
+            if [ "$actual" != "$EXPECTED_SIGNER_SHA256" ]; then
+              echo "::error::$apk 의 서명 지문($actual)이 기대한 값과 다릅니다. 시크릿의 키스토어가 맞는지 확인하세요."
+              failed=1
+            fi
           done
+          exit $failed
 
       - name: 결과물 모으기
         run: |
