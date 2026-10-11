@@ -1,5 +1,7 @@
 package com.windowhyun.health.ui.gym
 
+import java.time.DayOfWeek
+
 /**
  * 헬스 루틴 템플릿. 이름난 프로그램(5x5 · PPL · 5/3/1 · PHUL · 아놀드 스플릿 등)은 알려진 종목 구성을
  * 임의로 바꾸지 않았다 — 원래 구성 그대로 넣어야 "그 루틴"이 된다. 맨몸 · 덤벨 · 머신 · 코어 같은
@@ -15,6 +17,15 @@ object RoutineTemplates {
         val routineName: String,
         /** 종목 이름 -> 기본 세트 수. */
         val exercises: List<Pair<String, Int>>,
+        /**
+         * 슈퍼셋으로 묶을 종목 이름들. 묶음마다 [exercises] 안에서 **이어서** 나와야 한다(앱의 슈퍼셋 규칙).
+         * 묶음 중간 종목은 쉬지 않고 다음 종목으로 가고, 묶음의 마지막 종목을 마친 뒤에만 쉰다.
+         */
+        val supersets: List<List<String>> = emptyList(),
+        /** 종목별 휴식 시간(초). 없는 종목은 그 종목의 기본 휴식을 쓴다. 슈퍼셋은 묶음의 마지막 종목 값이 쓰인다. */
+        val restSeconds: Map<String, Int> = emptyMap(),
+        /** 이 루틴을 하는 요일. 비어 있으면 요일을 정하지 않는다(홈의 "오늘의 루틴"에 쓰인다). */
+        val scheduledDays: Set<DayOfWeek> = emptySet(),
     )
 
     /** 목록에서 묶어 보여 주는 갈래. 선언 순서가 화면 순서다. */
@@ -589,6 +600,95 @@ object RoutineTemplates {
                         "사이드 플랭크" to 3,
                         "데드버그" to 3,
                     ),
+                ),
+            ),
+        ),
+        Template(
+            id = "fat_maintenance_4day",
+            category = Category.SPLIT,
+            title = "체지방 유지 고강도 주4일 (웨이트 3 + 러닝 1)",
+            description = "평일 45분 웨이트 3일(가슴 / 등 / 하체·어깨)과 토요일 러닝 + 팔·복근. 큰 복합 운동은 RPE 8~9의 고중량으로, " +
+                "마지막 세트는 드롭세트로 마무리합니다. 월·화·목·토로 요일이 정해져 홈의 오늘의 루틴에 나옵니다(루틴 편집에서 바꿀 수 있습니다). " +
+                "토요일 러닝은 러닝 탭에서 인터벌 켜기: 달리기 3:00 / 걷기(조깅) 2:00 × 5회, 먼저 뛰고 팔·복근은 그 뒤에 하세요.",
+            days = listOf(
+                Day(
+                    routineName = "체지방 유지 · 가슴",
+                    exercises = listOf(
+                        "벤치프레스" to 4,
+                        "인클라인 덤벨 프레스" to 3,
+                        "케이블 크로스오버" to 3,
+                        "어시스티드 딥스" to 3,
+                        "와이드 푸시업" to 1,
+                    ),
+                    restSeconds = mapOf(
+                        "벤치프레스" to 150,
+                        "인클라인 덤벨 프레스" to 120,
+                        "케이블 크로스오버" to 75,
+                        "어시스티드 딥스" to 90,
+                        "와이드 푸시업" to 60,
+                    ),
+                    scheduledDays = setOf(DayOfWeek.MONDAY),
+                ),
+                Day(
+                    routineName = "체지방 유지 · 등",
+                    exercises = listOf(
+                        "풀업" to 4,
+                        "바벨로우" to 3,
+                        "시티드 케이블로우" to 3,
+                        "와이드그립 랫풀다운" to 3,
+                        "페이스풀" to 3,
+                    ),
+                    restSeconds = mapOf(
+                        "풀업" to 120,
+                        "바벨로우" to 150,
+                        "시티드 케이블로우" to 90,
+                        "와이드그립 랫풀다운" to 75,
+                        "페이스풀" to 60,
+                    ),
+                    scheduledDays = setOf(DayOfWeek.TUESDAY),
+                ),
+                Day(
+                    routineName = "체지방 유지 · 하체 + 어깨",
+                    exercises = listOf(
+                        "스쿼트" to 4,
+                        "오버헤드 프레스" to 3,
+                        "루마니안 데드리프트" to 3,
+                        "사이드 레터럴 레이즈" to 3,
+                        "레그프레스" to 2,
+                        "카프레이즈" to 3,
+                    ),
+                    // 45분 안에 끝내려고 하체 뒤쪽과 어깨 옆쪽을 번갈아 한다.
+                    supersets = listOf(listOf("루마니안 데드리프트", "사이드 레터럴 레이즈")),
+                    restSeconds = mapOf(
+                        "스쿼트" to 150,
+                        "오버헤드 프레스" to 120,
+                        "사이드 레터럴 레이즈" to 90,
+                        "레그프레스" to 90,
+                        "카프레이즈" to 45,
+                    ),
+                    scheduledDays = setOf(DayOfWeek.THURSDAY),
+                ),
+                Day(
+                    routineName = "체지방 유지 · 팔 + 복근 (토)",
+                    exercises = listOf(
+                        "바벨 컬" to 3,
+                        "케이블 푸시다운" to 3,
+                        "해머 컬" to 2,
+                        "벤치 딥스" to 2,
+                        "행잉 레그레이즈" to 3,
+                        "플랭크" to 3,
+                    ),
+                    supersets = listOf(
+                        listOf("바벨 컬", "케이블 푸시다운"),
+                        listOf("해머 컬", "벤치 딥스"),
+                    ),
+                    restSeconds = mapOf(
+                        "케이블 푸시다운" to 60,
+                        "벤치 딥스" to 60,
+                        "행잉 레그레이즈" to 60,
+                        "플랭크" to 45,
+                    ),
+                    scheduledDays = setOf(DayOfWeek.SATURDAY),
                 ),
             ),
         ),

@@ -74,13 +74,15 @@ class RoutineTemplateViewModel @Inject constructor(
                     exercise = exercise,
                     orderIndex = index,
                     defaultSets = sets,
-                    restSeconds = exercise.defaultRestSeconds,
+                    restSeconds = day.restSeconds[exercise.name] ?: exercise.defaultRestSeconds,
+                    supersetGroup = day.supersetGroupOf(exercise.name),
                 )
             }
 
             if (items.isNotEmpty()) {
+                // 슈퍼셋은 종목이 빠져 짝이 사라지면 묶음이 아니게 된다. 저장할 때 번호를 다시 매겨 정리한다.
                 routineRepository.saveRoutine(
-                    Routine(id = 0, name = day.routineName, items = items),
+                    Routine(id = 0, name = day.routineName, items = items, scheduledDays = day.scheduledDays),
                 )
                 createdNames += day.routineName
             }
@@ -88,4 +90,10 @@ class RoutineTemplateViewModel @Inject constructor(
 
         _applied.emit(TemplateApplyResult(template, createdNames, missing))
     }
+}
+
+/** 이 종목이 속한 슈퍼셋 묶음 번호(1부터). 묶음이 아니면 0. */
+private fun RoutineTemplates.Day.supersetGroupOf(exerciseName: String): Int {
+    val index = supersets.indexOfFirst { exerciseName in it }
+    return if (index < 0) 0 else index + 1
 }
