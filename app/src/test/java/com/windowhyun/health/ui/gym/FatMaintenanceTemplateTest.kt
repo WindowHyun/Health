@@ -246,8 +246,9 @@ class FatMaintenanceTemplateTest {
 
     /** 이름난 프로그램 템플릿이 슈퍼셋이나 요일을 몰래 얻지 않았는지(이번에 바꾼 것은 새 템플릿뿐). */
     @Test
-    fun `only the new template uses supersets rest overrides and schedules`() {
-        RoutineTemplates.all.filter { it.id != "fat_maintenance_4day" }.flatMap { it.days }.forEach { day ->
+    fun `only the two newest templates use supersets rest overrides and schedules`() {
+        val withExtras = setOf("fat_maintenance_4day", "split_4day_lower_upper_back")
+        RoutineTemplates.all.filter { it.id !in withExtras }.flatMap { it.days }.forEach { day ->
             assertWithMessage(day.routineName).that(day.supersets).isEmpty()
             assertWithMessage(day.routineName).that(day.restSeconds).isEmpty()
             assertWithMessage(day.routineName).that(day.scheduledDays).isEmpty()

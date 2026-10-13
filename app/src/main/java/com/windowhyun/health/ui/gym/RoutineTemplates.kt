@@ -692,6 +692,95 @@ object RoutineTemplates {
                 ),
             ),
         ),
+        Template(
+            id = "split_4day_lower_upper_back",
+            category = Category.SPLIT,
+            title = "주4일 4분할 (하체 / 가슴·어깨·팔 A / 등 / 가슴·어깨·팔 B)",
+            description = "화 하체, 목 가슴·어깨·팔 A, 토 등, 일 가슴·어깨·팔 B. 복합 운동은 휴식 2분, 보조 운동은 1~1.5분으로 맞췄습니다. " +
+                "횟수 목표: 하체 스쿼트 6~8 · 루마니안 8 · 레그프레스 10~12 · 레그 컬 10~12 · 카프 12~15 / A 벤치 6~8 · 인클라인 8~10 · 숄더프레스 8~10 · " +
+                "사이드 레이즈 12~15 · 푸시다운+컬 10~12 / 등 데드리프트 5 · 랫풀다운 8~10 · 로우 10 · 페이스풀 15 / " +
+                "B 오버헤드 6~8 · 덤벨 벤치 8~10 · 크로스오버 12~15 · 리어 델트 12~15. " +
+                "등 날 데드리프트가 부담되면 빼고 바벨로우 4세트(6~8회)를 넣으세요. 랫풀다운은 풀업으로 바꿔도 됩니다. " +
+                "요일이 화·목·토·일로 정해져 홈의 오늘의 루틴에 나옵니다(루틴 편집에서 바꿀 수 있습니다).",
+            days = listOf(
+                Day(
+                    routineName = "하체 (화)",
+                    exercises = listOf(
+                        "스쿼트" to 4,
+                        "루마니안 데드리프트" to 3,
+                        "레그프레스" to 3,
+                        "레그 컬" to 3,
+                        "카프레이즈" to 3,
+                    ),
+                    restSeconds = mapOf(
+                        "스쿼트" to 120,
+                        "루마니안 데드리프트" to 120,
+                        "레그프레스" to 90,
+                        "레그 컬" to 75,
+                        "카프레이즈" to 60,
+                    ),
+                    scheduledDays = setOf(DayOfWeek.TUESDAY),
+                ),
+                Day(
+                    routineName = "가슴·어깨·팔 A (목)",
+                    exercises = listOf(
+                        "벤치프레스" to 4,
+                        "인클라인 덤벨 프레스" to 3,
+                        "덤벨 숄더프레스" to 3,
+                        "사이드 레터럴 레이즈" to 3,
+                        "케이블 푸시다운" to 3,
+                        "바벨 컬" to 3,
+                    ),
+                    supersets = listOf(listOf("케이블 푸시다운", "바벨 컬")),
+                    restSeconds = mapOf(
+                        "벤치프레스" to 120,
+                        "인클라인 덤벨 프레스" to 120,
+                        "덤벨 숄더프레스" to 120,
+                        "사이드 레터럴 레이즈" to 60,
+                        "바벨 컬" to 75,
+                    ),
+                    scheduledDays = setOf(DayOfWeek.THURSDAY),
+                ),
+                Day(
+                    routineName = "등 (토)",
+                    exercises = listOf(
+                        "데드리프트" to 3,
+                        "랫풀다운" to 4,
+                        "시티드 케이블로우" to 3,
+                        "덤벨로우" to 3,
+                        "페이스풀" to 3,
+                    ),
+                    restSeconds = mapOf(
+                        "데드리프트" to 120,
+                        "랫풀다운" to 90,
+                        "시티드 케이블로우" to 90,
+                        "덤벨로우" to 90,
+                        "페이스풀" to 60,
+                    ),
+                    scheduledDays = setOf(DayOfWeek.SATURDAY),
+                ),
+                Day(
+                    routineName = "가슴·어깨·팔 B (일)",
+                    exercises = listOf(
+                        "오버헤드 프레스" to 4,
+                        "덤벨 벤치프레스" to 3,
+                        "케이블 크로스오버" to 3,
+                        "리어 델트 플라이 머신" to 3,
+                        "딥스" to 3,
+                        "해머 컬" to 3,
+                    ),
+                    supersets = listOf(listOf("딥스", "해머 컬")),
+                    restSeconds = mapOf(
+                        "오버헤드 프레스" to 120,
+                        "덤벨 벤치프레스" to 120,
+                        "케이블 크로스오버" to 75,
+                        "리어 델트 플라이 머신" to 60,
+                        "해머 컬" to 75,
+                    ),
+                    scheduledDays = setOf(DayOfWeek.SUNDAY),
+                ),
+            ),
+        ),
     )
 
     /** 갈래별로 묶은 목록(화면 순서). 템플릿이 없는 갈래는 뺀다. */
