@@ -140,9 +140,9 @@ class Split4DayTemplateTest {
         }
     }
 
-    /** 운영 원칙: 복합 운동 휴식 2분, 보조 1~1.5분. */
+    /** 운영 원칙: 복합 운동 휴식 2분, 보조 60~90초. 어떤 운동이 2분인지는 템플릿 설명에 적혀 있다. */
     @Test
-    fun `compound lifts rest two minutes and accessories one to ninety seconds`() = runTest(dispatcher) {
+    fun `compound lifts rest two minutes and accessories sixty to ninety seconds`() = runTest(dispatcher) {
         val all = applied()
         val lower = all.getValue("하체 (화)")
         val a = all.getValue("가슴·어깨·팔 A (목)")
@@ -160,12 +160,43 @@ class Split4DayTemplateTest {
         // 보조 운동은 60~90초(슈퍼셋은 묶음의 마지막 종목 값).
         listOf(
             lower to "레그프레스", lower to "레그 컬", lower to "카프레이즈",
-            a to "사이드 레터럴 레이즈", a to "바벨 컬",
+            a to "사이드 레터럴 레이즈", a to "케이블 푸시다운", a to "바벨 컬",
             back to "랫풀다운", back to "시티드 케이블로우", back to "덤벨로우", back to "페이스풀",
-            b to "케이블 크로스오버", b to "리어 델트 플라이 머신", b to "해머 컬",
+            b to "케이블 크로스오버", b to "리어 델트 플라이 머신", b to "딥스", b to "해머 컬",
         ).forEach { (routine, exercise) ->
             assertWithMessage("${routine.name} / $exercise").that(routine.rest(exercise)).isIn(60..90)
         }
+    }
+
+    /**
+     * 슈퍼셋의 앞 종목도 휴식이 비어 있으면 안 된다. 슈퍼셋을 풀거나 순서를 바꾸면 그 값이 쓰이는데,
+     * 비어 있으면 앱 설정의 기본 휴식(사용자가 바꿀 수 있다)을 따라가 설명과 달라진다.
+     */
+    @Test
+    fun `every exercise has its own rest so none follows the app setting`() {
+        template.days.forEach { day ->
+            assertWithMessage(day.routineName).that(day.restSeconds.keys)
+                .containsExactlyElementsIn(day.exercises.map { it.first })
+        }
+    }
+
+    /** 설명이 말하는 2분 운동이 실제로 120초인 운동과 정확히 같다(설명과 값이 어긋나지 않게). */
+    @Test
+    fun `the description names exactly the two minute exercises`() {
+        val twoMinutes = template.days.flatMap { it.restSeconds.entries }.filter { it.value == 120 }.map { it.key }
+
+        assertThat(twoMinutes).hasSize(8)
+        twoMinutes.forEach { assertWithMessage(it).that(template.description).contains(it) }
+        val accessories = template.days.flatMap { it.restSeconds.entries }.filter { it.value != 120 }.map { it.key }
+        accessories.forEach { assertWithMessage(it).that(template.description.substringBefore("나머지 보조 운동")).doesNotContain(it) }
+    }
+
+    /** 횟수 목표는 설명에만 적는다. 슈퍼셋도 빠짐없이 적혀 있어야 한다(A 는 푸시다운+컬, B 는 딥스+해머 컬). */
+    @Test
+    fun `the description gives rep targets for both supersets`() {
+        assertThat(template.description).contains("푸시다운+컬 10~12")
+        assertThat(template.description).contains("딥스 8~12")
+        assertThat(template.description).contains("해머 컬 10~12")
     }
 
     @Test

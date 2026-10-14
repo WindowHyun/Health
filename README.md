@@ -209,6 +209,8 @@ APK 만 만들려면:
 
 시계(Wear OS)에서 러닝 조작과 휴식 타이머를 쓰려면 [docs/WEAR.md](docs/WEAR.md) 를 참고하세요.
 
+기본 운동 종목과 루틴 템플릿은 JSON 파일로 되어 있어 코드를 건드리지 않고 고칠 수 있습니다. [docs/DATA.md](docs/DATA.md) 를 참고하세요.
+
 GitHub Actions(`.github/workflows/android.yml`)가 푸시마다 테스트와 APK 빌드를 하고,
 `v0.9.2` 같은 태그를 올리면 서명된 APK 를 Releases 에 붙입니다.
 서명 시크릿 설정은 [docs/RELEASE.md](docs/RELEASE.md#7-github-actions-로-빌드) 를 참고하세요.
