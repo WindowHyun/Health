@@ -426,7 +426,7 @@ class BackupRepositoryTest {
         val text = out.toByteArray().toString(Charsets.UTF_8)
         assertThat(rows).isEqualTo(2)
         // 엑셀이 한글을 깨뜨리지 않도록 BOM 을 붙인다.
-        assertThat(text.first()).isEqualTo('﻿')
+        assertThat(text.first()).isEqualTo('\uFEFF')
         assertThat(text).contains("날짜,루틴,운동")
         assertThat(text).contains("내가 만든 운동")
         assertThat(text).contains("WARMUP")
@@ -584,7 +584,7 @@ class BackupRepositoryTest {
         val bytes = exportBytes()
         db.backupDao().deleteAllWorkouts()
 
-        listOf("이건 json 이 아님", "", """{"templates":[{"id":"x"}]}""", """{"version":1}""").forEach { broken ->
+        listOf("이건 json 이 아님", "", """{"templates":[{"id":"x"}]}""", """{"version":1}""", """{"templates":[]}""").forEach { broken ->
             val summary = backup.restoreBackup(ByteArrayInputStream(withUserTemplates(bytes, broken)))
 
             assertThat(summary.userTemplateCount).isEqualTo(0)

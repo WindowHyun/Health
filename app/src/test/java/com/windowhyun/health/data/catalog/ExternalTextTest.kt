@@ -97,7 +97,7 @@ class ExternalTextTest {
 
     @Test
     fun `a pasted text with a leading byte order mark is cleaned`() {
-        assertThat(ExternalText.fromPasted("﻿{}", 100).text).isEqualTo("{}")
+        assertThat(ExternalText.fromPasted("\uFEFF{}", 100).text).isEqualTo("{}")
     }
 
     @Test

@@ -58,7 +58,7 @@ object ExternalText {
 
     /** 붙여넣은 글. 바이트 수로 한도를 본다. */
     fun fromPasted(text: String, maxBytes: Int): Result =
-        decode(text.removePrefix("﻿").toByteArray(Charsets.UTF_8), maxBytes)
+        decode(text.removePrefix("\uFEFF").toByteArray(Charsets.UTF_8), maxBytes)
 
     private fun tooLarge(maxBytes: Int) = "파일이 너무 큽니다. ${maxBytes / 1024}KB 까지 가져올 수 있습니다."
 

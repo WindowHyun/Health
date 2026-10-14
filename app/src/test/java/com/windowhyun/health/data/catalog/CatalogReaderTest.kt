@@ -261,7 +261,7 @@ class CatalogReaderTest {
 
     @Test
     fun `characters that reverse or hide text are refused`() {
-        listOf("202E", "202A", "2066", "200E", "200F", "FEFF", "2028", "061C").forEach { code ->
+        listOf("061C", "200E", "200F", "202A", "202B", "202C", "202D", "202E", "2066", "2067", "2068", "2069", "2028", "2029", "FEFF").forEach { code ->
             val report = read(exercisesFile(ex(name = "바\\u$code" + "벨")))
             assertOneError(report, "쓸 수 없는 문자", "U+$code")
         }
@@ -306,6 +306,56 @@ class CatalogReaderTest {
         assertOneError(read("""{"exercises":[{"name":5,"category":"BARBELL","bodyPart":"CHEST"}]}"""), "name", "글")
         assertOneError(read("""{"exercises":[{"name":["a"],"category":"BARBELL","bodyPart":"CHEST"}]}"""), "name", "글")
         assertOneError(read("""{"exercises":[{"name":true,"category":"BARBELL","bodyPart":"CHEST"}]}"""), "name", "글")
+    }
+
+    @Test
+    fun `a syntax error tells the column too`() {
+        // 3행: 공백 네 칸 뒤에 "{,}" — 쉼표는 6열이다.
+        val report = read("{\n  \"exercises\": [\n    {,}\n  ]\n}")
+
+        assertOneError(report, "3행 6열")
+    }
+
+    @Test
+    fun `a description may start or end with white space and keeps it`() {
+        val report = read(templatesFile(tpl(description = """\n 앞뒤에 공백과 줄바꿈 \n""")))
+
+        assertThat(report.isValid).isTrue()
+        assertThat(report.templates.single().description).isEqualTo("\n 앞뒤에 공백과 줄바꿈 \n")
+    }
+
+    @Test
+    fun `a template that replaces an imported one does not clash with its old routine names`() {
+        val context = ImportContext(
+            replaceableTemplateIds = setOf("mine"),
+            otherRoutineNames = mapOf("mine" to setOf("하루"), "other" to setOf("남의 루틴")),
+        )
+
+        val same = templateErrors(tpl(id = "mine", days = listOf(day("하루"))), context)
+        val clash = templateErrors(tpl(id = "mine", days = listOf(day("남의 루틴"))), context)
+
+        assertThat(same.warnings.map { it.toString() }.none { "다른 템플릿" in it }).isTrue()
+        assertThat(clash.warnings.map { it.toString() }.any { "다른 템플릿" in it }).isTrue()
+    }
+
+    /** 비슷한 이름 찾기는 비싸서 처음 몇 개 이름에만 한다. 오류 자체는 모두 알린다. */
+    @Test
+    fun `suggestions are looked up only for the first twenty unknown names`() {
+        val names = (1..25).map { "스쿼트$it" }
+        val lines = names.map { line(it) }
+        val report = templateErrors(tpl(days = listOf(day(lines = lines))), strict)
+
+        assertThat(report.errors).hasSize(25)
+        assertThat(report.errors.count { "를 쓰려던 건가요" in it.message }).isEqualTo(20)
+    }
+
+    @Test
+    fun `a long name is shortened where it is echoed`() {
+        val report = read(exercisesFile(ex(name = "가".repeat(100))))
+
+        val path = report.errors.single().path
+        assertThat(path).contains("…")
+        assertThat(path).doesNotContain("가".repeat(41))
     }
 
     // ----- 숫자 · 정해진 값 -----

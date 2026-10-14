@@ -44,6 +44,9 @@ class SuggestionsTest {
     @Test
     fun `an empty input or an empty list gives nothing`() {
         assertThat(Suggestions.closest("", names)).isNull()
+        // 한 글자 이름과 거리가 1 이라도, 빈 입력은 무엇의 오타도 아니다.
+        assertThat(Suggestions.closest("", listOf("a"))).isNull()
+        assertThat(Suggestions.closest("  ", listOf("a"))).isNull()
         assertThat(Suggestions.closest("   ", names)).isNull()
         assertThat(Suggestions.closest("벤치프레스", emptyList())).isNull()
     }
@@ -67,5 +70,18 @@ class SuggestionsTest {
     fun `edit distance gives up early when the limit is exceeded`() {
         assertThat(Suggestions.distance("abcdef", "uvwxyz", 2)).isEqualTo(3)
         assertThat(Suggestions.distance("a", "abcdefgh", 2)).isEqualTo(3)
+    }
+
+    @Test
+    fun `a short input is not matched to a name two letters away`() {
+        assertThat(Suggestions.closest("abcd", listOf("abxy"))).isNull()
+        assertThat(Suggestions.closest("abcde", listOf("abxye"))).isEqualTo("abxye")
+    }
+
+    @Test
+    fun `edit distance at exactly the limit is still reported`() {
+        assertThat(Suggestions.distance("abc", "abcd", 1)).isEqualTo(1)
+        assertThat(Suggestions.distance("abc", "abd", 1)).isEqualTo(1)
+        assertThat(Suggestions.distance("abc", "xyz", 3)).isEqualTo(3)
     }
 }

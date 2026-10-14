@@ -304,7 +304,7 @@ class TemplateImporterTest {
 
     @Test
     fun `pasted text works the same as a file`() {
-        assertThat(analyze("﻿" + simple).canImport).isTrue()
+        assertThat(analyze("\uFEFF" + simple).canImport).isTrue()
         assertThat(analyze("").canImport).isFalse()
         assertThat(analyze("그냥 글").errors.single().message).contains("JSON 문법")
         assertThat(analyze("가".repeat(ImportLimits.EXTERNAL.maxBytes)).errors.single().message).contains("너무 큽니다")

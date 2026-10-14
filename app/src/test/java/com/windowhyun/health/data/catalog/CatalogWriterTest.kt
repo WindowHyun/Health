@@ -77,10 +77,11 @@ class CatalogWriterTest {
         val onlyTemplates = CatalogWriter.write(listOf(template()))
         val onlyExercises = CatalogWriter.write(emptyList(), listOf(ExerciseEntity(name = "x", category = ExerciseCategory.OTHER, bodyPart = BodyPart.CORE)))
 
-        assertThat(onlyTemplates).doesNotContain("\"exercises\": [\n    {")
-        assertThat(onlyTemplates).contains("\"templates\"")
-        assertThat(onlyExercises).doesNotContain("\"templates\"")
-        assertThat(onlyExercises).contains("\"exercises\"")
+        // 최상위 항목은 두 칸 들여쓴 줄이다(하루 안의 "exercises" 와 구분된다).
+        assertThat(onlyTemplates).doesNotContain("\n  \"exercises\"")
+        assertThat(onlyTemplates).contains("\n  \"templates\"")
+        assertThat(onlyExercises).doesNotContain("\n  \"templates\"")
+        assertThat(onlyExercises).contains("\n  \"exercises\"")
     }
 
     @Test

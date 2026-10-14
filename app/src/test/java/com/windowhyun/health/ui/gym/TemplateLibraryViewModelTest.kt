@@ -158,6 +158,17 @@ class TemplateLibraryViewModelTest {
     }
 
     @Test
+    fun `importing only exercises says only that`() {
+        viewModel.importFromText("""{"exercises":[{"name":"내 새 운동","category":"CABLE","bodyPart":"BACK"}]}""")
+        settle { latest.preview != null }
+
+        viewModel.confirmImport()
+        settle { latest.preview == null && latest.message != null }
+
+        assertThat(latest.message).isEqualTo("가져왔습니다 · 새 종목 1개")
+    }
+
+    @Test
     fun `a preview with errors cannot be confirmed`() {
         viewModel.importFromText("""{"templates":[{"id":"x"}]}""")
         settle { latest.preview != null }
@@ -272,6 +283,33 @@ class TemplateLibraryViewModelTest {
         assertThat(result.createdRoutineNames).containsExactly("내 하체")
         val routine = runBlocking { routines.observeRoutines().first() }.single()
         assertThat(routine.items.map { it.exercise.name to it.defaultSets }).containsExactly("스쿼트" to 4, "레그 컬" to 3).inOrder()
+    }
+
+    /** 파일을 읽는 동안 다른 요청이 들어와도 겹쳐 처리하지 않는다. */
+    @Test
+    fun `a second request while one is running is ignored`() {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val gated = object : UserTemplateRepository by stored {
+            override suspend fun current(): List<RoutineTemplates.Template> {
+                gate.await()
+                return stored.current()
+            }
+        }
+        val slow = TemplateLibraryViewModel(
+            context, TemplateImporter(exercises, gated, Dispatchers.Unconfined), gated, routines, Dispatchers.Unconfined,
+        )
+        var seen = TemplateLibraryState()
+        GlobalScope.launch(Dispatchers.Unconfined) { slow.state.collect { seen = it } }
+
+        slow.importFromText(simple)
+        assertThat(seen.working).isTrue()
+        slow.importFromText("""{"exercises":[{"name":"두번째","category":"CABLE","bodyPart":"BACK"}]}""")
+        gate.complete(Unit)
+        settle { seen.preview != null && !seen.working }
+
+        // 첫 요청의 결과만 남는다.
+        assertThat(seen.preview!!.templates.map { it.id }).containsExactly("mine")
+        assertThat(seen.preview!!.newExercises).isEmpty()
     }
 
     // ----- 삭제 -----

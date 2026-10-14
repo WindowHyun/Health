@@ -214,4 +214,33 @@ class RoutineExportTest {
 
         assertThat(report.templates.single().description).contains("루틴 2개")
     }
+
+    @Test
+    fun `a routine with exactly thirty exercises is exported`() {
+        val r = routine("서른 개", *(0 until 30).map { item("종목$it", it) }.toTypedArray())
+
+        val result = RoutineExport.build(listOf(r), date)
+
+        assertThat(result.exportedRoutines).isEqualTo(1)
+        assertThat(result.skipped).isEmpty()
+    }
+
+    /** 이름이 풀어 쓴 한글(NFD)이면 파일에서 다시 읽을 때 다른 글자가 되어 종목을 못 찾는다. */
+    @Test
+    fun `an exercise name that is not normalized cannot be exported`() {
+        val decomposed = java.text.Normalizer.normalize("한글 운동", java.text.Normalizer.Form.NFD)
+        val result = RoutineExport.build(listOf(routine("정규화", item(decomposed, 0))), date)
+
+        assertThat(result.exportedRoutines).isEqualTo(0)
+        assertThat(result.skipped).containsExactly("정규화")
+    }
+
+    @Test
+    fun `three routines with the same name all get different names`() {
+        val rs = (1..3).map { routine("같은 이름", item("스쿼트", 0)) }
+
+        val names = reread(RoutineExport.build(rs, date).json, setOf("스쿼트")).templates.single().days.map { it.routineName }
+
+        assertThat(names).containsExactly("같은 이름", "같은 이름 (2)", "같은 이름 (3)").inOrder()
+    }
 }
