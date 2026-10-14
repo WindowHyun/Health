@@ -84,4 +84,10 @@ class SuggestionsTest {
         assertThat(Suggestions.distance("abc", "abd", 1)).isEqualTo(1)
         assertThat(Suggestions.distance("abc", "xyz", 3)).isEqualTo(3)
     }
+
+    @Test
+    fun `any amount of spacing is ignored`() {
+        assertThat(Suggestions.closest("벤 치 프 레 스", names)).isEqualTo("벤치프레스")
+        assertThat(Suggestions.closest(" 레 그 컬 ", names)).isEqualTo("레그 컬")
+    }
 }

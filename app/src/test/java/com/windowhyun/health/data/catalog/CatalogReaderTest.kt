@@ -681,6 +681,31 @@ class CatalogReaderTest {
         assertThat(report.templates.map { it.id }).containsExactly("good")
     }
 
+    /**
+     * 오류가 있으면 만들 수 있는 항목도 받아들이지 않는다. 필드 하나가 비는 오류는 항목이 못 만들어져 저절로 빠지지만,
+     * 모르는 키 · 겹침처럼 만들 수는 있는 오류는 이 규칙이 막는다.
+     */
+    @Test
+    fun `an item with an error is left out even when it could be built`() {
+        val typo = """{"id":"typo","category":"SPLIT","title":"t","description":"d","extra":1,"days":[${day("오타 하루")}]}"""
+        val dup = tpl(id = "dup", days = listOf(day("겹침 하루", lines = listOf(line("스쿼트"), line("스쿼트")))))
+        val crossed = tpl(id = "crossed", days = listOf(supersetDay("A", null, "A").replace("\"하루\"", "\"끼임 하루\"")))
+
+        val report = read(templatesFile(tpl(id = "good", days = listOf(day("좋은"))), typo, dup, crossed))
+
+        assertThat(report.isValid).isFalse()
+        assertThat(report.errors).hasSize(3)
+        assertThat(report.templates.map { it.id }).containsExactly("good")
+    }
+
+    @Test
+    fun `an exercise with an unknown key is left out`() {
+        val report = read(exercisesFile(ex("좋은 운동"), ex("오타 운동", extra = ""","memo":"x"""")))
+
+        assertThat(report.isValid).isFalse()
+        assertThat(report.exercises.map { it.name }).containsExactly("좋은 운동")
+    }
+
     @Test
     fun `too many problems are summarised`() {
         val context = ImportContext(limits = ImportLimits.EXTERNAL.copy(maxIssues = 3))

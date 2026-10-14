@@ -242,6 +242,30 @@ class TemplateImporterTest {
         assertThat(runBlocking { stored.current() }).isEmpty()
     }
 
+    @Test
+    fun `new exercises are custom exercises already in the preview`() {
+        val preview = analyze("""{"exercises":[{"name":"내 새 운동","category":"CABLE","bodyPart":"BACK"}]}""")
+
+        assertThat(preview.newExercises.map { it.name }).containsExactly("내 새 운동")
+        assertThat(preview.newExercises.none { it.isBuiltIn }).isTrue()
+    }
+
+    /** 검사하고 확인하는 사이에 같은 이름의 종목이 생겨도 두 번 만들지 않는다. */
+    @Test
+    fun `an exercise that appeared after the check is not added twice`() {
+        val preview = analyze("""{"exercises":[{"name":"늦게 생긴 운동","category":"CABLE","bodyPart":"BACK"}]}""")
+        runBlocking {
+            exercises.addExercise(com.windowhyun.health.domain.model.Exercise(0, "늦게 생긴 운동", ExerciseCategory.DUMBBELL, BodyPart.ARM))
+        }
+
+        val result = commit(preview)
+
+        assertThat(result.addedExercises).isEqualTo(0)
+        val same = runBlocking { exercises.observeExercises().first() }.filter { it.name == "늦게 생긴 운동" }
+        assertThat(same).hasSize(1)
+        assertThat(same.single().category).isEqualTo(ExerciseCategory.DUMBBELL)
+    }
+
     // ----- 받은 글의 첫 관문 -----
 
     private fun stream(bytes: ByteArray): InputStream = ByteArrayInputStream(bytes)
