@@ -1,5 +1,6 @@
 package com.windowhyun.health.ui
 
+import com.windowhyun.health.data.catalog.InMemoryUserTemplateRepository
 import android.content.Context
 import android.os.Looper
 import androidx.activity.ComponentActivity
@@ -171,7 +172,7 @@ class PipSpaceTest {
     /** 화면 크기가 기기마다 달라서 이 설정은 백업에 넣지 않는다(다른 기기에서 복원해도 그 기기의 설정이 남는다). */
     @Test
     fun `a backup does not carry the pip space`() = runBlocking<Unit> {
-        val backup = BackupRepositoryImpl(db, db.backupDao(), settings, Dispatchers.IO)
+        val backup = BackupRepositoryImpl(db, db.backupDao(), settings, InMemoryUserTemplateRepository(), Dispatchers.IO)
         val runs = RunRepositoryImpl(db.runDao())
         val runId = runs.startRun(RunGoalType.FREE, 0.0)
         runs.finishRun(runId, System.currentTimeMillis() + 5_000, 5_000.0, 1_500, 300.0, 280.0, 300, 4_000)

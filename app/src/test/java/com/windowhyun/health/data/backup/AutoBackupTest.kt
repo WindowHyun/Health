@@ -1,5 +1,6 @@
 package com.windowhyun.health.data.backup
 
+import com.windowhyun.health.data.catalog.InMemoryUserTemplateRepository
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
@@ -59,7 +60,7 @@ class AutoBackupTest {
         settings = SettingsRepositoryImpl(
             PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file },
         )
-        backup = BackupRepositoryImpl(db, db.backupDao(), settings, dispatcher)
+        backup = BackupRepositoryImpl(db, db.backupDao(), settings, InMemoryUserTemplateRepository(), dispatcher)
         folder = FakeBackupFolder()
     }
 

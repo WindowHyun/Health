@@ -1,6 +1,10 @@
 package com.windowhyun.health.data.backup
 
 import androidx.room.withTransaction
+import com.windowhyun.health.data.catalog.CatalogReader
+import com.windowhyun.health.data.catalog.CatalogWriter
+import com.windowhyun.health.data.catalog.TemplateStorageFullException
+import com.windowhyun.health.data.catalog.UserTemplateRepository
 import com.windowhyun.health.BuildConfig
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.DistanceUnit
@@ -56,6 +60,7 @@ class BackupRepositoryImpl @Inject constructor(
     private val database: HealthDatabase,
     private val backupDao: BackupDao,
     private val settingsRepository: SettingsRepository,
+    private val userTemplates: UserTemplateRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : BackupRepository {
 
@@ -69,6 +74,7 @@ class BackupRepositoryImpl @Inject constructor(
     override suspend fun exportBackup(output: OutputStream): BackupSummary =
         withContext(ioDispatcher) {
             val settings = settingsRepository.settings.first()
+            val importedTemplates = userTemplates.current()
             val file = BackupFile(
                 createdAt = System.currentTimeMillis(),
                 appVersion = BuildConfig.VERSION_NAME,
@@ -83,9 +89,10 @@ class BackupRepositoryImpl @Inject constructor(
                 runs = backupDao.allRuns().map { it.toBackup() },
                 runLaps = backupDao.allRunLaps().map { it.toBackup() },
                 runLocations = backupDao.allRunLocations().map { it.toBackup() },
+                userTemplates = importedTemplates.takeIf { it.isNotEmpty() }?.let { CatalogWriter.write(it) },
             )
             output.use { json.encodeToStream(file, it) }
-            file.summarize()
+            file.summarize().copy(userTemplateCount = importedTemplates.size)
         }
 
     override suspend fun restoreBackup(input: InputStream): BackupSummary =
@@ -149,11 +156,30 @@ class BackupRepositoryImpl @Inject constructor(
             }
 
             settingsRepository.update { file.settings.toSettings(it) }
+            val restoredTemplates = restoreUserTemplates(file.userTemplates)
 
             clean.summarize().copy(
+                userTemplateCount = restoredTemplates,
                 droppedRows = file.rowCount() - clean.rowCount(),
             )
         }
+
+    /**
+     * 백업에 든 가져온 템플릿으로 지금 것을 바꾼다. 백업에 없으면(옛 백업) 지금 것을 그대로 둔다.
+     * 읽을 수 없거나 저장 한도를 넘는 글은 건너뛴다: 기록 복원은 이미 끝났고, 템플릿은 다시 가져올 수 있다.
+     * 반환값은 복원한 템플릿 수.
+     */
+    private suspend fun restoreUserTemplates(text: String?): Int {
+        if (text == null) return 0
+        val report = CatalogReader.read(text)
+        if (!report.isValid || report.templates.isEmpty()) return 0
+        return try {
+            userTemplates.replaceAll(report.templates)
+            report.templates.size
+        } catch (e: TemplateStorageFullException) {
+            0
+        }
+    }
 
     override suspend fun exportWorkoutCsv(output: OutputStream): Int =
         withContext(ioDispatcher) {

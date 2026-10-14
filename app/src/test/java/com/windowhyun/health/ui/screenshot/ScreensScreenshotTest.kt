@@ -1,5 +1,6 @@
 package com.windowhyun.health.ui.screenshot
 
+import com.windowhyun.health.data.catalog.InMemoryUserTemplateRepository
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
@@ -175,7 +176,7 @@ class ScreensScreenshotTest {
 
     private fun settings(name: String, dark: Boolean, autoBackup: Boolean = false) {
         val viewModel = SettingsViewModel(fixture.settings)
-        val backupRepository = BackupRepositoryImpl(fixture.db, fixture.db.backupDao(), fixture.settings, Dispatchers.IO)
+        val backupRepository = BackupRepositoryImpl(fixture.db, fixture.db.backupDao(), fixture.settings, InMemoryUserTemplateRepository(), Dispatchers.IO)
         if (autoBackup) {
             runBlocking {
                 fixture.settings.update {

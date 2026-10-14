@@ -230,6 +230,8 @@ data class BackupSummary(
     val workoutCount: Int = 0,
     val setCount: Int = 0,
     val runCount: Int = 0,
+    /** 가져온 루틴 템플릿의 수. */
+    val userTemplateCount: Int = 0,
     /** 연결이 끊어져 버린 행 수. 정상 파일이면 0 이다. */
     val droppedRows: Int = 0,
 )

@@ -1,5 +1,10 @@
 package com.windowhyun.health.data.backup
 
+import com.windowhyun.health.ui.gym.RoutineTemplates
+import com.windowhyun.health.data.catalog.UserTemplateRepository
+import com.windowhyun.health.data.catalog.CatalogWriter
+import com.windowhyun.health.data.catalog.CatalogReader
+import com.windowhyun.health.data.catalog.InMemoryUserTemplateRepository
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
@@ -58,6 +63,7 @@ class BackupRepositoryTest {
     private lateinit var runs: RunRepositoryImpl
     private lateinit var settings: SettingsRepository
     private lateinit var backup: BackupRepositoryImpl
+    private lateinit var userTemplates: InMemoryUserTemplateRepository
 
     @Before
     fun setUp() {
@@ -77,7 +83,8 @@ class BackupRepositoryTest {
         settings = SettingsRepositoryImpl(
             PreferenceDataStoreFactory.create(scope = TestScope(dispatcher)) { file },
         )
-        backup = BackupRepositoryImpl(db, db.backupDao(), settings, dispatcher)
+        userTemplates = InMemoryUserTemplateRepository()
+        backup = BackupRepositoryImpl(db, db.backupDao(), settings, userTemplates, dispatcher)
     }
 
     @After
@@ -496,5 +503,106 @@ class BackupRepositoryTest {
         backup.restoreBackup(ByteArrayInputStream(old.toString().toByteArray()))
 
         assertThat(db.backupDao().allWorkouts()).hasSize(1)
+    }
+
+    // ----- 가져온 루틴 템플릿 -----
+
+    private fun importedTemplate(id: String, title: String = "제목 $id") = RoutineTemplates.Template(
+        id = id,
+        category = RoutineTemplates.Category.SPLIT,
+        title = title,
+        description = "설명",
+        days = listOf(
+            RoutineTemplates.Day(
+                routineName = "루틴 $id",
+                exercises = listOf("스쿼트" to 4, "레그 컬" to 3),
+                restSeconds = mapOf("스쿼트" to 120),
+                scheduledDays = setOf(java.time.DayOfWeek.TUESDAY),
+            ),
+        ),
+    )
+
+    /** 백업 글의 `userTemplates` 만 바꿔 다시 쓴다. */
+    private fun withUserTemplates(bytes: ByteArray, value: String?): ByteArray {
+        val file = Json { ignoreUnknownKeys = true }.decodeFromString(BackupFile.serializer(), bytes.decodeToString())
+        return Json { encodeDefaults = true }.encodeToString(BackupFile.serializer(), file.copy(userTemplates = value)).toByteArray()
+    }
+
+    @Test
+    fun `the backup carries the imported templates and counts them`() = runTest(dispatcher) {
+        seedRecords()
+        userTemplates.save(listOf(importedTemplate("a"), importedTemplate("b")))
+        val out = ByteArrayOutputStream()
+
+        val summary = backup.exportBackup(out)
+
+        assertThat(summary.userTemplateCount).isEqualTo(2)
+        val file = Json { ignoreUnknownKeys = true }.decodeFromString(BackupFile.serializer(), out.toByteArray().decodeToString())
+        assertThat(file.userTemplates).isNotNull()
+        assertThat(CatalogReader.read(file.userTemplates!!).templates.map { it.id }).containsExactly("a", "b").inOrder()
+    }
+
+    @Test
+    fun `a backup without imported templates leaves the field out`() = runTest(dispatcher) {
+        seedRecords()
+
+        val file = Json { ignoreUnknownKeys = true }.decodeFromString(BackupFile.serializer(), exportBytes().decodeToString())
+
+        assertThat(file.userTemplates).isNull()
+    }
+
+    @Test
+    fun `restore brings the imported templates back`() = runTest(dispatcher) {
+        seedRecords()
+        userTemplates.save(listOf(importedTemplate("a", "첫째"), importedTemplate("b")))
+        val bytes = exportBytes()
+        userTemplates.replaceAll(listOf(importedTemplate("other")))
+
+        val summary = backup.restoreBackup(ByteArrayInputStream(bytes))
+
+        assertThat(summary.userTemplateCount).isEqualTo(2)
+        assertThat(userTemplates.current()).isEqualTo(listOf(importedTemplate("a", "첫째"), importedTemplate("b")))
+    }
+
+    /** 옛 버전 앱의 백업에는 이 필드가 없다. 그때는 지금 가진 템플릿을 지우지 않는다. */
+    @Test
+    fun `restoring a backup that has no templates field keeps the current ones`() = runTest(dispatcher) {
+        seedRecords()
+        val old = withUserTemplates(exportBytes(), null)
+        userTemplates.save(listOf(importedTemplate("mine")))
+
+        val summary = backup.restoreBackup(ByteArrayInputStream(old))
+
+        assertThat(summary.userTemplateCount).isEqualTo(0)
+        assertThat(userTemplates.current().map { it.id }).containsExactly("mine")
+    }
+
+    @Test
+    fun `unreadable templates in a backup are skipped and the records are still restored`() = runTest(dispatcher) {
+        val workoutId = seedRecords()
+        userTemplates.save(listOf(importedTemplate("mine")))
+        val bytes = exportBytes()
+        db.backupDao().deleteAllWorkouts()
+
+        listOf("이건 json 이 아님", "", """{"templates":[{"id":"x"}]}""", """{"version":1}""").forEach { broken ->
+            val summary = backup.restoreBackup(ByteArrayInputStream(withUserTemplates(bytes, broken)))
+
+            assertThat(summary.userTemplateCount).isEqualTo(0)
+            assertThat(userTemplates.current().map { it.id }).containsExactly("mine")
+            assertThat(workouts.getWorkout(workoutId)).isNotNull()
+        }
+    }
+
+    @Test
+    fun `templates over the storage limit are skipped when restoring`() = runTest(dispatcher) {
+        seedRecords()
+        val many = (1..UserTemplateRepository.MAX_TEMPLATES + 1).map { importedTemplate("t$it") }
+        val text = CatalogWriter.write(many)
+        userTemplates.save(listOf(importedTemplate("mine")))
+
+        val summary = backup.restoreBackup(ByteArrayInputStream(withUserTemplates(exportBytes(), text)))
+
+        assertThat(summary.userTemplateCount).isEqualTo(0)
+        assertThat(userTemplates.current().map { it.id }).containsExactly("mine")
     }
 }

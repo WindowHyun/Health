@@ -1,5 +1,6 @@
 package com.windowhyun.health.data
 
+import com.windowhyun.health.data.catalog.InMemoryUserTemplateRepository
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.SavedStateHandle
@@ -197,7 +198,7 @@ class SupersetTest {
     fun `backup round trip keeps supersets in routines and workouts`() = runTest(dispatcher) {
         val routineId = routineWithSuperset()
         val workoutId = workouts.startWorkout(routineId)
-        val backup = BackupRepositoryImpl(db, db.backupDao(), settings, dispatcher)
+        val backup = BackupRepositoryImpl(db, db.backupDao(), settings, InMemoryUserTemplateRepository(), dispatcher)
         val out = ByteArrayOutputStream().also { backup.exportBackup(it) }
 
         db.backupDao().deleteAllWorkouts()

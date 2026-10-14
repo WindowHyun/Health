@@ -175,4 +175,5 @@ class BackupViewModel @Inject constructor(
 }
 
 private fun BackupSummary.describe(): String =
-    "운동 ${workoutCount}회 · 세트 ${setCount}개 · 러닝 ${runCount}회 · 루틴 ${routineCount}개"
+    "운동 ${workoutCount}회 · 세트 ${setCount}개 · 러닝 ${runCount}회 · 루틴 ${routineCount}개" +
+        if (userTemplateCount > 0) " · 가져온 템플릿 ${userTemplateCount}개" else ""

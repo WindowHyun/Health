@@ -41,6 +41,11 @@ data class BackupFile(
     val runs: List<BackupRun> = emptyList(),
     val runLaps: List<BackupRunLap> = emptyList(),
     val runLocations: List<BackupRunLocation> = emptyList(),
+    /**
+     * 가져온 루틴 템플릿(템플릿 파일 형식의 글). 옛 백업에는 없고, 없으면 복원할 때 지금 것을 그대로 둔다.
+     * 있어도 읽을 수 없는 글이면 건너뛴다 — 템플릿은 원래 파일에서 다시 가져올 수 있다.
+     */
+    val userTemplates: String? = null,
 ) {
     companion object {
         /** 지금 쓰는 형식 버전. 필드를 지우거나 뜻을 바꿀 때만 올린다. */

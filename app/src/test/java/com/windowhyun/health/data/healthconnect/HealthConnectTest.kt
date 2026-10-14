@@ -1,5 +1,6 @@
 package com.windowhyun.health.data.healthconnect
 
+import com.windowhyun.health.data.catalog.InMemoryUserTemplateRepository
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.SavedStateHandle
@@ -393,7 +394,7 @@ class HealthConnectTest {
 
     @Test
     fun `health connect settings are not carried by a backup`() = runBlocking<Unit> {
-        val backup = BackupRepositoryImpl(db, db.backupDao(), settings, Dispatchers.IO)
+        val backup = BackupRepositoryImpl(db, db.backupDao(), settings, InMemoryUserTemplateRepository(), Dispatchers.IO)
         finishedRun() // 기록이 하나도 없는 백업은 복원하지 않는다
         settings.update { it.copy(healthConnectEnabled = true, healthConnectImportWeight = true, weeklyWorkoutGoal = 3) }
         val bytes = ByteArrayOutputStream().also { backup.exportBackup(it) }.toByteArray()
