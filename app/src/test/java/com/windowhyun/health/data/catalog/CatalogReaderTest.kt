@@ -767,4 +767,195 @@ class CatalogReaderTest {
         assertThat(CatalogIssue(IssueSeverity.ERROR, "a › b", "문제").toString()).isEqualTo("a › b: 문제")
         assertThat(CatalogIssue(IssueSeverity.ERROR, "", "문제").toString()).isEqualTo("문제")
     }
+
+    // ----- 보이지 않는 문자(유니코드 분류) · 저장된 글 · 한도 -----
+
+    private fun cp(code: Int) = String(Character.toChars(code))
+
+    private val stored = ImportContext.STORED
+
+    /** 목록에 적은 몇 개가 아니라 분류로 거른다: 폭이 0인 공백 · 소프트 하이픈 · 태그 · 사설 영역 · 한글 채움 문자 등. */
+    @Test
+    fun `invisible characters are refused by category`() {
+        listOf(
+            0x200B, 0x200C, 0x200D, 0x2060, 0x00AD, 0x180E, 0xE0001, 0xE007F, 0xE000,
+            0x3164, 0x115F, 0x1160, 0xFFA0, 0x2800, 0x17B4, 0x17B5,
+        ).forEach { code ->
+            val report = read(exercisesFile(ex(name = "스쿼트" + cp(code))))
+            assertOneError(report, "쓸 수 없는 문자", "U+" + code.toString(16).uppercase().padStart(4, '0'))
+        }
+    }
+
+    @Test
+    fun `a name made only of a blank looking character is refused`() {
+        assertOneError(read(exercisesFile(ex(name = cp(0x3164)))), "쓸 수 없는 문자")
+        assertOneError(read(exercisesFile(ex(name = cp(0x200B)))), "쓸 수 없는 문자")
+    }
+
+    /** 같아 보이는데 이름이 달라지는 공백은 거절한다(보통 공백 U+0020 만 쓴다). */
+    @Test
+    fun `spaces other than the plain space are refused inside a name`() {
+        listOf(0x00A0, 0x3000, 0x2003, 0x202F).forEach { code ->
+            val report = read(exercisesFile(ex(name = "벤치" + cp(code) + "프레스")))
+            assertOneError(report, "쓸 수 없는 문자", "U+" + code.toString(16).uppercase().padStart(4, '0'))
+        }
+        assertThat(read(exercisesFile(ex(name = "벤치 프레스"))).isValid).isTrue()
+    }
+
+    @Test
+    fun `a description may join emoji but a name may not and zero width spaces are refused everywhere`() {
+        val family = cp(0x1F468) + cp(0x200D) + cp(0x1F469) + cp(0x200D) + cp(0x1F467)
+
+        assertThat(read(templatesFile(tpl(description = "가족 $family"))).isValid).isTrue()
+        assertOneError(read(exercisesFile(ex(name = "가족 $family"))), "U+200D")
+        assertOneError(templateErrors(tpl(description = "설명" + cp(0x200B))), "description", "U+200B")
+    }
+
+    @Test
+    fun `ordinary text with emoji punctuation and hangul is not refused`() {
+        val name = "벤치프레스 · 변형 (A) – 😀 ① ㉠ ×2"
+
+        assertThat(read(exercisesFile(ex(name = name))).exercises.single().name).isEqualTo(name)
+    }
+
+    @Test
+    fun `stored files may repeat a routine name across templates but not inside one`() {
+        val across = templatesFile(tpl(id = "a", days = listOf(day("같은"))), tpl(id = "b", days = listOf(day("같은"))))
+
+        assertThat(read(across, stored).isValid).isTrue()
+        assertThat(read(across, stored).templates.map { it.id }).containsExactly("a", "b").inOrder()
+        assertOneError(read(templatesFile(tpl(days = listOf(day("같은"), day("같은")))), stored), "겹칩니다")
+        // 가져오기 규칙으로는 여전히 오류다.
+        assertThat(read(across).isValid).isFalse()
+    }
+
+    /** 옛 버전이 받아들여 저장한 글을 새 글자 규칙으로 거절하면 저장해 둔 템플릿이 통째로 읽히지 않는다. */
+    @Test
+    fun `stored files may hold text an older version accepted`() {
+        val old = templatesFile(tpl(title = "제목" + cp(0x200B), description = "설명" + cp(0x3164)))
+
+        assertThat(read(old, stored).isValid).isTrue()
+        assertThat(read(old, stored).templates.single().title).isEqualTo("제목" + cp(0x200B))
+        assertThat(read(old).isValid).isFalse()
+    }
+
+    @Test
+    fun `stored reading still refuses a broken structure`() {
+        assertThat(read("{", stored).isValid).isFalse()
+        assertThat(read("""{"templates":[{"id":"x"}]}""", stored).isValid).isFalse()
+    }
+
+    @Test
+    fun `a file written by the writer reads back identically with the stored rules`() {
+        val two = listOf(
+            RoutineTemplates.Template("a", RoutineTemplates.Category.SPLIT, "제목", "설명", listOf(RoutineTemplates.Day("같은", listOf("스쿼트" to 3)))),
+            RoutineTemplates.Template("b", RoutineTemplates.Category.SPLIT, "제목", "설명", listOf(RoutineTemplates.Day("같은", listOf("스쿼트" to 3)))),
+        )
+
+        assertThat(read(CatalogWriter.write(two), stored).templates).isEqualTo(two)
+    }
+
+    /** 경고가 먼저 많이 나와도 뒤의 진짜 오류가 숫자로만 남지 않는다. */
+    @Test
+    fun `warnings never push real errors out of the list`() {
+        val known = (1..60).map { "종목$it" }.toSet()
+        val items = (known.map { ex(it) } + ex("진짜 오류", category = "NOPE")).toTypedArray()
+
+        val report = read(exercisesFile(*items), ImportContext(limits = ImportLimits.EXTERNAL, knownExerciseNames = known))
+
+        assertThat(report.isValid).isFalse()
+        val listed = report.errors.filter { !it.message.startsWith("그 밖에") }
+        assertThat(listed).hasSize(1)
+        assertThat(listed.single().toString()).contains("category")
+        assertThat(report.warnings).hasSize(51)
+        assertThat(report.warnings.last().message).contains("알림 10개가 더 있습니다")
+    }
+
+    @Test
+    fun `errors are listed before warnings`() {
+        val report = read(
+            exercisesFile(ex("스쿼트"), ex("오류", category = "NOPE")),
+            ImportContext(knownExerciseNames = setOf("스쿼트")),
+        )
+
+        assertThat(report.issues.map { it.severity }).containsExactly(IssueSeverity.ERROR, IssueSeverity.WARNING).inOrder()
+    }
+
+    @Test
+    fun `errors and warnings each have their own limit`() {
+        val context = ImportContext(limits = ImportLimits.EXTERNAL.copy(maxIssues = 2), knownExerciseNames = setOf("가", "나", "다"))
+        val items = listOf(ex("가"), ex("나"), ex("다"), ex("x1", category = "N"), ex("x2", category = "N"), ex("x3", category = "N"))
+
+        val report = read(exercisesFile(*items.toTypedArray()), context)
+
+        assertThat(report.errors).hasSize(3)
+        assertThat(report.errors.last().message).contains("오류 1개가 더 있습니다")
+        assertThat(report.warnings).hasSize(3)
+        assertThat(report.warnings.last().message).contains("알림 1개가 더 있습니다")
+    }
+
+    // ----- 비슷한 이름 찾기 횟수 -----
+
+    private fun manyDaysWith(vararg names: String): String {
+        val days = names.mapIndexed { i, name -> day("날 $i", lines = listOf(line(name))) }
+        // 한 템플릿의 날 수 한도(14)에 맞게 나눠 담는다.
+        return templatesFile(*days.chunked(14).mapIndexed { i, chunk -> tpl(id = "t$i", days = chunk) }.toTypedArray())
+    }
+
+    private fun countingContext() = ImportContext(
+        limits = ImportLimits.EXTERNAL.copy(maxTemplates = 100),
+        knownExerciseNames = setOf("스쿼트"),
+        checkExerciseReferences = true,
+    )
+
+    @Test
+    fun `a name with no close match is looked up once however often it repeats`() {
+        var calls = 0
+
+        val report = CatalogReader.read(manyDaysWith(*Array(50) { "전혀 다른 이름" }), countingContext()) { _, _ ->
+            calls++
+            null
+        }
+
+        assertThat(report.errors).hasSize(50)
+        assertThat(calls).isEqualTo(1)
+    }
+
+    @Test
+    fun `a name with a suggestion is also looked up once`() {
+        var calls = 0
+
+        val report = CatalogReader.read(manyDaysWith(*Array(30) { "스쿼터" }), countingContext()) { _, _ ->
+            calls++
+            "스쿼트"
+        }
+
+        assertThat(calls).isEqualTo(1)
+        assertThat(report.errors.count { "'스쿼트' 를 쓰려던 건가요" in it.message }).isEqualTo(30)
+    }
+
+    @Test
+    fun `at most twenty different names are looked up`() {
+        var calls = 0
+
+        CatalogReader.read(manyDaysWith(*Array(40) { "없는 이름 $it" }), countingContext()) { _, _ ->
+            calls++
+            null
+        }
+
+        assertThat(calls).isEqualTo(20)
+    }
+
+    @Test
+    fun `the candidates are the known names and the names the file defines`() {
+        var seen: Collection<String> = emptyList()
+        val json = """{"exercises":[${ex("파일 종목")}],"templates":[${tpl(days = listOf(day(lines = listOf(line("없는 이름")))))}]}"""
+
+        CatalogReader.read(json, countingContext()) { _, candidates ->
+            seen = candidates.toList()
+            null
+        }
+
+        assertThat(seen).containsExactly("스쿼트", "파일 종목")
+    }
 }

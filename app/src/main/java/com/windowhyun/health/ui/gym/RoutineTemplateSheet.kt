@@ -70,12 +70,9 @@ fun RoutineTemplateSheet(
         if (uri != null) library.writeExport(uri) else library.cancelExport()
     }
     LaunchedEffect(library) { library.exportReady.collect { createFile.launch(it) } }
-    // 시트를 닫으면 확인을 기다리던 결과와 안내를 치운다. 다시 열었을 때 옛 창이 뜨지 않게.
+    // 시트를 닫으면 확인을 기다리던 결과와 안내를 치우고, 아직 읽는 중이던 파일의 결과는 버린다.
     DisposableEffect(library) {
-        onDispose {
-            library.dismissPreview()
-            library.clearMessage()
-        }
+        onDispose { library.sheetClosed() }
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {

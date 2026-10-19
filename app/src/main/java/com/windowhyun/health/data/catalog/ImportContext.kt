@@ -9,7 +9,7 @@ data class ImportLimits(
     val maxTemplates: Int,
     val maxDaysPerTemplate: Int,
     val maxItemsPerDay: Int,
-    /** 한 번에 보여 주는 문제의 수. 넘는 것은 개수만 알려 준다. */
+    /** 한 번에 보여 주는 문제의 수(오류와 알림 각각). 넘는 것은 개수만 알려 준다. */
     val maxIssues: Int = 50,
 ) {
     companion object {
@@ -82,4 +82,25 @@ data class ImportContext(
      * 이 파일이 같은 id 로 덮어쓸 템플릿의 이름은 곧 사라지므로 빼고 본다.
      */
     val otherRoutineNames: Map<String, Set<String>> = emptyMap(),
-)
+    /**
+     * false 면 보이지 않는 문자 검사를 하지 않는다. 이미 저장된 글을 다시 읽을 때만 쓴다:
+     * 옛 버전이 받아들여 저장한 글을 새 규칙으로 거절하면 저장해 둔 템플릿이 통째로 읽히지 않게 된다.
+     */
+    val rejectInvisibleText: Boolean = true,
+    /**
+     * false 면 서로 다른 템플릿이 같은 루틴 이름을 가져도 오류로 보지 않는다(한 템플릿 안에서 겹치는 것은 여전히 오류).
+     * 가져온 템플릿은 여러 번에 걸쳐 쌓이고, 가져오기 검사는 이름이 겹치는 것을 경고만 하고 받아들이므로,
+     * 저장된 파일을 다시 읽을 때는 겹쳐도 읽혀야 한다.
+     */
+    val routineNamesUniqueAcrossTemplates: Boolean = true,
+) {
+    companion object {
+        /** 저장해 둔 가져온 템플릿(파일 · 백업)을 다시 읽을 때. 이미 받아들인 내용이라 새로 따지지 않는다. */
+        val STORED = ImportContext(
+            limits = ImportLimits.BUNDLED,
+            markExercisesBuiltIn = false,
+            rejectInvisibleText = false,
+            routineNamesUniqueAcrossTemplates = false,
+        )
+    }
+}

@@ -507,14 +507,14 @@ class BackupRepositoryTest {
 
     // ----- 가져온 루틴 템플릿 -----
 
-    private fun importedTemplate(id: String, title: String = "제목 $id") = RoutineTemplates.Template(
+    private fun importedTemplate(id: String, title: String = "제목 $id", routine: String = "루틴 $id") = RoutineTemplates.Template(
         id = id,
         category = RoutineTemplates.Category.SPLIT,
         title = title,
         description = "설명",
         days = listOf(
             RoutineTemplates.Day(
-                routineName = "루틴 $id",
+                routineName = routine,
                 exercises = listOf("스쿼트" to 4, "레그 컬" to 3),
                 restSeconds = mapOf("스쿼트" to 120),
                 scheduledDays = setOf(java.time.DayOfWeek.TUESDAY),
@@ -523,9 +523,11 @@ class BackupRepositoryTest {
     )
 
     /** 백업 글의 `userTemplates` 만 바꿔 다시 쓴다. */
-    private fun withUserTemplates(bytes: ByteArray, value: String?): ByteArray {
+    private fun withUserTemplates(bytes: ByteArray, value: String?, included: Boolean = value != null): ByteArray {
         val file = Json { ignoreUnknownKeys = true }.decodeFromString(BackupFile.serializer(), bytes.decodeToString())
-        return Json { encodeDefaults = true }.encodeToString(BackupFile.serializer(), file.copy(userTemplates = value)).toByteArray()
+        return Json { encodeDefaults = true }
+            .encodeToString(BackupFile.serializer(), file.copy(userTemplates = value, hasUserTemplates = included))
+            .toByteArray()
     }
 
     @Test
@@ -549,6 +551,8 @@ class BackupRepositoryTest {
         val file = Json { ignoreUnknownKeys = true }.decodeFromString(BackupFile.serializer(), exportBytes().decodeToString())
 
         assertThat(file.userTemplates).isNull()
+        // 템플릿이 없었다는 것도 표시로 남긴다: 옛 형식 백업과 구분하려고.
+        assertThat(file.hasUserTemplates).isTrue()
     }
 
     @Test
@@ -568,7 +572,7 @@ class BackupRepositoryTest {
     @Test
     fun `restoring a backup that has no templates field keeps the current ones`() = runTest(dispatcher) {
         seedRecords()
-        val old = withUserTemplates(exportBytes(), null)
+        val old = withUserTemplates(exportBytes(), null, included = false)
         userTemplates.save(listOf(importedTemplate("mine")))
 
         val summary = backup.restoreBackup(ByteArrayInputStream(old))
@@ -604,5 +608,65 @@ class BackupRepositoryTest {
 
         assertThat(summary.userTemplateCount).isEqualTo(0)
         assertThat(userTemplates.current().map { it.id }).containsExactly("mine")
+    }
+
+    /** 템플릿이 하나도 없을 때 만든 백업을 복원하면, 그 뒤에 가져온 템플릿도 백업 시점으로 돌아간다. */
+    @Test
+    fun `a backup made with no templates clears the ones imported later`() = runTest(dispatcher) {
+        seedRecords()
+        val bytes = exportBytes()
+        userTemplates.save(listOf(importedTemplate("later")))
+
+        val summary = backup.restoreBackup(ByteArrayInputStream(bytes))
+
+        assertThat(summary.userTemplateCount).isEqualTo(0)
+        assertThat(userTemplates.current()).isEmpty()
+    }
+
+    /** v0.13.0 이 만든 백업에는 표시 없이 글만 있다. 그것도 복원해야 한다. */
+    @Test
+    fun `a backup from the previous version that has the text but no marker is still restored`() = runTest(dispatcher) {
+        seedRecords()
+        userTemplates.save(listOf(importedTemplate("a")))
+        val text = CatalogWriter.write(userTemplates.current())
+        val bytes = withUserTemplates(exportBytes(), text, included = false)
+        userTemplates.replaceAll(emptyList())
+
+        val summary = backup.restoreBackup(ByteArrayInputStream(bytes))
+
+        assertThat(summary.userTemplateCount).isEqualTo(1)
+        assertThat(userTemplates.current().map { it.id }).containsExactly("a")
+    }
+
+    /** 가져올 때 경고만 하고 받아들인 템플릿(루틴 이름이 겹침)도 백업했다 복원할 수 있어야 한다. */
+    @Test
+    fun `templates that share a routine name are restored`() = runTest(dispatcher) {
+        seedRecords()
+        userTemplates.save(listOf(importedTemplate("a", routine = "같은 루틴"), importedTemplate("b", routine = "같은 루틴")))
+        val bytes = exportBytes()
+        userTemplates.replaceAll(emptyList())
+
+        val summary = backup.restoreBackup(ByteArrayInputStream(bytes))
+
+        assertThat(summary.userTemplateCount).isEqualTo(2)
+        assertThat(userTemplates.current().map { it.id }).containsExactly("a", "b").inOrder()
+    }
+
+    /** 기록 복원은 이미 끝났다. 템플릿을 쓰다 실패해도 복원 전체가 실패한 것처럼 보이면 안 된다. */
+    @Test
+    fun `a template write failure does not fail the restore`() = runTest(dispatcher) {
+        val workoutId = seedRecords()
+        userTemplates.save(listOf(importedTemplate("a")))
+        val bytes = exportBytes()
+        db.backupDao().deleteAllWorkouts()
+        val failing = object : UserTemplateRepository by userTemplates {
+            override suspend fun replaceAll(templates: List<RoutineTemplates.Template>) = throw java.io.IOException("디스크가 가득 찼습니다")
+        }
+        val restoring = BackupRepositoryImpl(db, db.backupDao(), settings, failing, dispatcher)
+
+        val summary = restoring.restoreBackup(ByteArrayInputStream(bytes))
+
+        assertThat(summary.userTemplateCount).isEqualTo(0)
+        assertThat(workouts.getWorkout(workoutId)).isNotNull()
     }
 }

@@ -2,6 +2,7 @@ package com.windowhyun.health.ui.gym
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.data.catalog.ImportPreview
@@ -13,6 +14,7 @@ import com.windowhyun.health.di.IoDispatcher
 import com.windowhyun.health.domain.repository.RoutineRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,30 +77,43 @@ class TemplateLibraryViewModel @Inject constructor(
 
     private var pendingExport: RoutineExport.Result? = null
 
+    /**
+     * 시트를 닫을 때마다 올린다. 파일을 읽는 도중에 시트를 닫으면, 나중에 끝난 결과가 다음에 시트를 열 때 갑자기
+     * 나타나지 않게 이 값이 달라졌는지로 가려낸다.
+     */
+    private var epoch = 0
+
     // ----- 가져오기 -----
 
     /** 사용자가 고른 파일을 읽어 검사한다. */
-    fun importFromUri(uri: Uri) = work {
-        val stream = try {
-            withContext(io) { context.contentResolver.openInputStream(uri) }
-        } catch (e: Exception) {
-            null
-        }
-        if (stream == null) {
-            say("파일을 열 수 없습니다.")
-            return@work
-        }
-        try {
-            showPreview(importer.analyzeStream(stream))
-        } catch (e: IOException) {
-            say("파일을 읽는 중 문제가 생겼습니다.")
+    fun importFromUri(uri: Uri) {
+        val token = epoch
+        work {
+            val stream = try {
+                withContext(io) { context.contentResolver.openInputStream(uri) }
+            } catch (e: Exception) {
+                null
+            }
+            if (stream == null) {
+                say("파일을 열 수 없습니다.", token)
+                return@work
+            }
+            try {
+                showPreview(importer.analyzeStream(stream), token)
+            } catch (e: IOException) {
+                say("파일을 읽는 중 문제가 생겼습니다.", token)
+            }
         }
     }
 
     /** 붙여넣은 글을 검사한다. */
-    fun importFromText(text: String) = work { showPreview(importer.analyzeText(text)) }
+    fun importFromText(text: String) {
+        val token = epoch
+        work { showPreview(importer.analyzeText(text), token) }
+    }
 
-    private fun showPreview(preview: ImportPreview) {
+    private fun showPreview(preview: ImportPreview, token: Int) {
+        if (token != epoch) return
         transient.update { it.copy(preview = preview, message = null) }
     }
 
@@ -106,6 +121,7 @@ class TemplateLibraryViewModel @Inject constructor(
     fun confirmImport() {
         val preview = transient.value.preview ?: return
         if (!preview.canImport) return
+        val token = epoch
         work {
             val message = try {
                 val result = importer.commit(preview)
@@ -123,7 +139,7 @@ class TemplateLibraryViewModel @Inject constructor(
             } catch (e: IllegalArgumentException) {
                 "가져올 수 없는 내용입니다."
             }
-            transient.update { it.copy(preview = null, message = message) }
+            if (token == epoch) transient.update { it.copy(preview = null, message = message) }
         }
     }
 
@@ -131,11 +147,22 @@ class TemplateLibraryViewModel @Inject constructor(
 
     fun clearMessage() = transient.update { it.copy(message = null) }
 
+    /** 시트를 닫았다. 확인을 기다리던 결과와 안내를 치우고, 아직 끝나지 않은 검사의 결과는 나중에 와도 버린다. */
+    fun sheetClosed() {
+        epoch++
+        transient.update { it.copy(preview = null, message = null) }
+    }
+
     fun deleteUserTemplate(id: String) {
         viewModelScope.launch {
-            val title = userTemplates.current().firstOrNull { it.id == id }?.title ?: return@launch
-            userTemplates.delete(id)
-            say("'$title' 템플릿을 지웠습니다. 이미 만든 루틴은 그대로 남습니다.")
+            try {
+                val title = userTemplates.current().firstOrNull { it.id == id }?.title ?: return@launch
+                userTemplates.delete(id)
+                say("'$title' 템플릿을 지웠습니다. 이미 만든 루틴은 그대로 남습니다.")
+            } catch (e: IOException) {
+                Log.w(TAG, "템플릿을 지우지 못했습니다", e)
+                say(FAILED)
+            }
         }
     }
 
@@ -186,18 +213,34 @@ class TemplateLibraryViewModel @Inject constructor(
 
     // ----- 공통 -----
 
-    private fun say(text: String) = transient.update { it.copy(message = text) }
+    /** 안내를 띄운다. [token] 을 주면 그사이 시트가 닫혔을 때는 띄우지 않는다. */
+    private fun say(text: String, token: Int = epoch) {
+        if (token == epoch) transient.update { it.copy(message = text) }
+    }
 
-    /** 같은 작업이 겹치지 않게 막고, 하는 동안 [TemplateLibraryState.working] 을 켠다. */
+    /**
+     * 같은 작업이 겹치지 않게 막고, 하는 동안 [TemplateLibraryState.working] 을 켠다.
+     * 파일을 쓰다 저장 공간이 모자라는 것처럼 예상 밖의 실패는 앱을 끝내지 않고 안내로 바꾼다.
+     */
     private fun work(block: suspend () -> Unit) {
         if (transient.value.working) return
         transient.update { it.copy(working = true) }
         viewModelScope.launch {
             try {
                 block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "템플릿 작업에 실패했습니다", e)
+                say(FAILED)
             } finally {
                 transient.update { it.copy(working = false) }
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "TemplateLibrary"
+        const val FAILED = "처리하지 못했습니다. 저장 공간을 확인한 뒤 다시 시도해 주세요."
     }
 }

@@ -17,10 +17,13 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Before
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.io.InputStream
 
 /**
@@ -347,6 +350,53 @@ class TemplateImporterTest {
         runBlocking { importer.analyzeStream(input) }
 
         assertThat(closed).isTrue()
+    }
+
+    // ----- 실제 파일 저장소로: 받아들인 것은 다시 켜도 남는다 -----
+
+    @get:Rule
+    val folder = TemporaryFolder()
+
+    /** 가져오기 검사는 이름이 겹치는 것을 경고만 하고 받아들인다. 그렇게 저장한 것은 앱을 다시 켜도 모두 있어야 한다. */
+    @Test
+    fun `templates imported one after another survive a restart even when routine names overlap`() {
+        val file = File(folder.root, "user_templates.json")
+        val repository = FileUserTemplateRepository(file, Dispatchers.Unconfined)
+        val real = TemplateImporter(exercises, repository, Dispatchers.Unconfined)
+
+        val first = runBlocking { real.analyzeText(templates(tpl("first", days = arrayOf(day("같은 루틴", line("스쿼트")))))) }
+        runBlocking { real.commit(first) }
+        val second = runBlocking { real.analyzeText(templates(tpl("second", days = arrayOf(day("같은 루틴", line("스쿼트")))))) }
+        assertThat(second.canImport).isTrue()
+        assertThat(second.warnings.single().toString()).contains("다른 템플릿")
+        runBlocking { real.commit(second) }
+
+        val afterRestart = FileUserTemplateRepository(file, Dispatchers.Unconfined)
+        assertThat(runBlocking { afterRestart.current() }.map { it.id }).containsExactly("first", "second").inOrder()
+        assertThat(File(file.path + FileUserTemplateRepository.BROKEN_SUFFIX).exists()).isFalse()
+        // 다시 켠 뒤의 검사도 두 템플릿을 모두 알고 있다.
+        val third = runBlocking { TemplateImporter(exercises, afterRestart, Dispatchers.Unconfined).analyzeText(templates(tpl("third", days = arrayOf(day("같은 루틴", line("스쿼트")))))) }
+        assertThat(third.warnings.single().toString()).contains("다른 템플릿")
+    }
+
+    @Test
+    fun `an imported template with new exercises survives a restart and keeps its details`() {
+        val file = File(folder.root, "user_templates.json")
+        val real = TemplateImporter(exercises, FileUserTemplateRepository(file, Dispatchers.Unconfined), Dispatchers.Unconfined)
+        val text = """{"exercises":[{"name":"내 새 운동","category":"CABLE","bodyPart":"BACK"}],
+            "templates":[{"id":"mine","category":"SPLIT","title":"내 분할","description":"설명 \n둘째 줄",
+            "days":[{"name":"내 하체","scheduledDays":["TUESDAY"],"exercises":[
+              {"name":"내 새 운동","sets":4,"rest":90,"superset":"A"},{"name":"스쿼트","sets":3,"rest":120,"superset":"A"}]}]}]}"""
+
+        runBlocking { real.commit(real.analyzeText(text)) }
+
+        val saved = runBlocking { FileUserTemplateRepository(file, Dispatchers.Unconfined).current() }.single()
+        assertThat(saved.description).isEqualTo("설명 \n둘째 줄")
+        val day = saved.days.single()
+        assertThat(day.exercises).containsExactly("내 새 운동" to 4, "스쿼트" to 3).inOrder()
+        assertThat(day.restSeconds).containsExactly("내 새 운동", 90, "스쿼트", 120)
+        assertThat(day.supersets).containsExactly(listOf("내 새 운동", "스쿼트"))
+        assertThat(day.scheduledDays).containsExactly(java.time.DayOfWeek.TUESDAY)
     }
 
     // ----- 저장 한도 -----

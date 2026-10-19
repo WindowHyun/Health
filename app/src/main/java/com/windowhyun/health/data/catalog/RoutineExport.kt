@@ -77,10 +77,21 @@ object RoutineExport {
 
     /** 루틴 이름은 자유롭게 지을 수 있어서, 파일 규칙에 맞게 다듬는다(종목 이름과 달리 다른 곳이 이름으로 찾지 않는다). */
     private fun sanitize(name: String): String {
-        val cleaned = name.map { if (CatalogReader.isIllegal(it, multiline = false) || it.isSurrogate()) ' ' else it }
-            .joinToString("")
-            .trim()
-        return java.text.Normalizer.normalize(cleaned, java.text.Normalizer.Form.NFC).take(CatalogRules.MAX_NAME_LENGTH).trim()
+        val cleaned = buildString {
+            var i = 0
+            while (i < name.length) {
+                val cp = name.codePointAt(i)
+                if (CatalogReader.isIllegal(cp, multiline = false)) append(' ') else appendCodePoint(cp)
+                i += Character.charCount(cp)
+            }
+        }.trim()
+        return takeChars(java.text.Normalizer.normalize(cleaned, java.text.Normalizer.Form.NFC), CatalogRules.MAX_NAME_LENGTH).trim()
+    }
+
+    /** 앞에서 [count] 글자. 이모지처럼 두 글자로 이루어진 글자의 한가운데에서 자르지 않는다. */
+    private fun takeChars(text: String, count: Int): String {
+        val cut = text.take(count)
+        return if (cut.length < text.length && cut.isNotEmpty() && Character.isHighSurrogate(cut.last())) cut.dropLast(1) else cut
     }
 
     private fun uniqueName(name: String, taken: MutableSet<String>): String {
@@ -89,7 +100,7 @@ object RoutineExport {
         var n = 2
         while (!taken.add(candidate)) {
             val suffix = " ($n)"
-            candidate = base.take(CatalogRules.MAX_NAME_LENGTH - suffix.length).trim() + suffix
+            candidate = takeChars(base, CatalogRules.MAX_NAME_LENGTH - suffix.length).trim() + suffix
             n++
         }
         return candidate

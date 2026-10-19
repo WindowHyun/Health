@@ -127,10 +127,11 @@ class FileUserTemplateRepository internal constructor(
         } catch (e: IOException) {
             return emptyList()
         }
-        val report = CatalogReader.read(text)
+        // 이미 받아들여 저장한 글이라, 가져올 때의 까다로운 규칙(템플릿 사이의 이름 겹침 · 글자 규칙)은 다시 따지지 않는다.
+        // 그러지 않으면 옛 버전이나 경고만 내고 받아들인 템플릿 때문에 저장해 둔 템플릿이 통째로 읽히지 않는다.
+        val report = CatalogReader.read(text, ImportContext.STORED)
         if (report.isValid) return report.templates
-        // 읽을 수 없는 파일을 다음에 쓸 때 덮어쓰면 되살릴 길이 없어진다. 옆에 남겨 둔다.
-        runCatching { file.copyTo(File(file.path + BROKEN_SUFFIX), overwrite = true) }
+        keepBrokenCopy(text)
         return emptyList()
     }
 
@@ -138,15 +139,16 @@ class FileUserTemplateRepository internal constructor(
         if (list.size > UserTemplateRepository.MAX_TEMPLATES) {
             throw TemplateStorageFullException(TemplateStorageFullException.TOO_MANY)
         }
-        val text = if (list.isEmpty()) "" else CatalogWriter.write(list)
-        if (text.toByteArray(Charsets.UTF_8).size > UserTemplateRepository.MAX_BYTES) {
-            throw TemplateStorageFullException(TemplateStorageFullException.TOO_LARGE)
-        }
+        // 글을 만드는 일(최대 512KB)도 입출력 스레드에서 한다.
         withContext(io) {
             if (list.isEmpty()) {
                 // 내용이 없는 파일은 읽을 수 없는 파일로 보이므로, 파일 자체를 지운다.
                 Files.deleteIfExists(file.toPath())
             } else {
+                val text = CatalogWriter.write(list)
+                if (text.toByteArray(Charsets.UTF_8).size > UserTemplateRepository.MAX_BYTES) {
+                    throw TemplateStorageFullException(TemplateStorageFullException.TOO_LARGE)
+                }
                 file.parentFile?.mkdirs()
                 val temp = File(file.path + TEMP_SUFFIX)
                 temp.writeText(text, Charsets.UTF_8)
@@ -156,9 +158,32 @@ class FileUserTemplateRepository internal constructor(
         loaded.value = list
     }
 
+    /**
+     * 읽을 수 없는 파일을 다음에 쓸 때 덮어쓰면 되살릴 길이 없어지므로 옆에 남겨 둔다.
+     * 같은 내용은 한 번만 남기고(실행할 때마다 늘어나지 않게), 먼저 남긴 것은 덮어쓰지 않으며, 다섯 개까지만 둔다.
+     */
+    private fun keepBrokenCopy(text: String) {
+        runCatching {
+            val dir = file.absoluteFile.parentFile ?: return
+            val prefix = file.name + BROKEN_SUFFIX
+            val existing = dir.listFiles { _, name -> name.startsWith(prefix) }.orEmpty()
+            if (existing.size >= MAX_BROKEN_COPIES) return
+            if (existing.any { runCatching { it.readText(Charsets.UTF_8) == text }.getOrDefault(false) }) return
+            // .broken, .broken.1, .broken.2 … 처럼 비어 있는 첫 이름에 남긴다(시계에 기대지 않아 같은 순간에도 겹치지 않는다).
+            var number = 0
+            var target: File
+            do {
+                target = File(dir, if (number == 0) prefix else "$prefix.$number")
+                number++
+            } while (target.exists())
+            target.writeText(text, Charsets.UTF_8)
+        }
+    }
+
     companion object {
         const val FILE_NAME = "user_templates.json"
         private const val TEMP_SUFFIX = ".tmp"
         const val BROKEN_SUFFIX = ".broken"
+        private const val MAX_BROKEN_COPIES = 5
     }
 }

@@ -215,4 +215,90 @@ class UserTemplateRepositoryTest {
         assertThat(merged.map { it.id }).containsExactly("a", "b", "c").inOrder()
         assertThat(merged.first().title).isEqualTo("새")
     }
+
+    // ----- 코드 리뷰에서 나온 것: 다시 켰을 때 사라지던 템플릿 -----
+
+    /** 가져오기 검사는 다른 템플릿과 루틴 이름이 겹치면 경고만 하고 받아들인다. 그렇게 저장한 것이 다시 켜도 남아야 한다. */
+    @Test
+    fun `templates that share a routine name survive a restart`() = runBlocking<Unit> {
+        val repo = repository()
+        repo.save(listOf(template("a", routine = "상체 A")))
+        repo.save(listOf(template("b", routine = "상체 A")))
+
+        val reopened = repository().current()
+
+        assertThat(reopened.map { it.id }).containsExactly("a", "b").inOrder()
+        assertThat(File(file.path + FileUserTemplateRepository.BROKEN_SUFFIX).exists()).isFalse()
+    }
+
+    /** 옛 버전이 받아들여 저장한 글(보이지 않는 문자 등)이 새 규칙 때문에 읽히지 않으면 저장해 둔 템플릿을 모두 잃는다. */
+    @Test
+    fun `a file saved under older rules still loads`() = runBlocking<Unit> {
+        val zeroWidthSpace = 0x200B.toChar()
+        val old = listOf(
+            template("a", title = "제목$zeroWidthSpace", routine = "같은 루틴"),
+            template("b", routine = "같은 루틴"),
+        )
+        file.writeText(CatalogWriter.write(old), Charsets.UTF_8)
+
+        val loaded = repository().current()
+
+        assertThat(loaded).isEqualTo(old)
+        assertThat(File(file.path + FileUserTemplateRepository.BROKEN_SUFFIX).exists()).isFalse()
+    }
+
+    private fun brokenCopies(): List<File> =
+        folder.root.listFiles { _, name -> name.startsWith("user_templates.json.broken") }.orEmpty().sortedBy { it.name }
+
+    @Test
+    fun `the same unreadable content is kept aside only once across starts`() = runBlocking<Unit> {
+        file.writeText("깨진 파일")
+
+        repeat(4) { repository().current() }
+
+        assertThat(brokenCopies().map { it.name }).containsExactly("user_templates.json.broken")
+    }
+
+    @Test
+    fun `a different unreadable content gets its own copy and the first is not overwritten`() = runBlocking<Unit> {
+        file.writeText("깨진 파일 A")
+        repository().current()
+        file.writeText("깨진 파일 B")
+        repository().current()
+
+        val copies = brokenCopies()
+        assertThat(copies.map { it.name }).containsExactly("user_templates.json.broken", "user_templates.json.broken.1").inOrder()
+        assertThat(copies.map { it.readText() }).containsExactly("깨진 파일 A", "깨진 파일 B").inOrder()
+    }
+
+    @Test
+    fun `at most five copies are kept`() = runBlocking<Unit> {
+        (1..8).forEach { n ->
+            file.writeText("깨진 파일 $n")
+            repository().current()
+        }
+
+        assertThat(brokenCopies()).hasSize(5)
+    }
+
+    @Test
+    fun `replace all keeps an unreadable file aside instead of dropping it`() = runBlocking<Unit> {
+        file.writeText("깨진 파일")
+
+        repository().replaceAll(listOf(template("x")))
+
+        assertThat(File(file.path + FileUserTemplateRepository.BROKEN_SUFFIX).readText()).isEqualTo("깨진 파일")
+        assertThat(repository().current().map { it.id }).containsExactly("x")
+    }
+
+    /** 디스크가 가득 찬 것처럼 쓰기가 실패하면 IOException 으로 알리고, 있던 목록은 그대로다. */
+    @Test
+    fun `a write that fails is reported and leaves the list as it was`() = runBlocking<Unit> {
+        val blocker = folder.newFile("blocker")
+        val repo = FileUserTemplateRepository(File(blocker, "user_templates.json"), Dispatchers.Unconfined)
+
+        assertThrows(java.io.IOException::class.java) { runBlocking { repo.save(listOf(template("a"))) } }
+
+        assertThat(repo.current()).isEmpty()
+    }
 }

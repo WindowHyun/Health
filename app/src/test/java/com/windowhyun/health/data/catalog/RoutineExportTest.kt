@@ -243,4 +243,44 @@ class RoutineExportTest {
 
         assertThat(names).containsExactly("같은 이름", "같은 이름 (2)", "같은 이름 (3)").inOrder()
     }
+
+    @Test
+    fun `an exercise name with an invisible character cannot be exported`() {
+        val name = "스쿼트" + 0x200B.toChar()
+
+        val result = RoutineExport.build(listOf(routine("보이지 않는 글자", item(name, 0))), date)
+
+        assertThat(result.exportedRoutines).isEqualTo(0)
+        assertThat(result.skipped).containsExactly("보이지 않는 글자")
+    }
+
+    @Test
+    fun `invisible characters in a routine name are cleaned`() {
+        val name = "상체" + 0x200B.toChar() + "A" + 0x00A0.toChar() + "루틴"
+
+        val template = reread(RoutineExport.build(listOf(routine(name, item("스쿼트", 0))), date).json, setOf("스쿼트")).templates.single()
+
+        assertThat(template.days.single().routineName).isEqualTo("상체 A 루틴")
+    }
+
+    /** 이모지처럼 두 글자로 이루어진 글자의 한가운데에서 이름을 자르면 짝 없는 글자가 남아 파일을 읽을 수 없게 된다. */
+    @Test
+    fun `a long routine name is cut without splitting an emoji`() {
+        val emoji = String(Character.toChars(0x1F600))
+        val name = "가".repeat(39) + emoji
+
+        val report = reread(RoutineExport.build(listOf(routine(name, item("스쿼트", 0))), date).json, setOf("스쿼트"))
+
+        assertThat(report.errors).isEmpty()
+        assertThat(report.templates.single().days.single().routineName).isEqualTo("가".repeat(39))
+    }
+
+    @Test
+    fun `an emoji in a routine name is kept`() {
+        val emoji = String(Character.toChars(0x1F600))
+
+        val report = reread(RoutineExport.build(listOf(routine("운동 $emoji", item("스쿼트", 0))), date).json, setOf("스쿼트"))
+
+        assertThat(report.templates.single().days.single().routineName).isEqualTo("운동 $emoji")
+    }
 }

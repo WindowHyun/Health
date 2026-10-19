@@ -47,6 +47,15 @@ internal fun issuesAsText(issues: List<CatalogIssue>): String =
 
 private const val MAX_NAMES_SHOWN = 5
 
+/** 붙여넣을 수 있는 글자 수. 한도(바이트)보다 한 글자 많게 두어, 넘으면 검사가 늘 "너무 큽니다" 로 알려 준다. */
+internal val MAX_PASTE_CHARS: Int = ImportLimits.EXTERNAL.maxBytes + 1
+
+/**
+ * 너무 큰 글이 입력 칸을 멈추지 않게 자른다. 글자는 적어도 1바이트이므로(짝 없는 서로게이트도 `?` 한 바이트로 바뀐다),
+ * 이 길이까지 남은 글이 한도를 넘었다면 바이트로도 넘는다 — 잘렸다는 사실이 검사에서 감춰지지 않는다.
+ */
+internal fun clampPasted(text: String): String = text.take(MAX_PASTE_CHARS)
+
 /**
  * 밖에서 받은 템플릿을 검사한 결과. 오류가 하나라도 있으면 가져올 수 없고, 알림은 알려 주기만 한다.
  * 사용자가 확인해야 비로소 저장한다.
@@ -145,8 +154,7 @@ fun TemplatePasteDialog(
                 )
                 OutlinedTextField(
                     value = text,
-                    // 너무 큰 글이 화면을 멈추지 않게 자른다. 한도를 넘는지는 검사에서 따로 알려 준다.
-                    onValueChange = { text = it.take(ImportLimits.EXTERNAL.maxBytes) },
+                    onValueChange = { text = clampPasted(it) },
                     minLines = 6,
                     maxLines = 10,
                     modifier = Modifier

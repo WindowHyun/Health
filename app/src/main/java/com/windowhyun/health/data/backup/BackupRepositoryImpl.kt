@@ -3,6 +3,7 @@ package com.windowhyun.health.data.backup
 import androidx.room.withTransaction
 import com.windowhyun.health.data.catalog.CatalogReader
 import com.windowhyun.health.data.catalog.CatalogWriter
+import com.windowhyun.health.data.catalog.ImportContext
 import com.windowhyun.health.data.catalog.TemplateStorageFullException
 import com.windowhyun.health.data.catalog.UserTemplateRepository
 import com.windowhyun.health.BuildConfig
@@ -38,6 +39,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.encodeToStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.time.Instant
@@ -90,6 +92,7 @@ class BackupRepositoryImpl @Inject constructor(
                 runLaps = backupDao.allRunLaps().map { it.toBackup() },
                 runLocations = backupDao.allRunLocations().map { it.toBackup() },
                 userTemplates = importedTemplates.takeIf { it.isNotEmpty() }?.let { CatalogWriter.write(it) },
+                hasUserTemplates = true,
             )
             output.use { json.encodeToStream(file, it) }
             file.summarize().copy(userTemplateCount = importedTemplates.size)
@@ -156,7 +159,7 @@ class BackupRepositoryImpl @Inject constructor(
             }
 
             settingsRepository.update { file.settings.toSettings(it) }
-            val restoredTemplates = restoreUserTemplates(file.userTemplates)
+            val restoredTemplates = restoreUserTemplates(file)
 
             clean.summarize().copy(
                 userTemplateCount = restoredTemplates,
@@ -165,18 +168,33 @@ class BackupRepositoryImpl @Inject constructor(
         }
 
     /**
-     * 백업에 든 가져온 템플릿으로 지금 것을 바꾼다. 백업에 없으면(옛 백업) 지금 것을 그대로 둔다.
-     * 읽을 수 없거나 저장 한도를 넘는 글은 건너뛴다: 기록 복원은 이미 끝났고, 템플릿은 다시 가져올 수 있다.
+     * 백업에 든 가져온 템플릿으로 지금 것을 바꾼다. 템플릿 항목이 없던 옛 백업이면 지금 것을 그대로 둔다.
+     * (v0.13.0 이 만든 백업에는 표시 없이 글만 있어서, 글이 있으면 담긴 것으로 본다.)
+     *
+     * 읽을 수 없거나 저장 한도를 넘거나 쓰다가 실패한 경우는 건너뛴다: 기록 복원은 이미 끝났고, 템플릿은 다시 가져올 수 있다.
      * 반환값은 복원한 템플릿 수.
      */
-    private suspend fun restoreUserTemplates(text: String?): Int {
-        if (text == null) return 0
-        val report = CatalogReader.read(text)
-        if (!report.isValid || report.templates.isEmpty()) return 0
+    private suspend fun restoreUserTemplates(file: BackupFile): Int {
+        val text = file.userTemplates
+        if (!file.hasUserTemplates && text == null) return 0
         return try {
-            userTemplates.replaceAll(report.templates)
-            report.templates.size
+            if (text == null) {
+                // 백업할 때 템플릿이 하나도 없었다: 그 뒤에 가져온 것도 백업 시점으로 돌려놓는다.
+                userTemplates.replaceAll(emptyList())
+                0
+            } else {
+                // 이미 받아들여 저장했던 글이라 저장 파일과 같은 규칙으로 읽는다.
+                val report = CatalogReader.read(text, ImportContext.STORED)
+                if (!report.isValid || report.templates.isEmpty()) {
+                    0
+                } else {
+                    userTemplates.replaceAll(report.templates)
+                    report.templates.size
+                }
+            }
         } catch (e: TemplateStorageFullException) {
+            0
+        } catch (e: IOException) {
             0
         }
     }

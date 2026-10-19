@@ -39,6 +39,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import java.io.File
+import java.io.IOException
 
 /**
  * 가져오기 화면의 흐름: 파일/글 → 검사 결과 → 확인 → 저장, 그리고 내보내기.
@@ -310,6 +311,152 @@ class TemplateLibraryViewModelTest {
         // 첫 요청의 결과만 남는다.
         assertThat(seen.preview!!.templates.map { it.id }).containsExactly("mine")
         assertThat(seen.preview!!.newExercises).isEmpty()
+    }
+
+    // ----- 코드 리뷰: 저장 실패 · 시트가 닫힌 뒤 도착한 결과 -----
+
+    private val failedMessage = "처리하지 못했습니다. 저장 공간을 확인한 뒤 다시 시도해 주세요."
+
+    private fun viewModelWith(repository: UserTemplateRepository): TemplateLibraryViewModel {
+        val vm = TemplateLibraryViewModel(
+            context, TemplateImporter(exercises, repository, Dispatchers.Unconfined), repository, routines, Dispatchers.Unconfined,
+        )
+        GlobalScope.launch(Dispatchers.Unconfined) { vm.state.collect { latest = it } }
+        return vm
+    }
+
+    @Test
+    fun `a failed write at confirm time shows a message instead of crashing and keeps the preview`() {
+        val failing = object : UserTemplateRepository by stored {
+            override suspend fun save(templates: List<RoutineTemplates.Template>) = throw IOException("디스크가 가득 찼습니다")
+        }
+        val vm = viewModelWith(failing)
+        vm.importFromText(simple)
+        settle { latest.preview != null }
+
+        vm.confirmImport()
+        settle { latest.message != null }
+
+        assertThat(latest.message).isEqualTo(failedMessage)
+        assertThat(latest.preview).isNotNull()
+        assertThat(latest.working).isFalse()
+    }
+
+    @Test
+    fun `after a failure the next request works`() {
+        var fail = true
+        val flaky = object : UserTemplateRepository by stored {
+            override suspend fun save(templates: List<RoutineTemplates.Template>) {
+                if (fail) throw IOException("디스크가 가득 찼습니다")
+                stored.save(templates)
+            }
+        }
+        val vm = viewModelWith(flaky)
+        vm.importFromText(simple)
+        settle { latest.preview != null }
+        vm.confirmImport()
+        settle { latest.message == failedMessage }
+
+        fail = false
+        vm.confirmImport()
+        settle { latest.preview == null && latest.message?.startsWith("가져왔습니다") == true }
+
+        assertThat(runBlocking { stored.current() }.map { it.id }).containsExactly("mine")
+    }
+
+    @Test
+    fun `a failed delete shows a message instead of crashing`() {
+        runBlocking { stored.save(listOf(RoutineTemplates.Template("mine", RoutineTemplates.Category.SPLIT, "내 분할", "설명", listOf(RoutineTemplates.Day("루틴", listOf("스쿼트" to 3)))))) }
+        val failing = object : UserTemplateRepository by stored {
+            override suspend fun delete(id: String) = throw IOException("쓰기 실패")
+        }
+        val vm = viewModelWith(failing)
+
+        vm.deleteUserTemplate("mine")
+        settle { latest.message != null }
+
+        assertThat(latest.message).isEqualTo(failedMessage)
+        assertThat(runBlocking { stored.current() }.map { it.id }).containsExactly("mine")
+    }
+
+    @Test
+    fun `an unexpected failure while reading is shown as a message too`() {
+        val broken = object : UserTemplateRepository by stored {
+            override suspend fun current(): List<RoutineTemplates.Template> = throw IllegalStateException("예상 밖의 실패")
+        }
+        val vm = viewModelWith(broken)
+
+        vm.importFromText(simple)
+        settle { latest.message != null }
+
+        assertThat(latest.message).isEqualTo(failedMessage)
+        assertThat(latest.working).isFalse()
+    }
+
+    private fun gatedViewModel(gate: kotlinx.coroutines.CompletableDeferred<Unit>): TemplateLibraryViewModel {
+        val gated = object : UserTemplateRepository by stored {
+            override suspend fun current(): List<RoutineTemplates.Template> {
+                gate.await()
+                return stored.current()
+            }
+        }
+        return viewModelWith(gated)
+    }
+
+    /** 파일을 읽는 도중에 시트를 닫으면, 나중에 끝난 결과가 다음에 시트를 열 때 갑자기 나타나면 안 된다. */
+    @Test
+    fun `a result that arrives after the sheet was closed is dropped`() {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val vm = gatedViewModel(gate)
+
+        vm.importFromText(simple)
+        assertThat(latest.working).isTrue()
+        vm.sheetClosed()
+        gate.complete(Unit)
+        settle()
+
+        assertThat(latest.preview).isNull()
+        assertThat(latest.message).isNull()
+    }
+
+    @Test
+    fun `a failure message that arrives after the sheet was closed is dropped too`() {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val vm = gatedViewModel(gate)
+
+        vm.importFromUri(Uri.fromFile(File(folder.root, "없는파일.json")))
+        vm.sheetClosed()
+        gate.complete(Unit)
+        settle()
+
+        assertThat(latest.message).isNull()
+    }
+
+    @Test
+    fun `closing the sheet clears the preview and the message and the next request works`() {
+        viewModel.importFromText(simple)
+        settle { latest.preview != null }
+
+        viewModel.sheetClosed()
+        assertThat(latest.preview).isNull()
+
+        viewModel.importFromText(simple)
+        settle { latest.preview != null }
+        assertThat(latest.preview!!.canImport).isTrue()
+    }
+
+    @Test
+    fun `a confirm that finishes after the sheet was closed does not leave a message`() {
+        viewModel.importFromText(simple)
+        settle { latest.preview != null }
+
+        viewModel.confirmImport()
+        viewModel.sheetClosed()
+        settle()
+
+        assertThat(latest.message).isNull()
+        // 저장은 이미 시작했으므로 끝까지 한다.
+        assertThat(runBlocking { stored.current() }.map { it.id }).containsExactly("mine")
     }
 
     // ----- 삭제 -----

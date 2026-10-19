@@ -36,7 +36,15 @@ import java.time.DayOfWeek
  */
 object CatalogReader {
 
-    fun read(text: String, context: ImportContext = ImportContext()): CatalogReport = Session(context).run(text)
+    fun read(text: String, context: ImportContext = ImportContext()): CatalogReport =
+        Session(context, Suggestions::closest).run(text)
+
+    /** 비슷한 이름 찾기를 바꿔 끼울 수 있는 진입점(찾는 횟수를 세는 테스트용). */
+    internal fun read(
+        text: String,
+        context: ImportContext,
+        suggest: (String, Collection<String>) -> String?,
+    ): CatalogReport = Session(context, suggest).run(text)
 
     private val ROOT_KEYS = listOf("version", "exercises", "templates")
     private val EXERCISE_KEYS = listOf("name", "category", "bodyPart", "trackingType", "defaultRestSeconds")
@@ -44,17 +52,25 @@ object CatalogReader {
     private val DAY_KEYS = listOf("name", "scheduledDays", "exercises")
     private val ITEM_KEYS = listOf("name", "sets", "rest", "superset")
 
-    /** 글자 방향을 바꾸거나 보이지 않게 만들어 화면의 글을 속일 수 있는 문자. */
-    private val HIDDEN_FORMAT = setOf(
-        '\u061C', '\u200E', '\u200F', '\u202A', '\u202B', '\u202C', '\u202D', '\u202E',
-        '\u2066', '\u2067', '\u2068', '\u2069', '\u2028', '\u2029', '\uFEFF',
-    )
+    /** 이모지를 잇는 ZWJ. 설명(여러 줄 글)에서만 허용한다. */
+    private const val ZERO_WIDTH_JOINER = 0x200D
+
+    /**
+     * 분류로는 걸러지지 않지만 화면에 아무것도 그리지 않는 글자(한글 채움 문자 · 점자 빈칸 · 크메르 내재 모음).
+     * 이름이 이것뿐이면 비어 보이고, 뒤에 붙으면 같아 보이는 다른 이름이 된다.
+     */
+    private val BLANK_LOOKALIKES = setOf(0x3164, 0x115F, 0x1160, 0xFFA0, 0x2800, 0x17B4, 0x17B5)
 
     /** 파일 하나를 읽는 동안의 상태. */
-    private class Session(private val ctx: ImportContext) {
+    private class Session(
+        private val ctx: ImportContext,
+        private val suggest: (String, Collection<String>) -> String?,
+    ) {
 
         private val limits = ctx.limits
-        private val issues = ArrayList<CatalogIssue>()
+        // 오류와 알림은 한도를 따로 쓴다. 알림이 먼저 많이 나와도 뒤의 진짜 오류가 숫자로만 남지 않게.
+        private val errorIssues = ArrayList<CatalogIssue>()
+        private val warningIssues = ArrayList<CatalogIssue>()
         private var errorCount = 0
         private var omittedErrors = 0
         private var omittedWarnings = 0
@@ -73,6 +89,9 @@ object CatalogReader {
 
         // 모르는 종목 이름의 "혹시 이거?" 는 비싸서 처음 몇 개만 찾는다.
         private val suggestions = HashMap<String, String?>()
+
+        /** 이름 후보. 종목 항목을 다 읽은 뒤(템플릿을 읽을 때) 처음 필요할 때 한 번만 만든다. */
+        private val candidateNames: List<String> by lazy { (ctx.knownExerciseNames + definedNames).toList() }
         private var hintedNewExercise = false
 
         fun run(text: String): CatalogReport {
@@ -96,28 +115,29 @@ object CatalogReader {
                 }
             }
             if (omittedErrors > 0) {
-                issues += CatalogIssue(IssueSeverity.ERROR, "", "그 밖에 오류 ${omittedErrors}개가 더 있습니다. 위의 문제부터 고쳐 보세요.")
+                errorIssues += CatalogIssue(IssueSeverity.ERROR, "", "그 밖에 오류 ${omittedErrors}개가 더 있습니다. 위의 문제부터 고쳐 보세요.")
             }
             if (omittedWarnings > 0) {
-                issues += CatalogIssue(IssueSeverity.WARNING, "", "그 밖에 알림 ${omittedWarnings}개가 더 있습니다.")
+                warningIssues += CatalogIssue(IssueSeverity.WARNING, "", "그 밖에 알림 ${omittedWarnings}개가 더 있습니다.")
             }
-            return CatalogReport(newExercises, templates, issues, hasExercises, hasTemplates)
+            // 오류를 먼저 보여 준다.
+            return CatalogReport(newExercises, templates, errorIssues + warningIssues, hasExercises, hasTemplates)
         }
 
         // ----- 문제 기록 -----
 
         private fun error(path: String, message: String) {
             errorCount++
-            if (issues.size < limits.maxIssues) {
-                issues += CatalogIssue(IssueSeverity.ERROR, path, message)
+            if (errorIssues.size < limits.maxIssues) {
+                errorIssues += CatalogIssue(IssueSeverity.ERROR, path, message)
             } else {
                 omittedErrors++
             }
         }
 
         private fun warn(path: String, message: String) {
-            if (issues.size < limits.maxIssues) {
-                issues += CatalogIssue(IssueSeverity.WARNING, path, message)
+            if (warningIssues.size < limits.maxIssues) {
+                warningIssues += CatalogIssue(IssueSeverity.WARNING, path, message)
             } else {
                 omittedWarnings++
             }
@@ -128,9 +148,14 @@ object CatalogReader {
         /** 파일에 있던 글을 메시지에 그대로 옮기지 않는다: 길이를 줄이고 위험한 문자를 가린다. */
         private fun show(text: String): String {
             val clean = buildString {
-                text.take(MAX_SHOWN).forEach { append(if (isIllegal(it, multiline = false) || it.isSurrogate()) '?' else it) }
+                var i = 0
+                while (i < text.length && length < MAX_SHOWN) {
+                    val cp = text.codePointAt(i)
+                    if (isIllegal(cp, multiline = false)) append('?') else appendCodePoint(cp)
+                    i += Character.charCount(cp)
+                }
             }
-            return if (text.length > MAX_SHOWN) "$clean…" else clean
+            return if (clean.length < text.length && text.codePointCount(0, text.length) > MAX_SHOWN) "$clean…" else clean
         }
 
         // ----- JSON 문법 -----
@@ -262,7 +287,7 @@ object CatalogReader {
                 !multiline && value != value.trim() -> error(at, "앞이나 뒤에 공백이 있습니다. 공백도 이름의 일부라 지워 주세요.")
                 value.length > maxLength -> error(at, "${value.length}자입니다. ${maxLength}자까지 쓸 수 있습니다.")
                 else -> {
-                    val bad = firstIllegal(value, multiline)
+                    val bad = if (ctx.rejectInvisibleText) firstIllegal(value, multiline) else null
                     when {
                         bad != null -> error(at, "쓸 수 없는 문자가 있습니다($bad).")
                         pattern != null && !pattern.matches(value) -> error(at, patternHint)
@@ -382,6 +407,8 @@ object CatalogReader {
             val idsInFile = items.mapNotNull { ((it as? JsonObject)?.get("id") as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.toSet()
             otherRoutineNames = ctx.otherRoutineNames.filterKeys { it !in idsInFile }.values.flatten().toSet()
             items.forEachIndexed { index, item ->
+                // 저장된 파일은 따로 가져온 템플릿들이 쌓인 것이라, 템플릿 사이의 이름 겹침은 따지지 않는다.
+                if (!ctx.routineNamesUniqueAcrossTemplates) routineNames.clear()
                 val before = errorCount
                 val base = "templates[$index]"
                 val obj = asObject(item, base) ?: return@forEachIndexed
@@ -524,12 +551,11 @@ object CatalogReader {
         private fun checkReference(name: String, path: String) {
             if (!ctx.checkExerciseReferences) return
             if (name in ctx.knownExerciseNames || name in definedNames) return
-            val suggestion = suggestions.getOrPut(name) {
-                if (suggestions.size < MAX_SUGGESTIONS) {
-                    Suggestions.closest(name, ctx.knownExerciseNames + definedNames)
-                } else {
-                    null
-                }
+            val suggestion = when {
+                // 결과가 없는(null) 것도 기억한다: getOrPut 은 null 을 없는 것으로 봐서 같은 이름이 나올 때마다 다시 찾는다.
+                name in suggestions -> suggestions[name]
+                suggestions.size < MAX_SUGGESTIONS -> suggest(name, candidateNames).also { suggestions[name] = it }
+                else -> null
             }
             val message = buildString {
                 append("'${show(name)}' 종목이 없습니다.")
@@ -558,29 +584,38 @@ object CatalogReader {
     private const val MAX_SUGGESTIONS = 20
     private val OFFSET = Regex("offset (\\d+)")
 
-    /** 제어 문자나 글자 방향을 속이는 문자인가. 여러 줄 글에서는 줄바꿈과 탭은 허용한다. */
-    internal fun isIllegal(c: Char, multiline: Boolean): Boolean =
-        (Character.isISOControl(c) && !(multiline && (c == '\n' || c == '\t'))) || c in HIDDEN_FORMAT
+    /**
+     * 이 글자(코드 포인트)를 거절하는가.
+     *
+     * 목록으로 적지 않고 유니코드 분류로 거른다: 제어 문자 · 서식 문자(폭이 0인 공백, 글자 방향을 바꾸는 문자, 소프트 하이픈,
+     * 태그 문자) · 줄/문단 구분 문자 · 보통 공백이 아닌 공백 · 사설 영역 · 짝 없는 서로게이트.
+     * 여기에 분류로는 안 걸리는 빈 글자 몇 개를 더한다.
+     * 여러 줄 글(설명)에서는 줄바꿈 · 탭 · 이모지를 잇는 ZWJ 는 허용한다.
+     */
+    internal fun isIllegal(codePoint: Int, multiline: Boolean): Boolean {
+        if (multiline && (codePoint == '\n'.code || codePoint == '\t'.code || codePoint == ZERO_WIDTH_JOINER)) return false
+        if (codePoint in BLANK_LOOKALIKES) return true
+        // 보통 공백(U+0020) 말고 다른 공백(줄바꿈 없는 공백, 전각 공백 등)은 같아 보이는데 이름이 달라지므로 거절한다.
+        if (Character.getType(codePoint) == Character.SPACE_SEPARATOR.toInt() && codePoint != ' '.code) return true
+        return when (Character.getType(codePoint)) {
+            Character.CONTROL.toInt(),
+            Character.FORMAT.toInt(),
+            Character.LINE_SEPARATOR.toInt(),
+            Character.PARAGRAPH_SEPARATOR.toInt(),
+            Character.PRIVATE_USE.toInt(),
+            Character.SURROGATE.toInt(),
+            -> true
+            else -> false
+        }
+    }
 
-    /** 쓸 수 없는 문자가 있으면 설명("U+202E")을, 없으면 null. 짝이 맞지 않는 서로게이트도 거절한다. */
+    /** 쓸 수 없는 문자가 있으면 설명("U+202E")을, 없으면 null. */
     internal fun firstIllegal(text: String, multiline: Boolean): String? {
         var i = 0
         while (i < text.length) {
-            val c = text[i]
-            val bad = when {
-                Character.isHighSurrogate(c) -> {
-                    if (i + 1 < text.length && Character.isLowSurrogate(text[i + 1])) {
-                        i++
-                        false
-                    } else {
-                        true
-                    }
-                }
-                Character.isLowSurrogate(c) -> true
-                else -> isIllegal(c, multiline)
-            }
-            if (bad) return "U+" + c.code.toString(16).uppercase().padStart(4, '0')
-            i++
+            val cp = text.codePointAt(i)
+            if (isIllegal(cp, multiline)) return "U+" + cp.toString(16).uppercase().padStart(4, '0')
+            i += Character.charCount(cp)
         }
         return null
     }

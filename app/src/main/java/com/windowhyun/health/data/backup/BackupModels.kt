@@ -42,10 +42,16 @@ data class BackupFile(
     val runLaps: List<BackupRunLap> = emptyList(),
     val runLocations: List<BackupRunLocation> = emptyList(),
     /**
-     * 가져온 루틴 템플릿(템플릿 파일 형식의 글). 옛 백업에는 없고, 없으면 복원할 때 지금 것을 그대로 둔다.
-     * 있어도 읽을 수 없는 글이면 건너뛴다 — 템플릿은 원래 파일에서 다시 가져올 수 있다.
+     * 가져온 루틴 템플릿(템플릿 파일 형식의 글). 템플릿이 하나도 없으면 null.
+     * 읽을 수 없는 글이면 복원할 때 건너뛴다 — 템플릿은 원래 파일에서 다시 가져올 수 있다.
      */
     val userTemplates: String? = null,
+    /**
+     * 이 백업이 가져온 템플릿 항목을 담고 있는가. 새 백업은 항상 true 다. 이 표시가 없으면 [userTemplates] 가 null 인 것이
+     * "템플릿이 없었다" 인지 "템플릿 항목이 없던 옛 백업" 인지 구분할 수 없다.
+     * true 인데 [userTemplates] 가 null 이면 복원할 때 지금 가진 템플릿을 비운다. 옛 백업(false)은 지금 것을 그대로 둔다.
+     */
+    val hasUserTemplates: Boolean = false,
 ) {
     companion object {
         /** 지금 쓰는 형식 버전. 필드를 지우거나 뜻을 바꿀 때만 올린다. */
