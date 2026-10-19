@@ -419,17 +419,40 @@ class TemplateLibraryViewModelTest {
         assertThat(latest.message).isNull()
     }
 
+    /** 읽는 중에 실패한 안내도 시트를 닫은 뒤에 도착하면 버린다(파일이 없는 경우는 닫기 전에 이미 끝나므로 이 경로가 아니다). */
     @Test
     fun `a failure message that arrives after the sheet was closed is dropped too`() {
         val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
-        val vm = gatedViewModel(gate)
+        val failingLater = object : UserTemplateRepository by stored {
+            override suspend fun current(): List<RoutineTemplates.Template> {
+                gate.await()
+                throw IOException("읽는 중 실패")
+            }
+        }
+        val vm = viewModelWith(failingLater)
 
-        vm.importFromUri(Uri.fromFile(File(folder.root, "없는파일.json")))
+        vm.importFromUri(fileUri("t.json", simple))
+        assertThat(latest.working).isTrue()
         vm.sheetClosed()
         gate.complete(Unit)
         settle()
 
         assertThat(latest.message).isNull()
+        assertThat(latest.preview).isNull()
+    }
+
+    /** 닫지 않았다면 같은 실패는 안내로 보인다. */
+    @Test
+    fun `the same failure is shown when the sheet stays open`() {
+        val failingLater = object : UserTemplateRepository by stored {
+            override suspend fun current(): List<RoutineTemplates.Template> = throw IOException("읽는 중 실패")
+        }
+        val vm = viewModelWith(failingLater)
+
+        vm.importFromUri(fileUri("t.json", simple))
+        settle { latest.message != null }
+
+        assertThat(latest.message).isEqualTo("파일을 읽는 중 문제가 생겼습니다.")
     }
 
     @Test
