@@ -94,6 +94,13 @@ class HealthConnectViewModel @Inject constructor(
     /** 요청할 권한 전체. 허용 화면을 띄울 때 쓴다. */
     val permissionsToRequest: Set<String> get() = HealthConnectPermissions.all
 
+    /** 체중 가져오기를 켜려고 권한을 요청하는 중. 권한을 받았을 때만 켠다(거절하면 켜진 것처럼 보이지 않게). */
+    private var pendingWeightImport = false
+
+    fun requestWeightImport() {
+        pendingWeightImport = true
+    }
+
     /** 허용 화면에서 돌아왔다. 내보내기에 필요한 권한이 모두 있으면 켠다. */
     fun onPermissionResult(granted: Set<String>) {
         val permissions = HealthConnectPermissions.stateFrom(granted)
@@ -107,6 +114,10 @@ class HealthConnectViewModel @Inject constructor(
                 )
             }
             local.update { it.copy(permissions = actual, permissionDenied = !actual.canWrite) }
+            if (pendingWeightImport) {
+                pendingWeightImport = false
+                if (actual.canReadWeight) settingsRepository.update { it.copy(healthConnectImportWeight = true) }
+            }
             if (actual.canWrite) {
                 settingsRepository.update { it.copy(healthConnectEnabled = true, healthConnectLastError = null) }
                 syncNow()

@@ -51,7 +51,8 @@ data class WatchUiState(
     /** 시계에서 러닝 시작을 요청한 시각. 0 이면 요청한 적 없다. */
     val startRequestedAtMillis: Long = 0,
 ) {
-    val restVisible: Boolean get() = rest.active
+    /** 폰이 지우지 못한 오래된 휴식은 보여 주지 않는다(휴식이 러닝 · 헬스 화면보다 앞서서 그것들을 가린다). */
+    val restVisible: Boolean get() = rest.active && !rest.isStale(nowMillis)
     val runVisible: Boolean get() = run.isActive
 
     /** 폰이 한동안 소식이 없으면(세션 화면이 꺼졌거나 앱이 죽었다) 세트를 보여 주지 않는다. */

@@ -4,6 +4,7 @@ import com.windowhyun.health.data.catalog.InMemoryUserTemplateRepository
 import android.content.Context
 import android.os.Looper
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -118,6 +121,45 @@ class PipSpaceTest {
         assertThat(PipSpace(widthPercent = 90).heightDp(320f)).isLessThan(full)
         // 가로가 작은 PiP 는 더 적게 비운다.
         assertThat(PipSpace(widthPercent = 40).heightDp(400f)).isLessThan(full)
+    }
+
+    /** 가로 화면이나 태블릿에서 너비만으로 높이를 정하면 자리가 화면을 다 차지해 앱을 쓸 수 없다. */
+    @Test
+    fun `the blank space never takes most of a short screen`() {
+        val landscape = PipSpace(widthPercent = 90).heightDp(screenWidthDp = 800f, screenHeightDp = 360f)
+
+        assertThat(landscape).isWithin(0.01f).of(360f * PipSpace.MAX_HEIGHT_FRACTION)
+        // 세로 폰처럼 넉넉하면 상한에 걸리지 않는다.
+        assertThat(PipSpace(widthPercent = 90).heightDp(400f, 800f)).isWithin(0.01f).of(400f * 0.9f * 9f / 16f + PipSpace.MARGIN_DP)
+    }
+
+    /** 자리 비우기를 켜고 끌 때 안쪽 화면이 새로 만들어지면 탐색 위치와 입력하던 값이 사라진다. */
+    @Test
+    fun `toggling the blank space keeps the inner screen state`() {
+        var pip by androidx.compose.runtime.mutableStateOf(PipSpace(enabled = false))
+        compose.setContent {
+            HealthTheme {
+                PipSpaceHost(pip) {
+                    var count by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+                    androidx.compose.material3.Text(
+                        "count $count",
+                        Modifier.testTag("counter").clickable { count++ },
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("counter").performClick()
+        compose.onNodeWithTag("counter").performClick()
+        compose.onNodeWithText("count 2").assertExists()
+
+        compose.runOnIdle { pip = PipSpace(enabled = true) }
+        compose.waitForIdle()
+        compose.onNodeWithText("count 2").assertExists()
+
+        compose.runOnIdle { pip = PipSpace(enabled = false) }
+        compose.waitForIdle()
+        compose.onNodeWithText("count 2").assertExists()
     }
 
     @Test

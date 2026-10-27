@@ -153,6 +153,12 @@ class WatchWorkoutTest {
         assertThat(kind(ExerciseTrackingType.TIME)).isEqualTo(WatchSetKind.TIME)
     }
 
+    /** "루틴 없이 바로 시작"하고 종목을 담기 전에는 시계에 보여 줄 세트가 없다. 이름 없는 0/0세트를 보내지 않는다. */
+    @Test
+    fun `a workout without any exercise shows nothing on the watch`() {
+        assertThat(workout().toSnapshot(false)).isEqualTo(WorkoutSnapshot.None)
+    }
+
     @Test
     fun `a finished workout shows nothing and a done one says so`() {
         val done = record("벤치", listOf(set(1, completed = true)))
@@ -240,14 +246,16 @@ class WatchWorkoutTest {
     private fun handler(status: RunStatus, starter: Starter = Starter(), link: WatchLink = WatchLink { 0 }) =
         WatchCommandHandler(Control(), { status }, link, starter)
 
+    /** 끝난 러닝은 폰의 결과 화면이 닫힐 때까지 FINISHED 로 남는다. 그때도 시계에서 새로 시작할 수 있어야 한다. */
     @Test
-    fun `a run can be started only while idle`() {
+    fun `a run can be started while idle or after a finished run only`() {
         RunStatus.entries.forEach { status ->
             val starter = Starter()
+            val allowed = status == RunStatus.IDLE || status == RunStatus.FINISHED
             val handled = handler(status, starter).handle(WatchCommand.RUN_START)
 
-            assertThat(handled).isEqualTo(status == RunStatus.IDLE)
-            assertThat(starter.requests).isEqualTo(if (status == RunStatus.IDLE) 1 else 0)
+            assertThat(handled).isEqualTo(allowed)
+            assertThat(starter.requests).isEqualTo(if (allowed) 1 else 0)
         }
     }
 

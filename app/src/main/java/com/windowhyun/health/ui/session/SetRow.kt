@@ -23,7 +23,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -90,6 +92,27 @@ fun SetRow(
     fun reps() = repsText.toIntOrNull() ?: 0
     fun duration() = durationSecondsOf(minutesText, secondsText)
 
+    // 이 행에서 마지막으로 값을 고친 때. 고친 직후에 돌아오는 저장값(내가 보낸 값의 되돌림)은 화면에 다시 쓰지 않는다.
+    var lastEditNanos by remember(set.id) { mutableLongStateOf(0L) }
+    fun changed() {
+        lastEditNanos = System.nanoTime()
+        onValuesChange(weightKg(), reps(), duration())
+    }
+
+    // 이 행이 아닌 곳에서 값이 바뀌면(앞 세트의 무게를 고쳐 뒤 세트가 따라 바뀜) 화면의 값도 맞춘다.
+    // 그러지 않으면 옛 값이 그대로 남아, 완료를 누를 때 저장된 값을 덮어쓴다.
+    LaunchedEffect(set.weightKg, set.reps, set.durationSeconds) {
+        if (lastEditNanos != 0L && System.nanoTime() - lastEditNanos < EDIT_ECHO_NANOS) return@LaunchedEffect
+        if (kotlin.math.abs(weightKg() - set.weightKg) > WEIGHT_EPSILON_KG) {
+            weightText = formatWeightValue(weightUnit.fromKg(set.weightKg))
+        }
+        if (reps() != set.reps) repsText = if (set.reps > 0) set.reps.toString() else ""
+        if (duration() != set.durationSeconds) {
+            minutesText = if (set.durationSeconds >= 60) (set.durationSeconds / 60).toString() else ""
+            secondsText = if (set.durationSeconds > 0) (set.durationSeconds % 60).toString() else ""
+        }
+    }
+
     val isWarmup = set.setType == SetType.WARMUP
     // 끝낸 세트는 라임을 옅게 깐다. 한눈에 "어디까지 했는지"가 보이되 입력칸 글자는 그대로 읽힌다.
     val background = when {
@@ -121,7 +144,7 @@ fun SetRow(
                         value = weightText,
                         onValueChange = {
                             weightText = it.filter { ch -> ch.isDigit() || ch == '.' }
-                            onValuesChange(weightKg(), reps(), duration())
+                            changed()
                         },
                         suffix = weightUnit.label,
                         label = "${set.setNumber}세트 중량",
@@ -131,7 +154,7 @@ fun SetRow(
                         value = repsText,
                         onValueChange = {
                             repsText = it.filter { ch -> ch.isDigit() }
-                            onValuesChange(weightKg(), reps(), duration())
+                            changed()
                         },
                         suffix = "회",
                         label = "${set.setNumber}세트 횟수",
@@ -143,7 +166,7 @@ fun SetRow(
                     value = repsText,
                     onValueChange = {
                         repsText = it.filter { ch -> ch.isDigit() }
-                        onValuesChange(weightKg(), reps(), duration())
+                        changed()
                     },
                     suffix = "회",
                     label = "${set.setNumber}세트 횟수",
@@ -155,7 +178,7 @@ fun SetRow(
                         value = minutesText,
                         onValueChange = {
                             minutesText = it.filter { ch -> ch.isDigit() }.take(3)
-                            onValuesChange(weightKg(), reps(), duration())
+                            changed()
                         },
                         suffix = "분",
                         label = "${set.setNumber}세트 시간(분)",
@@ -165,7 +188,7 @@ fun SetRow(
                         value = secondsText,
                         onValueChange = {
                             secondsText = it.filter { ch -> ch.isDigit() }.take(4)
-                            onValuesChange(weightKg(), reps(), duration())
+                            changed()
                         },
                         suffix = "초",
                         label = "${set.setNumber}세트 시간(초)",
@@ -198,17 +221,17 @@ fun SetRow(
                 onWeight = { delta ->
                     val next = (weightText.toDoubleOrNull() ?: 0.0) + delta
                     weightText = formatWeightValue(next.coerceAtLeast(0.0))
-                    onValuesChange(weightKg(), reps(), duration())
+                    changed()
                 },
                 onReps = { delta ->
                     repsText = ((reps() + delta).coerceAtLeast(0)).let { if (it > 0) it.toString() else "" }
-                    onValuesChange(weightKg(), reps(), duration())
+                    changed()
                 },
                 onSeconds = { delta ->
                     val total = (duration() + delta).coerceAtLeast(0)
                     minutesText = if (total >= 60) (total / 60).toString() else ""
                     secondsText = if (total > 0) (total % 60).toString() else ""
-                    onValuesChange(weightKg(), reps(), duration())
+                    changed()
                 },
             )
         }
@@ -222,6 +245,9 @@ internal fun quickWeightStep(unit: WeightUnit): Double = when (unit) {
 }
 
 internal const val QUICK_SECONDS_STEP = 5
+
+private const val EDIT_ECHO_NANOS = 1_500_000_000L
+private const val WEIGHT_EPSILON_KG = 0.005
 
 @Composable
 private fun QuickAdjustRow(

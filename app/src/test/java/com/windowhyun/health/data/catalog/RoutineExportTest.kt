@@ -111,7 +111,7 @@ class RoutineExportTest {
         val badName = routine("이름이 이상함", item(" 앞공백", 0))
         val tooLongName = routine("긴 이름", item("가".repeat(41), 0))
         val badSets = routine("세트 이상", item("스쿼트", 0, sets = 21))
-        val badRest = routine("휴식 이상", item("스쿼트", 0, rest = 4))
+        val badRest = routine("휴식 이상", item("스쿼트", 0, rest = 601))
         val tooMany = routine("너무 많음", *(0..30).map { item("종목$it", it) }.toTypedArray())
 
         val result = RoutineExport.build(listOf(ok, empty, twice, badName, tooLongName, badSets, badRest, tooMany), date)
@@ -119,6 +119,19 @@ class RoutineExportTest {
         assertThat(result.exportedRoutines).isEqualTo(1)
         assertThat(result.skipped).containsExactly("비어 있음", "두 번", "이름이 이상함", "긴 이름", "세트 이상", "휴식 이상", "너무 많음").inOrder()
         assertThat(reread(result.json, setOf("스쿼트")).errors).isEmpty()
+    }
+
+    /** 루틴 편집기는 휴식 0초(쉬지 않음)를 허용한다. 내보내기에서 빠지면 다른 폰으로 옮길 수 없다. */
+    @Test
+    fun `a routine with a zero second rest is exported and read back`() {
+        val superset = routine("슈퍼셋", item("스쿼트", 0, rest = 0), item("벤치프레스", 1, rest = 60))
+
+        val result = RoutineExport.build(listOf(superset), date)
+
+        assertThat(result.exportedRoutines).isEqualTo(1)
+        assertThat(result.skipped).isEmpty()
+        assertThat(Regex("\"rest\":\\s*0\\b").containsMatchIn(result.json)).isTrue()
+        assertThat(reread(result.json, setOf("스쿼트", "벤치프레스")).errors).isEmpty()
     }
 
     @Test

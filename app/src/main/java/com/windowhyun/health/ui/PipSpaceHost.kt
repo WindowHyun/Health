@@ -47,24 +47,29 @@ fun PipSpaceHost(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    if (!pipSpace.enabled) {
-        Box(modifier = modifier.fillMaxSize()) { content() }
-        return
-    }
     val atTop = pipSpace.position == PipSpacePosition.TOP
-    val heightDp = pipSpace.heightDp(LocalConfiguration.current.screenWidthDp.toFloat())
+    val configuration = LocalConfiguration.current
+    val heightDp = pipSpace.heightDp(configuration.screenWidthDp.toFloat(), configuration.screenHeightDp.toFloat())
+    // 켜고 끌 때 안쪽 화면(탐색 위치 · 입력값)이 새로 만들어지지 않도록, 꺼져 있을 때도 같은 배치를 쓴다.
+    // 켜면 자리만 앞이나 뒤에 끼워 넣을 뿐, content 가 들어 있는 상자의 자리는 바뀌지 않는다.
     Column(modifier = modifier.fillMaxSize()) {
-        if (atTop) PipSpaceBand(heightDp, atTop = true)
+        if (pipSpace.enabled && atTop) PipSpaceBand(heightDp, atTop = true)
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 // 자리가 막대 높이를 차지했으니 안쪽 화면은 그 막대 여백을 다시 두지 않는다.
-                .consumeWindowInsets(if (atTop) WindowInsets.statusBars else WindowInsets.navigationBars),
+                .then(
+                    if (pipSpace.enabled) {
+                        Modifier.consumeWindowInsets(if (atTop) WindowInsets.statusBars else WindowInsets.navigationBars)
+                    } else {
+                        Modifier
+                    },
+                ),
         ) {
             content()
         }
-        if (!atTop) PipSpaceBand(heightDp, atTop = false)
+        if (pipSpace.enabled && !atTop) PipSpaceBand(heightDp, atTop = false)
     }
 }
 

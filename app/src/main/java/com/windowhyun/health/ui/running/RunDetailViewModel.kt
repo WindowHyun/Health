@@ -45,7 +45,7 @@ data class RunDetailUiState(
 @HiltViewModel
 class RunDetailViewModel @Inject constructor(
     private val runRepository: RunRepository,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle,
     /**
      * 메모 저장은 화면을 벗어나는 순간에도 끝까지 가야 한다. viewModelScope 는
@@ -77,9 +77,12 @@ class RunDetailViewModel @Inject constructor(
     private suspend fun loadHeartRate(run: Run): HeartRateSummary? {
         val end = run.endTime ?: return null
         return try {
+            // 설정에서 직접 켠 경우에만 읽는다(권한만 남아 있어도 끈 사람의 건강 기록을 읽지 않는다).
+            if (!settingsRepository.current().healthConnectEnabled) return null
             if (healthConnect.availability() != HealthConnectAvailability.AVAILABLE) return null
             if (!healthConnect.permissionState().canReadHeartRate) return null
-            healthConnect.heartRate(run.startTime, end)
+            // 응답이 늦어도 러닝 상세가 로딩에서 멈춰 있지 않게 한다.
+            kotlinx.coroutines.withTimeoutOrNull(HEART_RATE_TIMEOUT_MILLIS) { healthConnect.heartRate(run.startTime, end) }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -138,5 +141,9 @@ class RunDetailViewModel @Inject constructor(
             runRepository.deleteRun(run.id)
             local.update { it.copy(deleted = true) }
         }
+    }
+
+    private companion object {
+        const val HEART_RATE_TIMEOUT_MILLIS = 3_000L
     }
 }

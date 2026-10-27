@@ -35,7 +35,8 @@ class WatchCommandHandler internal constructor(
      * [payload] 는 명령이 싣고 온 내용이다(세트 완료의 세트 번호).
      */
     fun handle(command: WatchCommand, payload: ByteArray? = null): Boolean = when (command) {
-        WatchCommand.RUN_START -> runStatus() == RunStatus.IDLE && runStarter.requestStart()
+        // 끝난 러닝은 폰의 결과 화면이 닫힐 때까지 FINISHED 로 남는다. 기록은 이미 저장돼 있어 새로 시작해도 잃는 것이 없다.
+        WatchCommand.RUN_START -> runStatus().let { it == RunStatus.IDLE || it == RunStatus.FINISHED } && runStarter.requestStart()
         WatchCommand.SET_COMPLETE -> WearCodec.decodeSetId(payload)?.let { link.emitSetCompletion(it) } ?: false
         WatchCommand.RUN_PAUSE -> runIf(runStatus() == RunStatus.TRACKING) { runControl.pause() }
         WatchCommand.RUN_RESUME -> runIf(runStatus() == RunStatus.PAUSED) { runControl.resume() }

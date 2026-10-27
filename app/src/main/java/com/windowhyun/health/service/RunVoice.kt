@@ -44,20 +44,35 @@ class AndroidRunVoice @Inject constructor(
     private var focusRequest: AudioFocusRequest? = null
     private val audioManager get() = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
+    /** 초기화 결과가 엔진 변수에 넣기 전에(생성자 안에서) 도착했을 때 받아 둔다. */
+    private var earlyInitStatus: Int? = null
+
     @Synchronized
     override fun prepare() {
         releaseWhenIdle = false
         if (engine != null) return
+        earlyInitStatus = null
         engine = runCatching {
             TextToSpeech(context) { status -> onInit(status) }
         }.onFailure { Log.w(TAG, "TextToSpeech could not be created", it) }.getOrNull()
+        earlyInitStatus?.let { status ->
+            earlyInitStatus = null
+            onInit(status)
+        }
     }
 
     @Synchronized
     private fun onInit(status: Int) {
-        val tts = engine ?: return
+        val tts = engine
+        if (tts == null) {
+            // 생성자가 끝나기 전에 불렸다. prepare() 가 엔진을 넣은 뒤 다시 처리한다.
+            earlyInitStatus = status
+            return
+        }
         if (status != TextToSpeech.SUCCESS) {
             Log.w(TAG, "TextToSpeech init failed: $status")
+            // 죽은 엔진을 붙들고 있으면 다시 시도하지 못하고, 쌓인 말 때문에 해제도 미뤄진다. 버리고 다음 말 때 새로 만든다.
+            releaseNow()
             return
         }
         val korean = tts.setLanguage(Locale.KOREAN)

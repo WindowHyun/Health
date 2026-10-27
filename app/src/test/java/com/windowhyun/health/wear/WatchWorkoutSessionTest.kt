@@ -283,6 +283,16 @@ class WatchWorkoutSessionTest {
         assertThat(notification.actions.single().title.toString()).isEqualTo("러닝 시작")
     }
 
+    /** 알림을 띄울 수 없으면 사용자가 알 방법이 없다. 요청을 받았다고 하면 시계가 "폰에 요청했어요"만 보여 주며 기다린다. */
+    @Test
+    fun `without a way to ask you the request is refused`() {
+        // 알림 권한을 주지 않는다(Android 13 이상).
+        assertThat(starter().requestStart()).isFalse()
+
+        assertThat(shadowOf(context as android.app.Application).nextStartedService).isNull()
+        assertThat(postedNotification()).isNull()
+    }
+
     @Test
     fun `without location permission the run cannot start`() {
         shadowOf(context as android.app.Application).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)

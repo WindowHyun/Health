@@ -3,8 +3,11 @@ package com.windowhyun.health.ui.session
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.SavedStateHandle
@@ -223,6 +226,52 @@ class SetShortcutTest {
                 }
             }
         }
+    }
+
+    private fun showLiveRow(weightKg: () -> Double) {
+        compose.setContent {
+            HealthTheme(themeMode = ThemeMode.LIGHT) {
+                MaterialTheme {
+                    SetRow(
+                        set = WorkoutSet(id = 1, setNumber = 1, weightKg = weightKg(), reps = 8, completed = false),
+                        weightUnit = WeightUnit.KG,
+                        quickAdjust = true,
+                        onValuesChange = { _, _, _ -> },
+                        onToggleCompleted = { _, _, _ -> },
+                        onRemove = {},
+                    )
+                }
+            }
+        }
+    }
+
+    /** 앞 세트를 고쳐 이 세트의 저장값이 따라 바뀌면 화면의 값도 바뀌어야 한다. 아니면 완료를 누를 때 옛 값이 덮어쓴다. */
+    @Test
+    fun `a weight changed elsewhere shows up in the row`() {
+        var kg by androidx.compose.runtime.mutableDoubleStateOf(60.0)
+        showLiveRow { kg }
+        compose.onNodeWithText("60").assertExists()
+
+        compose.runOnIdle { kg = 62.5 }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("62.5").assertExists()
+    }
+
+    /** 이 행에서 방금 고친 값은, 늦게 돌아온 저장값(한두 글자 전 값)이 덮어쓰지 않는다. */
+    @Test
+    fun `a late echo of an older value does not undo what was just tapped`() {
+        var kg by androidx.compose.runtime.mutableDoubleStateOf(60.0)
+        showLiveRow { kg }
+
+        compose.onNodeWithContentDescription("무게 2.5kg 늘리기").performClick()
+        compose.onNodeWithContentDescription("무게 2.5kg 늘리기").performClick()
+        compose.onNodeWithText("65").assertExists()
+
+        compose.runOnIdle { kg = 62.5 } // 첫 번째 누름의 저장값이 이제야 도착
+        compose.waitForIdle()
+
+        compose.onNodeWithText("65").assertExists()
     }
 
     @Test

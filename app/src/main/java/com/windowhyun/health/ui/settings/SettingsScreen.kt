@@ -328,8 +328,8 @@ private fun HealthConnectSection(viewModel: HealthConnectViewModel) {
                         } else if (state.permissions.canReadWeight) {
                             viewModel.setImportWeight(true)
                         } else {
+                            viewModel.requestWeightImport()
                             requestPermissions.launch(viewModel.permissionsToRequest)
-                            viewModel.setImportWeight(true)
                         }
                     },
                 )

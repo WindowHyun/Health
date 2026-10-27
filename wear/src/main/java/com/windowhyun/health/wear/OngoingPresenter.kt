@@ -46,7 +46,7 @@ internal object OngoingPresenter {
         workout: WorkoutSnapshot,
         nowMillis: Long,
     ): OngoingContent? {
-        if (rest.active && !rest.isFinished(nowMillis) && !isRestStale(rest, nowMillis)) return rest(rest, nowMillis)
+        if (rest.active && !rest.isFinished(nowMillis) && !rest.isStale(nowMillis)) return rest(rest, nowMillis)
         if (run.isActive && !run.isStale(nowMillis)) return run(run, nowMillis)
         if (workout.active && !workout.allDone && !workout.isStale(nowMillis)) return workout(workout)
         return null
@@ -99,10 +99,4 @@ internal object OngoingPresenter {
         text = "${workout.setNumber}/${workout.setCount}세트",
         tileLines = listOf(workout.exerciseName, "${workout.setNumber}/${workout.setCount}세트", WatchFormat.setValue(workout)),
     )
-
-    /** 휴식은 길어야 몇 분이다. 끝나는 시각에서 한참 지났거나 보낸 지 오래면 폰이 그만둔 것이다. */
-    private fun isRestStale(rest: RestSnapshot, nowMillis: Long): Boolean =
-        !rest.paused && nowMillis - rest.sentAtMillis > REST_STALE_MILLIS + rest.totalSeconds * 1_000L
-
-    private const val REST_STALE_MILLIS = 60_000L
 }

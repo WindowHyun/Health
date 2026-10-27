@@ -225,6 +225,8 @@ class TemplateLibraryViewModel @Inject constructor(
     private fun work(block: suspend () -> Unit) {
         if (transient.value.working) return
         transient.update { it.copy(working = true) }
+        // 시작할 때의 시트에 대한 일이다. 그사이 시트를 닫았다면 실패 안내도 띄우지 않는다.
+        val token = epoch
         viewModelScope.launch {
             try {
                 block()
@@ -232,7 +234,7 @@ class TemplateLibraryViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "템플릿 작업에 실패했습니다", e)
-                say(FAILED)
+                say(FAILED, token)
             } finally {
                 transient.update { it.copy(working = false) }
             }

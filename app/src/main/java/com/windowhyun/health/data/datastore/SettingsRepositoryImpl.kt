@@ -77,7 +77,9 @@ class SettingsRepositoryImpl @Inject constructor(
             } ?: defaults.themeMode,
             keepScreenOnDuringWorkout = prefs[Keys.KEEP_SCREEN_ON] ?: defaults.keepScreenOnDuringWorkout,
             runVibrationCues = prefs[Keys.RUN_VIBRATION_CUES] ?: defaults.runVibrationCues,
-            runVoiceCues = prefs[Keys.RUN_VOICE_CUES] ?: defaults.runVoiceCues,
+            // 새로 설치한 사람은 기본으로 켜지만, 이 설정이 생기기 전부터 쓰던 사람(저장된 값은 있는데 이 키만 없다)은
+            // 업데이트했다고 갑자기 소리가 나지 않게 꺼 둔다.
+            runVoiceCues = prefs[Keys.RUN_VOICE_CUES] ?: (defaults.runVoiceCues && prefs.asMap().isEmpty()),
             weeklyWorkoutGoal = prefs[Keys.WEEKLY_WORKOUT_GOAL] ?: defaults.weeklyWorkoutGoal,
             weeklyRunGoalMeters = prefs[Keys.WEEKLY_RUN_GOAL_METERS] ?: defaults.weeklyRunGoalMeters,
             autoPauseRun = prefs[Keys.AUTO_PAUSE_RUN] ?: defaults.autoPauseRun,

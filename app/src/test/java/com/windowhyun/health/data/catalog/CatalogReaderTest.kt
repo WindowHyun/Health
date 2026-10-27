@@ -378,13 +378,14 @@ class CatalogReaderTest {
     }
 
     @Test
-    fun `rest must be between 5 and 600 seconds and may be left out`() {
+    fun `rest must be between 0 and 600 seconds and may be left out`() {
         fun rest(value: String) = read(templatesFile(tpl(days = listOf(day(lines = listOf(line(extra = ""","rest":$value""")))))))
+        assertThat(rest("0").isValid).isTrue() // 슈퍼셋의 앞 종목: 쉬지 않음
         assertThat(rest("5").isValid).isTrue()
         assertThat(rest("600").isValid).isTrue()
         assertThat(rest("null").isValid).isTrue()
-        assertOneError(rest("4"), "rest", "5~600")
-        assertOneError(rest("601"), "rest", "5~600")
+        assertOneError(rest("-1"), "rest", "0~600")
+        assertOneError(rest("601"), "rest", "0~600")
         assertOneError(rest("\"60\""), "rest", "숫자")
     }
 
@@ -659,7 +660,7 @@ class CatalogReaderTest {
             tpl(
                 id = "mine",
                 days = listOf(
-                    day("첫째", lines = listOf(line("스쿼트", sets = "0"), line("벤치프레스", extra = ""","rest":4"""))),
+                    day("첫째", lines = listOf(line("스쿼트", sets = "0"), line("벤치프레스", extra = ""","rest":601"""))),
                     day("둘째", lines = listOf(line("딥스", extra = ""","superset":"A""""), line("해머 컬"))),
                 ),
             ),

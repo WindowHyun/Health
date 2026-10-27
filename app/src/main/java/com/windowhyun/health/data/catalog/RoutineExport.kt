@@ -71,7 +71,7 @@ object RoutineExport {
         return routine.items.all { item ->
             CatalogReader.isAcceptableName(item.exercise.name) &&
                 item.defaultSets in CatalogRules.SETS &&
-                (item.restSeconds == null || item.restSeconds in CatalogRules.REST_SECONDS)
+                (item.restSeconds == null || item.restSeconds in CatalogRules.ITEM_REST_SECONDS)
         }
     }
 

@@ -441,6 +441,28 @@ class TemplateLibraryViewModelTest {
         assertThat(latest.preview).isNull()
     }
 
+    /** 붙여넣은 글을 처리하다(work 의 일반 실패 경로) 실패한 안내도 시트를 닫은 뒤에 도착하면 버린다. */
+    @Test
+    fun `an unexpected failure that arrives after the sheet was closed is dropped`() {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val failingLater = object : UserTemplateRepository by stored {
+            override suspend fun current(): List<RoutineTemplates.Template> {
+                gate.await()
+                throw IllegalStateException("예상 밖의 실패")
+            }
+        }
+        val vm = viewModelWith(failingLater)
+
+        vm.importFromText(simple)
+        assertThat(latest.working).isTrue()
+        vm.sheetClosed()
+        gate.complete(Unit)
+        settle()
+
+        assertThat(latest.message).isNull()
+        assertThat(latest.working).isFalse()
+    }
+
     /** 닫지 않았다면 같은 실패는 안내로 보인다. */
     @Test
     fun `the same failure is shown when the sheet stays open`() {

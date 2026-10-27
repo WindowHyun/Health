@@ -57,20 +57,21 @@ class WatchRunStarter @Inject constructor(
             runServiceController.start(RunGoal())
             return true
         }
-        notifyUser(text = context.getString(R.string.watch_run_request_text), withStartButton = true)
-        return true
+        // 알릴 방법이 없으면(알림 권한 없음) 시작 요청을 받았다고 하지 않는다. 시계에도 안 됐다고 알려야 한다.
+        return notifyUser(text = context.getString(R.string.watch_run_request_text), withStartButton = true)
     }
 
-    private fun notifyUser(text: String, withStartButton: Boolean) {
+    /** 알림을 띄웠으면 true. */
+    private fun notifyUser(text: String, withStartButton: Boolean): Boolean {
         // 알림 권한이 없으면 알릴 방법이 없다. 시계에는 "폰에서 시작해 주세요"가 남는다.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            return
+            return false
         }
         val manager = NotificationManagerCompat.from(context)
-        if (!manager.areNotificationsEnabled()) return
+        if (!manager.areNotificationsEnabled()) return false
 
         val openApp = PendingIntent.getActivity(
             context,
@@ -104,7 +105,7 @@ class WatchRunStarter @Inject constructor(
                 ).build(),
             )
         }
-        runCatching { manager.notify(NOTIFICATION_ID, builder.build()) }
+        return runCatching { manager.notify(NOTIFICATION_ID, builder.build()) }.isSuccess
     }
 
     companion object {

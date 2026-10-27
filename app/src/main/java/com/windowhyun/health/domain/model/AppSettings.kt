@@ -32,7 +32,8 @@ data class PipSpace(
      * 빈 자리의 높이(dp). **화면 가장자리부터** 잰다(상태 · 내비게이션 막대 영역 포함). PiP 는 막대 위에도 뜨기 때문이다.
      * PiP 의 16:9 세로에 창이 가장자리에서 떨어진 여백([MARGIN_DP])을 더한다.
      */
-    fun heightDp(screenWidthDp: Float): Float = screenWidthDp * widthPercent / 100f * 9f / 16f + MARGIN_DP
+    fun heightDp(screenWidthDp: Float, screenHeightDp: Float = Float.MAX_VALUE): Float =
+        (screenWidthDp * widthPercent / 100f * 9f / 16f + MARGIN_DP).coerceAtMost(screenHeightDp * MAX_HEIGHT_FRACTION)
 
     companion object {
         const val DEFAULT_WIDTH_PERCENT = 65
@@ -42,6 +43,9 @@ data class PipSpace(
 
         /** PiP 창과 화면 가장자리 사이 여백 + 약간의 여유. */
         const val MARGIN_DP = 12f
+
+        /** 화면을 가로로 돌리거나 태블릿일 때 자리가 화면을 다 차지해 앱을 못 쓰게 되지 않도록, 화면 높이의 이 비율까지만 비운다. */
+        const val MAX_HEIGHT_FRACTION = 0.45f
 
         /** 자주 쓰는 크기. 유튜브 PiP 를 작게 · 중간 · 가장 크게 늘렸을 때(가로 약 90%)에 맞춘다. */
         val PRESETS: List<Pair<String, Int>> = listOf("작게" to 40, "보통" to 65, "크게" to 90)

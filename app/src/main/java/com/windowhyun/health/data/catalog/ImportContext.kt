@@ -49,6 +49,9 @@ object CatalogRules {
     /** 설정의 기본 휴식과 같은 한도. */
     val REST_SECONDS = 5..600
 
+    /** 템플릿 종목의 `rest`. 0 은 "쉬지 않음"이다(슈퍼셋의 앞 종목). 루틴 편집기가 0 을 허용하므로 내보낸 파일에도 있을 수 있다. */
+    val ITEM_REST_SECONDS = 0..600
+
     /** 템플릿 id 에 쓸 수 있는 글자. */
     val ID_PATTERN = Regex("[A-Za-z0-9_-]+")
 

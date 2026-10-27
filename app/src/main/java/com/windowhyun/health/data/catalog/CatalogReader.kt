@@ -516,7 +516,7 @@ object CatalogReader {
             checkKeys(obj, path, ITEM_KEYS)
             val name = text(obj, "name", path, CatalogRules.MAX_NAME_LENGTH)
             val sets = int(obj, "sets", path, CatalogRules.SETS)
-            val rest = int(obj, "rest", path, CatalogRules.REST_SECONDS, required = false)
+            val rest = int(obj, "rest", path, CatalogRules.ITEM_REST_SECONDS, required = false)
             val superset = if (obj["superset"].let { it == null || it is JsonNull }) {
                 null
             } else {

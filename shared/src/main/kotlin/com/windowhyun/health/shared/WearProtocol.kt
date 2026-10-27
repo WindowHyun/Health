@@ -87,6 +87,13 @@ data class RestSnapshot(
 
     fun isFinished(nowMillis: Long): Boolean = active && !paused && nowMillis >= endsAtMillis
 
+    /**
+     * 휴식은 길어야 몇 분이다. 끝나는 시각에서 한참 지났거나 보낸 지 오래면 폰이 그만둔 것이다
+     * (앱이 멈추거나 꺼져서 "휴식 끝"을 지우지 못했다). 일시정지 중에는 끝나는 시각이 없어 따지지 않는다.
+     */
+    fun isStale(nowMillis: Long): Boolean =
+        active && !paused && nowMillis - sentAtMillis > WearProtocol.STALE_MILLIS + totalSeconds * 1_000L
+
     /** 0..1. 1 이 가득 찬 상태에서 줄어든다. */
     fun fraction(nowMillis: Long): Float {
         if (!active || totalSeconds <= 0) return 0f

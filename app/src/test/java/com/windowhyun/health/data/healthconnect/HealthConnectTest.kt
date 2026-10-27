@@ -555,7 +555,7 @@ class HealthConnectTest {
             PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) {
                 File(context.cacheDir, "ledger-${System.nanoTime()}.preferences_pb")
             },
-        )
+        ) { "this-phone" }
         assertThat(store.read()).isEmpty()
 
         store.write(mapOf("health-run-1" to "100:5000:1500:300:4000", "health-workout-2" to "200:2:960:벤치"))
@@ -564,6 +564,36 @@ class HealthConnectTest {
             "health-run-1", "100:5000:1500:300:4000",
             "health-workout-2", "200:2:960:벤치",
         )
+    }
+
+    /** 새 폰으로 옮기면 설정 저장소(와 장부)만 따라온다. 새 폰의 Health Connect 에는 없으므로 "이미 보냈다"고 믿으면 안 된다. */
+    @Test
+    fun `a ledger that came from another phone is ignored`() = runBlocking<Unit> {
+        var phone = "old-phone"
+        val ledger = DataStoreHealthConnectLedger(
+            PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) {
+                File(context.cacheDir, "ledger-moved-${System.nanoTime()}.preferences_pb")
+            },
+        ) { phone }
+        ledger.write(mapOf("health-run-1" to "100"))
+        assertThat(ledger.read()).containsExactly("health-run-1", "100")
+
+        phone = "new-phone" // 같은 저장소 파일이 다른 기기로 옮겨졌다
+        assertThat(ledger.read()).isEmpty()
+        // 새 폰에서 다시 쓰면 그 뒤로는 새 폰의 장부다.
+        ledger.write(mapOf("health-run-2" to "200"))
+        assertThat(ledger.read()).containsExactly("health-run-2", "200")
+    }
+
+    @Test
+    fun `the device token is created once and kept`() {
+        val file = File(context.cacheDir, "owner-${System.nanoTime()}")
+        val first = DataStoreHealthConnectLedger.fileToken(file)()
+        val again = DataStoreHealthConnectLedger.fileToken(file)()
+
+        assertThat(first).isNotEmpty()
+        assertThat(again).isEqualTo(first)
+        assertThat(file.readText().trim()).isEqualTo(first)
     }
 
     // ----- 설정 화면 -----
@@ -596,6 +626,27 @@ class HealthConnectTest {
 
         assertThat(runBlocking { settings.current().healthConnectEnabled }).isTrue()
         assertThat(viewModel.uiState.value.permissionDenied).isFalse()
+    }
+
+    /** 체중 권한을 거절했는데 "체중 가져오기"가 켜진 채로 남으면 안 된다. */
+    @Test
+    fun `weight import is turned on only when the weight permission was given`() = runTest(dispatcher) {
+        gateway.permissions = HealthPermissionState(canWrite = true, canReadWeight = false)
+        val viewModel = viewModel(this)
+        viewModel.requestWeightImport()
+
+        viewModel.onPermissionResult(HealthConnectPermissions.exportPermissions)
+        await { runBlocking { settings.current().healthConnectEnabled } }
+
+        assertThat(runBlocking { settings.current().healthConnectImportWeight }).isFalse()
+
+        // 이번에는 허용한다.
+        gateway.permissions = HealthPermissionState(canWrite = true, canReadWeight = true)
+        viewModel.requestWeightImport()
+        viewModel.onPermissionResult(HealthConnectPermissions.all)
+        await { runBlocking { settings.current().healthConnectImportWeight } }
+
+        assertThat(runBlocking { settings.current().healthConnectImportWeight }).isTrue()
     }
 
     @Test
@@ -667,6 +718,7 @@ class HealthConnectTest {
 
     @Test
     fun `a run shows the heart rate from health connect`() = runTest(dispatcher) {
+        enable()
         val runId = runBlocking { finishedRun() }
         gateway.heartRate = HeartRateSummary(averageBpm = 152, maxBpm = 178)
 
@@ -675,8 +727,21 @@ class HealthConnectTest {
         assertThat(state.heartRate).isEqualTo(HeartRateSummary(152, 178))
     }
 
+    /** 연동을 끈 사람의 건강 기록은 권한이 남아 있어도 읽지 않는다. */
+    @Test
+    fun `with the export turned off no heart rate is read even if the permission remains`() = runTest(dispatcher) {
+        val runId = runBlocking { finishedRun() }
+        gateway.heartRate = HeartRateSummary(152, 178)
+
+        val state = detail(runId).uiState.first { !it.loading }
+
+        assertThat(state.heartRate).isNull()
+        assertThat(gateway.heartRateRequests).isEqualTo(0)
+    }
+
     @Test
     fun `no permission means no heart rate lookup at all`() = runTest(dispatcher) {
+        enable()
         val runId = runBlocking { finishedRun() }
         gateway.heartRate = HeartRateSummary(152, 178)
         gateway.permissions = HealthPermissionState(canWrite = true, canReadHeartRate = false)
@@ -689,6 +754,7 @@ class HealthConnectTest {
 
     @Test
     fun `an unavailable health connect shows no heart rate and the run still opens`() = runTest(dispatcher) {
+        enable()
         val runId = runBlocking { finishedRun() }
         gateway.heartRate = HeartRateSummary(152, 178)
         gateway.availability = HealthConnectAvailability.UNAVAILABLE
@@ -702,6 +768,7 @@ class HealthConnectTest {
     /** 심박을 못 읽는다고 러닝 상세가 안 열리면 안 된다. */
     @Test
     fun `a failing heart rate lookup does not break the run detail`() = runTest(dispatcher) {
+        enable()
         val runId = runBlocking { finishedRun() }
         gateway.failHeartRate = SecurityException("권한 없음")
 

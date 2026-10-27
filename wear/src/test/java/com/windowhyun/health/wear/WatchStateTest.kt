@@ -29,6 +29,15 @@ class WatchStateTest {
         assertThat(WatchUiState(rest = resting).screen).isEqualTo(WatchScreen.REST)
     }
 
+    /** 폰이 "휴식 끝"을 지우지 못하고 멈췄다면, 휴식이 러닝 · 헬스 화면을 영영 가리면 안 된다. */
+    @Test
+    fun `a rest the phone never cleared stops hiding the other screens`() {
+        val late = 1_000L + 60_000L + 60_000L + 1 // 보낸 뒤 1분 + 휴식 시간을 넘김
+        assertThat(WatchUiState(run = running, rest = resting, nowMillis = late - 1).screen).isEqualTo(WatchScreen.REST)
+        assertThat(WatchUiState(run = running, rest = resting, nowMillis = late).screen).isEqualTo(WatchScreen.RUN)
+        assertThat(WatchUiState(rest = resting, nowMillis = late).screen).isEqualTo(WatchScreen.IDLE)
+    }
+
     /** 헬스 중 휴식은 곧 끝나므로 먼저 보여 준다. 끝나면 러닝 화면이 나온다. */
     @Test
     fun `a rest comes before a run`() {
