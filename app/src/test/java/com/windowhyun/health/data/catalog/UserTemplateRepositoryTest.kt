@@ -37,6 +37,24 @@ class UserTemplateRepositoryTest {
         assertThat(file.exists()).isFalse()
     }
 
+    /** 읽다가 실패한 것을 "템플릿이 없다"로 기억하면, 다음 저장이 멀쩡한 파일을 덮어쓴다. */
+    @Test
+    fun `a failed read is not remembered as empty and does not let a save overwrite the file`() = runBlocking<Unit> {
+        val repo = repository()
+        // 파일 자리에 폴더가 있으면 읽기가 IOException 으로 실패한다.
+        assertThat(file.mkdirs()).isTrue()
+
+        assertThat(repo.current()).isEmpty()
+        assertThrows(java.io.IOException::class.java) { runBlocking { repo.save(listOf(template("new"))) } }
+        assertThrows(java.io.IOException::class.java) { runBlocking { repo.delete("x") } }
+        assertThat(file.isDirectory).isTrue()
+
+        // 읽을 수 있게 되면 다음에 다시 읽는다.
+        assertThat(file.delete()).isTrue()
+        repository().save(listOf(template("kept")))
+        assertThat(repo.current().map { it.id }).containsExactly("kept")
+    }
+
     @Test
     fun `saved templates are written to the file and read back by a new instance`() = runBlocking<Unit> {
         repository().save(listOf(template("a"), template("b")))

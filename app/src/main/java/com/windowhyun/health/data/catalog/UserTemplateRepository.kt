@@ -92,8 +92,16 @@ class FileUserTemplateRepository internal constructor(
     override val templates: Flow<List<RoutineTemplates.Template>> =
         loaded.filterNotNull().onStart { current() }
 
+    /**
+     * 파일을 읽지 못하면 빈 목록을 돌려주되 **기억해 두지 않는다**. 다음에 다시 읽어 본다.
+     * (빈 목록을 기억해 두면, 그 뒤 저장이 멀쩡한 파일을 덮어쓴다.)
+     */
     override suspend fun current(): List<RoutineTemplates.Template> =
-        loaded.value ?: lock.withLock { loadLocked() }
+        loaded.value ?: try {
+            lock.withLock { loadLocked() }
+        } catch (e: IOException) {
+            emptyList()
+        }
 
     override suspend fun save(templates: List<RoutineTemplates.Template>) {
         lock.withLock { write(UserTemplateRepository.merge(loadLocked(), templates)) }
@@ -122,11 +130,8 @@ class FileUserTemplateRepository internal constructor(
 
     private fun readFile(): List<RoutineTemplates.Template> {
         if (!file.exists()) return emptyList()
-        val text = try {
-            file.readText(Charsets.UTF_8)
-        } catch (e: IOException) {
-            return emptyList()
-        }
+        // 읽다가 실패하면 그대로 던진다. "템플릿이 없다"로 바꾸면 이어지는 저장이 파일을 덮어쓴다.
+        val text = file.readText(Charsets.UTF_8)
         // 이미 받아들여 저장한 글이라, 가져올 때의 까다로운 규칙(템플릿 사이의 이름 겹침 · 글자 규칙)은 다시 따지지 않는다.
         // 그러지 않으면 옛 버전이나 경고만 내고 받아들인 템플릿 때문에 저장해 둔 템플릿이 통째로 읽히지 않는다.
         val report = CatalogReader.read(text, ImportContext.STORED)

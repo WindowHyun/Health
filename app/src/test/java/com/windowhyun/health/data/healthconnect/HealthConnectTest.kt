@@ -34,6 +34,7 @@ import com.windowhyun.health.ui.settings.healthConnectStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -68,20 +69,32 @@ class HealthConnectTest {
         var heartRate: HeartRateSummary? = null
         var failUpsert: Exception? = null
         var failHeartRate: Exception? = null
+        var failPermission: Exception? = null
+        var failWeight: Exception? = null
+        var failUpsertAtCall: Int? = null
+        var permissionCalls = 0
         val upserts = mutableListOf<List<HealthSession>>()
         val deletes = mutableListOf<List<String>>()
         var heartRateRequests = 0
 
         override fun availability() = availability
-        override suspend fun permissionState() = permissions
+        override suspend fun permissionState(): HealthPermissionState {
+            permissionCalls++
+            failPermission?.let { throw it }
+            return permissions
+        }
         override suspend fun upsert(sessions: List<HealthSession>) {
             failUpsert?.let { throw it }
+            if (failUpsertAtCall == upserts.size + 1) throw IOException("중간에 끊김")
             upserts += sessions
         }
         override suspend fun delete(clientIds: List<String>) {
             deletes += clientIds
         }
-        override suspend fun latestWeightKg(withinDays: Int) = weightKg
+        override suspend fun latestWeightKg(withinDays: Int): Double? {
+            failWeight?.let { throw it }
+            return weightKg
+        }
         override suspend fun heartRate(startMillis: Long, endMillis: Long): HeartRateSummary? {
             heartRateRequests++
             failHeartRate?.let { throw it }
@@ -331,6 +344,133 @@ class HealthConnectTest {
         assertThat(gateway.written().single().clientId).isEqualTo(runClientId(runId))
         assertThat(settings.current().healthConnectLastError).isNull()
         assertThat(settings.current().healthConnectLastSyncAt).isGreaterThan(0)
+    }
+
+    /** 권한 확인도 Health Connect 와 통신하다 실패할 수 있다. 던지면 백그라운드에서 앱이 죽는다. */
+    @Test
+    fun `a failing permission check is reported instead of thrown`() = runBlocking<Unit> {
+        enable()
+        finishedRun()
+        gateway.failPermission = IllegalStateException("Health Connect 를 업데이트하는 중")
+
+        val result = syncer().sync()
+
+        assertThat(result).isEqualTo(HealthSyncResult.Failed("Health Connect 를 업데이트하는 중"))
+        assertThat(settings.current().healthConnectLastError).isEqualTo("Health Connect 를 업데이트하는 중")
+    }
+
+    /** 한 번에 너무 많이 보내면 거절당해 영영 내보내지 못한다. 나눠 보내고, 반영한 만큼은 장부에 남긴다. */
+    @Test
+    fun `many records are sent in batches and the ledger keeps what already went through`() = runBlocking<Unit> {
+        enable()
+        repeat(HealthConnectSyncer.BATCH_SIZE + 5) { finishedRun() }
+        val syncer = syncer()
+        gateway.failUpsertAtCall = 2
+
+        val failed = syncer.sync()
+
+        assertThat(failed).isInstanceOf(HealthSyncResult.Failed::class.java)
+        assertThat(gateway.upserts).hasSize(1)
+        assertThat(gateway.upserts.single()).hasSize(HealthConnectSyncer.BATCH_SIZE)
+        assertThat(ledger.entries).hasSize(HealthConnectSyncer.BATCH_SIZE)
+
+        gateway.failUpsertAtCall = null
+        val retried = syncer.sync()
+
+        // 이미 반영한 덩이는 다시 보내지 않고, 남은 5개만 보낸다.
+        assertThat(retried).isEqualTo(HealthSyncResult.Done(written = 5, deleted = 0))
+        assertThat(gateway.upserts.last()).hasSize(5)
+        assertThat(ledger.entries).hasSize(HealthConnectSyncer.BATCH_SIZE + 5)
+    }
+
+    @Test
+    fun `many deletions are sent in batches too`() = runBlocking<Unit> {
+        enable()
+        ledger.entries = (1..HealthConnectSyncer.BATCH_SIZE + 3).associate { "health-run-${900 + it}" to "x" }
+
+        val result = syncer().sync()
+
+        assertThat(result).isEqualTo(HealthSyncResult.Done(written = 0, deleted = HealthConnectSyncer.BATCH_SIZE + 3))
+        assertThat(gateway.deletes.map { it.size }).containsExactly(HealthConnectSyncer.BATCH_SIZE, 3).inOrder()
+        assertThat(ledger.entries).isEmpty()
+    }
+
+    /** 체중 읽기는 백그라운드에서 막힐 수 있다. 이미 끝낸 내보내기까지 실패로 만들면 안 된다. */
+    @Test
+    fun `a failing weight import does not turn a finished export into a failure`() = runBlocking<Unit> {
+        enable(importWeight = true)
+        finishedRun()
+        gateway.failWeight = SecurityException("백그라운드에서는 읽을 수 없어요")
+
+        val result = syncer().sync()
+
+        assertThat(result).isEqualTo(HealthSyncResult.Done(written = 1, deleted = 0))
+        assertThat(settings.current().healthConnectLastError).isNull()
+        assertThat(settings.current().healthConnectLastSyncAt).isGreaterThan(0)
+    }
+
+    @Test
+    fun `an automatic sync with nothing new leaves the last sync time alone but a manual one updates it`() = runBlocking<Unit> {
+        enable()
+        finishedRun()
+        val syncer = syncer()
+        syncer.sync()
+        val first = settings.current().healthConnectLastSyncAt
+        Thread.sleep(5)
+
+        syncer.sync()
+        assertThat(settings.current().healthConnectLastSyncAt).isGreaterThan(first)
+    }
+
+    // ----- 저절로 도는 동기화 -----
+
+    private fun waitUntil(timeoutMillis: Long = 8_000, condition: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return true
+            Thread.sleep(50)
+        }
+        return condition()
+    }
+
+    @Test
+    fun `while it is off the records are not watched at all`() = runBlocking<Unit> {
+        val scope = CoroutineScope(Dispatchers.IO)
+        try {
+            syncer(scope = scope).start()
+            finishedRun()
+            finishedWorkout()
+
+            // 디바운스(2초)보다 길게 기다려도 아무것도 하지 않는다.
+            Thread.sleep(HealthConnectSyncer.DEBOUNCE_MILLIS + 1_000)
+
+            assertThat(gateway.permissionCalls).isEqualTo(0)
+            assertThat(gateway.upserts).isEmpty()
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `when on a new record is sent by itself and an unfinished run changing does not sync again`() = runBlocking<Unit> {
+        enable()
+        val scope = CoroutineScope(Dispatchers.IO)
+        try {
+            syncer(scope = scope).start()
+            val runId = finishedRun()
+            assertThat(waitUntil { gateway.written().any { it.clientId == runClientId(runId) } }).isTrue()
+
+            // 달리는 중 5초마다 바뀌는 기록: 내보낼 것이 아니므로 다시 맞추지 않는다.
+            val live = runs.startRun(RunGoalType.FREE, 0.0)
+            Thread.sleep(HealthConnectSyncer.DEBOUNCE_MILLIS + 1_000)
+            val calls = gateway.permissionCalls
+            runs.updateProgress(live, 100.0, 30, 300.0, 280.0, 10, 5)
+            Thread.sleep(HealthConnectSyncer.DEBOUNCE_MILLIS + 1_000)
+
+            assertThat(gateway.permissionCalls).isEqualTo(calls)
+        } finally {
+            scope.cancel()
+        }
     }
 
     // ----- 체중 -----
