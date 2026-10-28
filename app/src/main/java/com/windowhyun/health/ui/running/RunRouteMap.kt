@@ -3,20 +3,39 @@ package com.windowhyun.health.ui.running
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Point
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.sp
 import com.windowhyun.health.BuildConfig
 import com.windowhyun.health.domain.model.RunPoint
 import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.MapTileProviderBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
@@ -24,7 +43,6 @@ import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.Projection
 import org.osmdroid.views.overlay.Overlay
-import org.osmdroid.views.overlay.Polyline
 
 /**
  * OpenStreetMap 위에 러닝 경로를 그린다.
@@ -42,27 +60,29 @@ fun RunRouteMap(
     modifier: Modifier = Modifier,
     /** 기록 중에는 마지막 위치를 따라가고, 결과 화면에서는 전체 경로를 맞춰 보여 준다. */
     followLatest: Boolean = false,
+    /** 타일을 받아 오는 방법. 비워 두면 OpenStreetMap 에서 받는다(화면 캡처 테스트가 미리 받아 둔 타일을 넣는 자리). */
+    tileProvider: MapTileProviderBase? = null,
 ) {
     val context = LocalContext.current
     if (LocalInspectionMode.current) return
 
-    val lineColor = MaterialTheme.colorScheme.primary.toArgb()
-    val startColor = MaterialTheme.colorScheme.tertiary.toArgb()
-    val endColor = MaterialTheme.colorScheme.error.toArgb()
-    // 타일을 아직 못 받았을 때 배경. osmdroid 기본값은 분홍빛 격자라
-    // "고장난 화면"처럼 보이므로 앱 배경색으로 바꾼다.
-    val emptyTileColor = MaterialTheme.colorScheme.surfaceVariant.toArgb()
+    // 지도 바탕은 앱 테마를 따른다. 어두운 앱에서는 어두운 지도 위에 밝은 경로가, 밝은 앱에서는 옅은 회색 지도 위에 짙은 경로가 보인다.
+    val darkMap = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val ramp = remember(darkMap) { RouteColors.ramp(darkMap) }
+    val startColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val endColor = ramp.last()
+    val outlineColor = if (darkMap) 0xCC0B0D10.toInt() else 0xE6FFFFFF.toInt()
+    // 타일을 아직 못 받았을 때 배경. osmdroid 기본값은 분홍빛 격자라 "고장난 화면"처럼 보이므로 지도 바탕색으로 바꾼다(이 색도 아래 색 변환을 거친다).
+    val emptyTileColor = RouteMapStyle.TILE_PLACEHOLDER
 
     val mapView = remember {
         initOsmdroid(context)
-        MapView(context).apply {
+        (if (tileProvider != null) MapView(context, tileProvider) else MapView(context)).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
             setUseDataConnection(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             isTilesScaledToDpi = true
-            overlayManager.tilesOverlay.setLoadingBackgroundColor(emptyTileColor)
-            overlayManager.tilesOverlay.setLoadingLineColor(emptyTileColor)
         }
     }
 
@@ -74,57 +94,161 @@ fun RunRouteMap(
         }
     }
 
-    AndroidView(
-        factory = { mapView },
-        modifier = modifier,
-        update = { view ->
-            view.overlays.clear()
+    val paced = remember(route) { RoutePace.fractions(route.downsample()).any { !it.isNaN() && it != 0.5f } }
 
-            val displayed = route.downsample()
-            displayed.toSegments().forEach { segment ->
-                if (segment.size < 2) return@forEach
-                val polyline = Polyline(view).apply {
-                    setPoints(segment.map { GeoPoint(it.latitude, it.longitude) })
-                    outlinePaint.color = lineColor
-                    outlinePaint.strokeWidth = 12f
-                    outlinePaint.isAntiAlias = true
-                    // 기본 동작은 탭하면 빈 말풍선(InfoWindow)을 띄운다.
-                    // 보여 줄 내용이 없으므로 탭을 아예 무시한다.
-                    setOnClickListener { _, _, _ -> false }
-                    infoWindow = null
+    Box(modifier = modifier) {
+        AndroidView(
+            factory = { mapView },
+            modifier = Modifier.fillMaxSize(),
+            update = { view ->
+                view.overlayManager.tilesOverlay.apply {
+                    setLoadingBackgroundColor(emptyTileColor)
+                    setLoadingLineColor(emptyTileColor)
+                    // 색색의 도로 · 건물 · 글자가 경로를 묻지 않도록 바탕 지도를 차분한 회색조로 바꾼다.
+                    setColorFilter(ColorMatrixColorFilter(ColorMatrix(RouteMapStyle.matrix(darkMap))))
                 }
-                view.overlays.add(polyline)
-            }
+                view.overlays.clear()
 
-            val start = route.firstOrNull()
-            val end = route.lastOrNull()
-            if (start != null && end != null) {
-                view.overlays.add(EndpointsOverlay(start, end, startColor, endColor))
-            }
-
-            when {
-                route.isEmpty() -> Unit
-
-                followLatest -> {
-                    val last = route.last()
-                    view.controller.setZoom(RUNNING_ZOOM)
-                    view.controller.setCenter(GeoPoint(last.latitude, last.longitude))
+                val displayed = route.downsample()
+                if (displayed.size >= 2) {
+                    view.overlays.add(
+                        PaceRouteOverlay(
+                            points = displayed,
+                            fractions = RoutePace.fractions(displayed),
+                            ramp = ramp,
+                            outlineColor = outlineColor,
+                            density = view.resources.displayMetrics.density,
+                        ),
+                    )
                 }
 
-                route.size == 1 -> {
-                    view.controller.setZoom(RUNNING_ZOOM)
-                    view.controller.setCenter(GeoPoint(route[0].latitude, route[0].longitude))
+                val start = route.firstOrNull()
+                val end = route.lastOrNull()
+                if (start != null && end != null) {
+                    view.overlays.add(
+                        EndpointsOverlay(start, end, startColor, endColor, view.resources.displayMetrics.density, showStart = !followLatest),
+                    )
                 }
 
-                else -> view.zoomToRoute(route)
-            }
-            view.invalidate()
-        },
-    )
+                when {
+                    route.isEmpty() -> Unit
+
+                    followLatest -> {
+                        val last = route.last()
+                        view.controller.setZoom(RUNNING_ZOOM)
+                        view.controller.setCenter(GeoPoint(last.latitude, last.longitude))
+                    }
+
+                    route.size == 1 -> {
+                        view.controller.setZoom(RUNNING_ZOOM)
+                        view.controller.setCenter(GeoPoint(route[0].latitude, route[0].longitude))
+                    }
+
+                    else -> view.zoomToRoute(route)
+                }
+                view.invalidate()
+            },
+        )
+
+        if (!followLatest && paced) {
+            PaceLegend(ramp, Modifier.align(Alignment.BottomStart).padding(10.dp))
+        }
+        // OpenStreetMap 데이터를 쓰려면 출처를 화면에 밝혀야 한다.
+        Text(
+            text = "© OpenStreetMap",
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(horizontal = 6.dp, vertical = 3.dp),
+        )
+    }
+}
+
+/** 지도 한쪽에 두는 작은 설명: 선 색이 느림에서 빠름으로 바뀐다. */
+@Composable
+private fun PaceLegend(ramp: IntArray, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f), RoundedCornerShape(50))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("느림", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(
+            Modifier
+                .padding(horizontal = 6.dp)
+                .width(46.dp)
+                .height(5.dp)
+                .background(Brush.horizontalGradient(ramp.map { ComposeColor(it) }), RoundedCornerShape(50)),
+        )
+        Text("빠름", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 /**
- * 시작/끝 점.
+ * 경로를 구간마다 빠르기에 맞는 색으로 그린다. 선 아래에 굵은 반투명 외곽선을 한 번 더 깔아, 어떤 지도 위에서도 선이 떠 보이게 한다.
+ *
+ * osmdroid 의 Polyline 은 한 색밖에 못 쓰고 탭하면 빈 말풍선을 띄우므로 직접 그린다.
+ */
+private class PaceRouteOverlay(
+    private val points: List<RunPoint>,
+    private val fractions: List<Float>,
+    private val ramp: IntArray,
+    outlineColor: Int,
+    density: Float,
+) : Overlay() {
+
+    private val outlinePaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        strokeWidth = OUTLINE_WIDTH_DP * density
+        color = outlineColor
+    }
+    private val linePaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        strokeWidth = LINE_WIDTH_DP * density
+    }
+    private val pixel = Point()
+    private val xs = FloatArray(points.size)
+    private val ys = FloatArray(points.size)
+    private val outline = Path()
+
+    override fun draw(canvas: Canvas, projection: Projection) {
+        for (i in points.indices) {
+            projection.toPixels(GeoPoint(points[i].latitude, points[i].longitude), pixel)
+            xs[i] = pixel.x.toFloat()
+            ys[i] = pixel.y.toFloat()
+        }
+
+        // 일시정지로 끊긴 곳은 이어 그리지 않는다.
+        outline.rewind()
+        for (i in 1 until points.size) {
+            if (points[i].isSegmentStart) continue
+            outline.moveTo(xs[i - 1], ys[i - 1])
+            outline.lineTo(xs[i], ys[i])
+        }
+        canvas.drawPath(outline, outlinePaint)
+
+        for (i in 1 until points.size) {
+            val fraction = fractions.getOrNull(i - 1) ?: continue
+            if (points[i].isSegmentStart) continue
+            linePaint.color = RoutePace.colorAt(if (fraction.isNaN()) 0.5f else fraction, ramp)
+            canvas.drawLine(xs[i - 1], ys[i - 1], xs[i], ys[i], linePaint)
+        }
+    }
+
+    private companion object {
+        const val LINE_WIDTH_DP = 5f
+        const val OUTLINE_WIDTH_DP = 9f
+    }
+}
+
+/**
+ * 시작/끝 점. 끝(기록 중에는 지금 위치)에는 은은한 둥근 빛을 둘러 눈에 띄게 한다.
  *
  * osmdroid 의 Marker 를 쓰지 않는 이유: Marker 는 기본 InfoWindow 를 달고 다녀서
  * 탭했을 때 빈 말풍선이 뜬다. 점 두 개를 그리는 데 그런 기능은 필요 없다.
@@ -134,6 +258,8 @@ private class EndpointsOverlay(
     private val end: RunPoint,
     private val startColor: Int,
     private val endColor: Int,
+    private val density: Float,
+    private val showStart: Boolean,
 ) : Overlay() {
 
     private val fillPaint = Paint().apply {
@@ -143,25 +269,28 @@ private class EndpointsOverlay(
     private val borderPaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.STROKE
-        strokeWidth = 4f
+        strokeWidth = 2.5f * density
         color = Color.WHITE
     }
     private val point = Point()
 
     override fun draw(canvas: Canvas, projection: Projection) {
-        drawDot(canvas, projection, start, startColor)
-        drawDot(canvas, projection, end, endColor)
+        if (showStart) drawDot(canvas, projection, start, startColor, radiusDp = 5f, halo = false)
+        drawDot(canvas, projection, end, endColor, radiusDp = 7f, halo = true)
     }
 
-    private fun drawDot(canvas: Canvas, projection: Projection, at: RunPoint, color: Int) {
+    private fun drawDot(canvas: Canvas, projection: Projection, at: RunPoint, color: Int, radiusDp: Float, halo: Boolean) {
         projection.toPixels(GeoPoint(at.latitude, at.longitude), point)
+        val x = point.x.toFloat()
+        val y = point.y.toFloat()
+        val radius = radiusDp * density
+        if (halo) {
+            fillPaint.color = (color and 0x00FFFFFF) or 0x40000000
+            canvas.drawCircle(x, y, radius * 2.4f, fillPaint)
+        }
         fillPaint.color = color
-        canvas.drawCircle(point.x.toFloat(), point.y.toFloat(), DOT_RADIUS, fillPaint)
-        canvas.drawCircle(point.x.toFloat(), point.y.toFloat(), DOT_RADIUS, borderPaint)
-    }
-
-    private companion object {
-        const val DOT_RADIUS = 14f
+        canvas.drawCircle(x, y, radius, fillPaint)
+        canvas.drawCircle(x, y, radius, borderPaint)
     }
 }
 
@@ -177,20 +306,6 @@ private fun List<RunPoint>.downsample(): List<RunPoint> {
     return filterIndexed { index, point ->
         index == 0 || index == lastIndex || point.isSegmentStart || index % step == 0
     }
-}
-
-/** 일시정지로 끊긴 지점에서 선을 나눈다. */
-private fun List<RunPoint>.toSegments(): List<List<RunPoint>> {
-    if (isEmpty()) return emptyList()
-    val segments = mutableListOf<MutableList<RunPoint>>()
-    forEachIndexed { index, point ->
-        if (index == 0 || point.isSegmentStart || segments.isEmpty()) {
-            segments += mutableListOf(point)
-        } else {
-            segments.last() += point
-        }
-    }
-    return segments
 }
 
 /**
