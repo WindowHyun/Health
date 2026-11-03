@@ -60,6 +60,9 @@ data class WorkoutSessionUiState(
 sealed interface WorkoutSessionEvent {
     data class Finished(val workoutId: Long) : WorkoutSessionEvent
     data object Discarded : WorkoutSessionEvent
+
+    /** 세트를 지웠다. 화면은 "실행 취소" 를 눌러 되돌릴 수 있는 안내를 잠깐 보여 준다. */
+    data object SetRemoved : WorkoutSessionEvent
 }
 
 /**
@@ -294,8 +297,26 @@ class WorkoutSessionViewModel internal constructor(
         viewModelScope.launch { workoutRepository.addSet(workoutExerciseId) }
     }
 
+    /** 방금 지운 세트. 되돌리려면 어느 종목의 몇 번째였는지와 값을 알아야 한다. */
+    private var lastRemovedSet: Pair<Long, WorkoutSet>? = null
+
     fun removeSet(setId: Long) {
-        viewModelScope.launch { workoutRepository.removeSet(setId) }
+        viewModelScope.launch {
+            // 지우기 전에 DB 에서 원래 모습을 읽어 둔다(화면 상태가 아니라 저장된 값을 되돌린다).
+            val owner = workoutRepository.getWorkout(workoutId)?.exercises
+                ?.firstOrNull { record -> record.sets.any { it.id == setId } } ?: return@launch
+            val set = owner.sets.first { it.id == setId }
+            workoutRepository.removeSet(setId)
+            lastRemovedSet = owner.id to set
+            _events.emit(WorkoutSessionEvent.SetRemoved)
+        }
+    }
+
+    /** 방금 지운 세트를 되살린다. 땀 젖은 손으로 X 를 잘못 눌러도 복구할 수 있게 한다. */
+    fun undoRemoveSet() {
+        val (workoutExerciseId, set) = lastRemovedSet ?: return
+        lastRemovedSet = null
+        viewModelScope.launch { workoutRepository.restoreSet(workoutExerciseId, set) }
     }
 
     fun addExercise(exerciseId: Long) {
@@ -471,6 +492,14 @@ class WorkoutSessionViewModel internal constructor(
         finishing = true
         viewModelScope.launch {
             stopRestTimer()
+            lastRemovedSet = null
+            // 한 세트도 완료하지 않았다면 남길 기록이 없다. 빈 기록이 저장되어 주간 횟수에 들어가지 않게 버린다.
+            val anythingDone = workoutRepository.getWorkout(workoutId)?.exercises?.any { it.completedSets.isNotEmpty() } == true
+            if (!anythingDone) {
+                workoutRepository.discardWorkout(workoutId)
+                _events.emit(WorkoutSessionEvent.Discarded)
+                return@launch
+            }
             workoutRepository.finishWorkout(workoutId)
             _events.emit(WorkoutSessionEvent.Finished(workoutId))
         }

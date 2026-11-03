@@ -79,6 +79,8 @@ class RunMetricsAccumulator(
      */
     fun breakSegment() {
         lastAccepted = null
+        jumpStreak = 0
+        jumpAt = null
         segmentBreakPending = true
         paceWindow.clear()
         lastRawStepCount = null
@@ -110,7 +112,14 @@ class RunMetricsAccumulator(
      * @return 이번 호출로 새로 만들어진 Lap 목록 (없으면 빈 목록)
      */
     fun onLocation(sample: LocationSample): List<RunLap> {
-        if (!isAcceptable(sample)) return emptyList()
+        when (judge(sample)) {
+            Verdict.REJECT -> return emptyList()
+            Verdict.JUMP -> {
+                reanchorIfFirstFixWasWrong(sample)
+                return emptyList()
+            }
+            Verdict.ACCEPT -> jumpStreak = 0
+        }
 
         val previous = lastAccepted
         val isSegmentStart = segmentBreakPending
@@ -142,16 +151,23 @@ class RunMetricsAccumulator(
         return checkLaps()
     }
 
+    private enum class Verdict { ACCEPT, REJECT, JUMP }
+
+    /** 사람이 낼 수 없는 속도로 튄 샘플이 이어서 몇 개나 나왔는지, 그리고 그 마지막 위치. */
+    private var jumpStreak = 0
+    private var jumpAt: LocationSample? = null
+
     /**
      * 노이즈 걸러내기.
-     * - 정확도가 나쁘거나 알 수 없는 샘플은 버린다
+     * - 정확도가 나쁘거나 알 수 없는 샘플, 좌표가 숫자가 아닌 샘플은 버린다
      * - 직전 점과 너무 가까우면(GPS 흔들림) 버린다
-     * - 사람이 낼 수 없는 속도로 튀면 버린다
+     * - 사람이 낼 수 없는 속도로 튀면 버린다([Verdict.JUMP]). 시각이 같거나 거꾸로인 샘플이 크게 튀어도 마찬가지다
      */
-    private fun isAcceptable(sample: LocationSample): Boolean {
-        val accuracy = sample.accuracyMeters ?: return false
-        if (accuracy > MAX_ACCURACY_METERS) return false
-        val previous = lastAccepted ?: return true
+    private fun judge(sample: LocationSample): Verdict {
+        if (!sample.latitude.isFinite() || !sample.longitude.isFinite()) return Verdict.REJECT
+        val accuracy = sample.accuracyMeters ?: return Verdict.REJECT
+        if (accuracy > MAX_ACCURACY_METERS) return Verdict.REJECT
+        val previous = lastAccepted ?: return Verdict.ACCEPT
 
         val meters = haversineMeters(
             previous.latitude,
@@ -159,12 +175,39 @@ class RunMetricsAccumulator(
             sample.latitude,
             sample.longitude,
         )
-        if (meters < MIN_DISPLACEMENT_METERS) return false
+        if (meters < MIN_DISPLACEMENT_METERS) return Verdict.REJECT
 
         val deltaSeconds = (sample.timestamp - previous.timestamp) / 1000.0
-        if (deltaSeconds > 0 && meters / deltaSeconds > MAX_SPEED_MPS) return false
+        if (deltaSeconds <= 0) {
+            // 시간이 흐르지 않았는데 크게 옮겨 갔다면 속도를 따질 수 없으니 튄 값으로 본다.
+            return if (meters > SAME_TIME_JUMP_METERS) Verdict.JUMP else Verdict.ACCEPT
+        }
+        if (meters / deltaSeconds > MAX_SPEED_MPS) return Verdict.JUMP
 
-        return true
+        return Verdict.ACCEPT
+    }
+
+    /**
+     * 첫 위치가 엉뚱한 곳(예: 몇 km 떨어진 값)이었다면 그 뒤의 진짜 위치가 모두 "튄 값"으로 버려져 러닝이 시작되지 않는다.
+     * 아직 거의 달리지 않았는데, 서로 가까운 위치가 연달아 튄 값으로 판정되면 그쪽이 진짜라고 보고 기준점을 옮긴다.
+     */
+    private fun reanchorIfFirstFixWasWrong(sample: LocationSample) {
+        val previousJump = jumpAt
+        jumpStreak = if (previousJump != null &&
+            haversineMeters(previousJump.latitude, previousJump.longitude, sample.latitude, sample.longitude) <= JUMP_CLUSTER_METERS
+        ) {
+            jumpStreak + 1
+        } else {
+            1
+        }
+        jumpAt = sample
+        if (jumpStreak >= REANCHOR_AFTER_JUMPS && distanceMeters < REANCHOR_MAX_DISTANCE_METERS) {
+            lastAccepted = sample
+            // 새 기준점은 새 구간의 시작이다(잘못된 첫 점과 이어 그리지 않는다).
+            segmentBreakPending = true
+            jumpStreak = 0
+            jumpAt = null
+        }
     }
 
     /** 최근 [PACE_WINDOW_SECONDS] 초만 남긴다. */
@@ -256,6 +299,11 @@ class RunMetricsAccumulator(
         return lap
     }
 
+    /** 저장에 실패해 돌려받은 경로 포인트를 다시 저장 대기열 맨 앞에 둔다(다음 저장 때 함께 저장한다). */
+    fun restorePendingPoints(points: List<RunPoint>) {
+        if (points.isNotEmpty()) pendingPoints.addAll(0, points)
+    }
+
     /** 아직 저장하지 않은 경로 포인트를 꺼내 간다(꺼내면 비워진다). */
     fun drainPendingPoints(): List<RunPoint> {
         if (pendingPoints.isEmpty()) return emptyList()
@@ -273,6 +321,16 @@ class RunMetricsAccumulator(
 
         /** 사람이 달릴 수 없는 속도(약 43km/h)면 튄 값으로 본다. */
         const val MAX_SPEED_MPS = 12.0
+
+        /** 시각이 같거나 거꾸로인데 이만큼 넘게 옮겨 간 샘플은 튄 값으로 본다. */
+        const val SAME_TIME_JUMP_METERS = 50.0
+
+        /** 튄 값이 이만큼 가까이 연달아 나오면 "같은 곳에 있다"고 본다. */
+        const val JUMP_CLUSTER_METERS = 100.0
+
+        /** 튄 값이 이만큼 연달아 나오고 아직 거의 달리지 않았으면 기준점을 옮긴다. */
+        const val REANCHOR_AFTER_JUMPS = 3
+        const val REANCHOR_MAX_DISTANCE_METERS = 100.0
 
         /** 현재 페이스를 계산할 최근 구간 길이. */
         const val PACE_WINDOW_SECONDS = 30L

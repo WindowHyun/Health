@@ -48,7 +48,25 @@ object AppModule {
     fun providePreferencesDataStore(
         @ApplicationContext context: Context,
         @ApplicationScope scope: CoroutineScope,
-    ): DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scope) {
-        context.preferencesDataStoreFile(SETTINGS_DATASTORE)
-    }
+    ): DataStore<Preferences> = createSettingsDataStore(scope) { context.preferencesDataStoreFile(SETTINGS_DATASTORE) }
 }
+
+/**
+ * 설정 저장소. 파일이 깨져 있어도 앱이 죽지 않게, 읽다가 손상을 만나면 기본 설정으로 시작한다.
+ *
+ * 이 파일은 클라우드 백업 · 기기 이전에도 들어가서(자동 백업 규칙), 깨진 파일이 복원돼 올 수도 있다.
+ * 손상 복구 핸들러가 없으면 설정을 읽는 순간 예외가 나 앱을 켤 때마다 죽는다.
+ * 깨진 파일은 지우지 않고 옆에 `.corrupt` 로 남겨 둔다(원인을 볼 수 있게).
+ */
+internal fun createSettingsDataStore(scope: kotlinx.coroutines.CoroutineScope, produceFile: () -> java.io.File): DataStore<Preferences> =
+    PreferenceDataStoreFactory.create(
+        corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler {
+            runCatching {
+                val file = produceFile()
+                file.copyTo(java.io.File(file.path + ".corrupt"), overwrite = true)
+            }
+            androidx.datastore.preferences.core.emptyPreferences()
+        },
+        scope = scope,
+        produceFile = produceFile,
+    )

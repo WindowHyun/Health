@@ -52,6 +52,7 @@ import com.windowhyun.health.core.util.formatDistanceValue
 import com.windowhyun.health.core.util.formatDuration
 import com.windowhyun.health.core.util.formatPace
 import com.windowhyun.health.domain.model.RunStatus
+import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.components.Hairline
 import com.windowhyun.health.ui.components.HealthButton
 import com.windowhyun.health.ui.components.HealthOutlinedButton
@@ -74,6 +75,8 @@ fun RunActiveScreen(
 
     // 기본은 큰 숫자 화면. 지도는 필요할 때만 한 번 눌러서 본다.
     var showMap by rememberSaveable { mutableStateOf(false) }
+    // 종료는 되돌릴 수 없다(끝난 러닝은 이어 달릴 수 없다). 일시정지 옆의 큰 버튼이라 실수로 누르기 쉬워 한 번 묻는다.
+    var confirmStop by rememberSaveable { mutableStateOf(false) }
 
     // 달리는 동안에는 화면이 꺼지지 않도록 한다.
     val view = LocalView.current
@@ -176,7 +179,7 @@ fun RunActiveScreen(
                         Text("계속", style = MaterialTheme.typography.titleLarge)
                     }
                     HealthButton(
-                        onClick = viewModel::finish,
+                        onClick = { confirmStop = true },
                         container = MaterialTheme.colorScheme.error,
                         content = MaterialTheme.colorScheme.onError,
                         modifier = Modifier
@@ -193,6 +196,20 @@ fun RunActiveScreen(
 
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    if (confirmStop && tracking.status == RunStatus.PAUSED) {
+        ConfirmDialog(
+            title = "러닝을 종료할까요?",
+            message = "지금까지의 기록은 저장됩니다. 종료한 러닝은 이어서 달릴 수 없어요.",
+            confirmLabel = "종료",
+            dismissLabel = "계속 달리기",
+            onConfirm = {
+                confirmStop = false
+                viewModel.finish()
+            },
+            onDismiss = { confirmStop = false },
+        )
     }
 }
 

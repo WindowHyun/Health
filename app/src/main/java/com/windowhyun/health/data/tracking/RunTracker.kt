@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -186,7 +187,9 @@ class RunTracker internal constructor(
             updateInterval(current.interval, accumulator.elapsedSeconds)
 
             // 첫 위치를 받은 뒤에만 센다. 신호를 못 받는 중에는 멈춘 것인지 알 수 없다.
-            if (autoPauseEnabled && current.lastAccuracyMeters != null && !signalLost &&
+            // 정확도가 나쁜 구간(20~30m)에서는 움직였는지 판단할 수 없다. 그때 멈춘 것으로 보면 달리는 중에도 일시정지에 갇힌다.
+            val accuracy = current.lastAccuracyMeters
+            if (autoPauseEnabled && accuracy != null && accuracy <= MOVEMENT_MAX_ACCURACY_METERS && !signalLost &&
                 clock() - lastMovementAt >= AUTO_PAUSE_MILLIS
             ) {
                 pauseLocked(accumulator, auto = true)
@@ -278,9 +281,10 @@ class RunTracker internal constructor(
     private fun movedAwayFromPause(sample: LocationSample): Boolean {
         val anchor = pauseAnchor ?: return false
         val accuracy = sample.accuracyMeters ?: return false
-        if (accuracy > MOVEMENT_MAX_ACCURACY_METERS) return false
+        // 거리 기록에 쓰는 정확도(30m)까지는 이어 가는 판단에도 쓴다. 정확도가 나쁠수록 흔들림이 크니, 그만큼 더 벗어나야 한다.
+        if (accuracy > RunMetricsAccumulator.MAX_ACCURACY_METERS) return false
         return haversineMeters(anchor.latitude, anchor.longitude, sample.latitude, sample.longitude) >=
-            RESUME_DISTANCE_METERS
+            maxOf(RESUME_DISTANCE_METERS, accuracy.toDouble())
     }
 
     /** 러닝을 끝낸다. 결과 화면에서 저장/삭제를 선택할 때까지 상태는 유지된다. */
@@ -376,16 +380,32 @@ class RunTracker internal constructor(
     private suspend fun flush(accumulator: RunMetricsAccumulator) {
         val runId = _state.value.runId
         if (runId == 0L) return
-        runRepository.appendRoutePoints(runId, accumulator.drainPendingPoints())
-        runRepository.updateProgress(
-            runId = runId,
-            distanceMeters = accumulator.distanceMeters,
-            durationSeconds = accumulator.elapsedSeconds,
-            averagePaceSecPerKm = accumulator.averagePaceSecPerKm,
-            bestPaceSecPerKm = accumulator.bestPaceSecPerKm,
-            calories = estimateRunCalories(bodyWeightKg, accumulator.distanceMeters),
-            steps = accumulator.steps.toInt(),
-        )
+        // 저장이 한 번 실패했다고 경로 점을 잃으면 안 된다. 꺼내 둔 점을 돌려놓고 다음 저장 때 다시 시도한다.
+        // (이 기록 하나가 DB 오류로 서비스 전체를 죽이지도 않는다.)
+        val points = accumulator.drainPendingPoints()
+        try {
+            runRepository.appendRoutePoints(runId, points)
+        } catch (e: CancellationException) {
+            accumulator.restorePendingPoints(points)
+            throw e
+        } catch (e: Exception) {
+            accumulator.restorePendingPoints(points)
+        }
+        try {
+            runRepository.updateProgress(
+                runId = runId,
+                distanceMeters = accumulator.distanceMeters,
+                durationSeconds = accumulator.elapsedSeconds,
+                averagePaceSecPerKm = accumulator.averagePaceSecPerKm,
+                bestPaceSecPerKm = accumulator.bestPaceSecPerKm,
+                calories = estimateRunCalories(bodyWeightKg, accumulator.distanceMeters),
+                steps = accumulator.steps.toInt(),
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // 진행 상황은 5초 뒤 다시 저장한다.
+        }
     }
 
     private companion object {

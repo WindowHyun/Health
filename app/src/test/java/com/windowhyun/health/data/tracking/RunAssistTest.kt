@@ -74,6 +74,37 @@ class RunAssistTest {
 
     private suspend fun RunTracker.begin(goal: RunGoal = RunGoal(RunGoalType.FREE, 0.0)) = start(goal)
 
+    // ----- 저장 실패에도 경로를 잃지 않는다 -----
+
+    /** 경로 저장이 한 번 실패해도(DB 오류) 꺼내 둔 점을 잃지 않고 다음 저장 때 함께 저장한다. 오류가 러닝을 끝내지도 않는다. */
+    @Test
+    fun `a failed save keeps the route points for the next try`() = runTest {
+        var failing = true
+        val flaky = object : com.windowhyun.health.domain.repository.RunRepository by runs {
+            override suspend fun appendRoutePoints(runId: Long, points: List<com.windowhyun.health.domain.model.RunPoint>) {
+                if (failing) throw java.io.IOException("디스크 오류")
+                runs.appendRoutePoints(runId, points)
+            }
+        }
+        val tracker = RunTracker(flaky, settings, noSteps) { now }
+        tracker.begin()
+        repeat(6) { i ->
+            now += 1_000
+            tracker.onLocation(at(i * 9.0))
+            tracker.tick()
+        }
+        assertThat(tracker.state.value.status).isEqualTo(RunStatus.TRACKING) // 오류로 멈추지 않았다
+        val runId = tracker.state.value.runId
+
+        failing = false
+        tracker.finish()
+
+        val saved = runs.getRun(runId)!!.route
+        assertThat(saved).hasSize(6)
+        assertThat(saved.map { it.latitude }).isInOrder()
+        tracker.reset()
+    }
+
     // ----- 자동 일시정지 -----
 
     /** 한자리에 8초 넘게 서 있으면 저절로 멈추고, 멈춘 시간은 세지 않는다. */
@@ -146,6 +177,63 @@ class RunAssistTest {
         assertThat(tracker.state.value.durationSeconds).isEqualTo(11)
         // 이어 간 직후에 곧바로 다시 멈추지 않는다.
         assertThat(tracker.state.value.status).isEqualTo(RunStatus.TRACKING)
+        tracker.discard()
+    }
+
+    /**
+     * 정확도가 20~30m 로 나오는 구간(도심 · 나무 아래)에서는 움직였는지 판단할 수 없다.
+     * 예전에는 그 위치를 "움직임" 으로 인정하지 않아, 달리는 중에도 8초 뒤 일시정지에 걸리고 이어 가지도 못했다.
+     */
+    @Test
+    fun `does not pause by itself while the gps is too poor to tell`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+        tracker.onLocation(at(0.0, accuracy = 25f))
+        repeat(60) { i ->
+            now += 1_000
+            tracker.onLocation(at((i + 1) * 3.0, accuracy = 25f))
+            tracker.tick()
+        }
+
+        assertThat(tracker.state.value.status).isEqualTo(RunStatus.TRACKING)
+        assertThat(tracker.state.value.autoPaused).isFalse()
+        assertThat(tracker.state.value.distanceMeters).isGreaterThan(120.0)
+        tracker.discard()
+    }
+
+    /** 좋은 신호에서 멈춰 섰다가 신호가 나빠진 채로 다시 달리면, 정확도만큼 더 벗어났을 때 이어 간다. */
+    @Test
+    fun `resumes with a poor fix once it moved farther than the uncertainty`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+        tracker.onLocation(at(0.0))
+        now += 9_000
+        tracker.tick()
+        assertThat(tracker.state.value.autoPaused).isTrue()
+
+        now += 5_000
+        tracker.onLocation(at(20.0, accuracy = 25f)) // 정확도 25m 인데 20m 옮김: 흔들림일 수 있다
+        assertThat(tracker.state.value.status).isEqualTo(RunStatus.PAUSED)
+
+        now += 2_000
+        tracker.onLocation(at(32.0, accuracy = 25f)) // 정확도보다 멀리 벗어남
+        assertThat(tracker.state.value.status).isEqualTo(RunStatus.TRACKING)
+        tracker.discard()
+    }
+
+    /** 신호 정확도가 30m 를 넘으면(아무것도 믿을 수 없다) 이어 가는 판단에도 쓰지 않는다. */
+    @Test
+    fun `a hopeless fix never resumes`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+        tracker.onLocation(at(0.0))
+        now += 9_000
+        tracker.tick()
+
+        now += 5_000
+        tracker.onLocation(at(200.0, accuracy = 45f))
+
+        assertThat(tracker.state.value.status).isEqualTo(RunStatus.PAUSED)
         tracker.discard()
     }
 

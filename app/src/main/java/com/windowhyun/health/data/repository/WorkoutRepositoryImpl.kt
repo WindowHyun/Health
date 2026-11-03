@@ -230,6 +230,26 @@ class WorkoutRepositoryImpl @Inject constructor(
         recomputeRecordsIfFinished(owner)
     }
 
+    override suspend fun restoreSet(workoutExerciseId: Long, set: WorkoutSet) {
+        val existing = workoutDao.getSets(workoutExerciseId)
+        // 되살릴 자리부터 뒤 세트를 한 칸씩 밀어 자리를 비운다.
+        val at = set.setNumber.coerceIn(1, existing.size + 1)
+        existing.filter { it.setNumber >= at }.forEach { workoutDao.updateSet(it.copy(setNumber = it.setNumber + 1)) }
+        workoutDao.insertSet(
+            WorkoutSetEntity(
+                workoutExerciseId = workoutExerciseId,
+                setNumber = at,
+                weightKg = set.weightKg,
+                reps = set.reps,
+                durationSeconds = set.durationSeconds,
+                setType = set.setType,
+                completed = set.completed,
+            ),
+        )
+        workoutDao.renumberSets(workoutExerciseId)
+        recomputeRecordsIfFinished(workoutDao.getSetOwnerOfExercise(workoutExerciseId))
+    }
+
     /**
      * 끝난 기록을 고쳤으면 그 종목의 PR 을 다시 계산한다.
      * 진행 중인 세션은 아직 PR 이 없고, 끝낼 때 계산하므로 건너뛴다.

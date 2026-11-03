@@ -243,6 +243,17 @@ interface WorkoutDao {
     )
     suspend fun getSetOwner(setId: Long): SetOwner?
 
+    /** 운동 기록 안의 종목 하나가 속한 운동 기록(세트를 되살릴 때 PR 재계산 여부를 정한다). */
+    @Query(
+        """
+        SELECT w.id AS workoutId, we.exerciseId AS exerciseId, w.endTime AS endTime
+        FROM workout_exercise we
+        JOIN workout w ON we.workoutId = w.id
+        WHERE we.id = :workoutExerciseId
+        """,
+    )
+    suspend fun getSetOwnerOfExercise(workoutExerciseId: Long): SetOwner?
+
     @Query("SELECT id, endTime FROM workout WHERE id IN (:ids)")
     suspend fun getEndTimes(ids: List<Long>): List<WorkoutEndTime>
 }

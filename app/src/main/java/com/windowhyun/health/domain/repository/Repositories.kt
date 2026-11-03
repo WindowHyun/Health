@@ -96,6 +96,9 @@ interface WorkoutRepository {
 
     suspend fun addSet(workoutExerciseId: Long): Long
     suspend fun removeSet(setId: Long)
+
+    /** 방금 지운 세트를 원래 자리에 되살린다(실행 취소). 값 · 종류 · 완료 여부를 그대로 되돌린다. */
+    suspend fun restoreSet(workoutExerciseId: Long, set: WorkoutSet)
     suspend fun updateSet(set: WorkoutSet, workoutExerciseId: Long)
     suspend fun setCompleted(
         setId: Long,

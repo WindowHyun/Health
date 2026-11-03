@@ -30,6 +30,8 @@ import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.domain.repository.StepCounter
 import com.windowhyun.health.wear.WatchRunStarter
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
@@ -59,6 +61,22 @@ class RunTrackingService : LifecycleService() {
 
     @Inject lateinit var voice: RunVoice
 
+    /** 이 서비스의 작업 하나가 예외로 끝나도 앱 전체(러닝 기록)가 죽지 않게 한다. */
+    private val taskFailureHandler = CoroutineExceptionHandler { _, error ->
+        Log.e(TAG, "러닝 서비스 작업이 실패했습니다", error)
+    }
+
+    /** 한 번의 처리(위치 · 걸음 · 1초 타이머)가 실패해도 다음 처리는 계속한다. DB 오류 한 번이 러닝을 끝내면 안 된다. */
+    private suspend inline fun guarded(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "$what 처리에 실패했습니다", e)
+        }
+    }
+
     private var locationJob: Job? = null
     private var stepJob: Job? = null
     private var tickerJob: Job? = null
@@ -82,15 +100,19 @@ class RunTrackingService : LifecycleService() {
             ACTION_PAUSE, ACTION_RESUME -> if (locationJob == null) {
                 stopSelf()
             } else if (intent.action == ACTION_PAUSE) {
-                lifecycleScope.launch { runTracker.pause() }
+                lifecycleScope.launch(taskFailureHandler) { runTracker.pause() }
             } else {
-                lifecycleScope.launch { runTracker.resume() }
+                lifecycleScope.launch(taskFailureHandler) { runTracker.resume() }
             }
             // 기록을 마감한 뒤에 서비스를 내린다. 순서가 바뀌면 endTime 과
             // 마지막 Lap 이 기록되지 않는다.
-            ACTION_STOP -> lifecycleScope.launch {
-                runTracker.finish()
-                stopTracking()
+            ACTION_STOP -> lifecycleScope.launch(taskFailureHandler) {
+                // 마감이 실패해도 서비스는 내린다. 안 그러면 알림만 남은 채 멈추지 못한다.
+                try {
+                    runTracker.finish()
+                } finally {
+                    stopTracking()
+                }
             }
             else -> Unit
         }
@@ -106,26 +128,30 @@ class RunTrackingService : LifecycleService() {
 
         startForegroundWithNotification(buildNotification(distanceText = "0.00km", durationText = "0:00"))
 
-        lifecycleScope.launch { runTracker.start(goal, interval) }
+        lifecycleScope.launch(taskFailureHandler) { runTracker.start(goal, interval) }
 
-        locationJob = lifecycleScope.launch {
+        // 위치 수신이 끊기면(GPS 를 껐다 켬, 권한 화면을 다녀옴, 일시적인 오류) 포기하지 않고 다시 붙는다.
+        // 끊긴 동안에는 15초 뒤 "GPS 신호 끊김" 이 화면과 알림에 나온다.
+        locationJob = lifecycleScope.launch(taskFailureHandler) {
             locationTracker.locationUpdates(LOCATION_INTERVAL_MILLIS)
-                .catch { /* 권한이 사라지거나 GPS 가 꺼지면 스트림이 끊긴다. 기록은 유지한다. */ }
-                .collect { sample -> runTracker.onLocation(sample) }
+                .retryForever { error -> Log.w(TAG, "위치 수신이 끊겨 다시 시도합니다", error) }
+                .collect { sample -> guarded("위치") { runTracker.onLocation(sample) } }
         }
 
         // 걸음 센서가 없거나 권한이 없으면 스트림이 비어 있어 아무 일도 하지 않는다.
-        stepJob = lifecycleScope.launch {
+        stepJob = lifecycleScope.launch(taskFailureHandler) {
             stepCounter.cumulativeSteps()
                 .catch { /* 센서 오류는 러닝 기록을 막지 않는다. */ }
-                .collect { raw -> runTracker.onStepCount(raw) }
+                .collect { raw -> guarded("걸음") { runTracker.onStepCount(raw) } }
         }
 
-        tickerJob = lifecycleScope.launch {
+        tickerJob = lifecycleScope.launch(taskFailureHandler) {
             while (isActive) {
                 delay(1_000)
-                runTracker.tick()
-                stopIfGoalReached()
+                guarded("타이머") {
+                    runTracker.tick()
+                    stopIfGoalReached()
+                }
             }
         }
 
@@ -192,7 +218,9 @@ class RunTrackingService : LifecycleService() {
     }
 
     private fun startForegroundWithNotification(notification: Notification) {
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        // Android 10(API 29)부터 서비스 타입을 넘길 수 있다. 0 을 넘기면 "타입 없음" 이라 화면이 꺼진 동안
+        // 위치를 못 받는 기기가 있을 수 있다. 타입을 지원하는 모든 버전에서 위치 타입을 밝힌다.
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         } else {
             0

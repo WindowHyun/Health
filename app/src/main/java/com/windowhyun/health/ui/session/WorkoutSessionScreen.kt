@@ -20,10 +20,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -71,12 +77,33 @@ fun WorkoutSessionScreen(
     var showFinishDialog by remember { mutableStateOf(false) }
     var showDiscardDialog by remember { mutableStateOf(false) }
     var showPicker by remember { mutableStateOf(false) }
+    // 확인 없이 지워지던 종목: 완료한 세트가 있으면 먼저 묻는다.
+    var pendingRemoveExercise by remember { mutableStateOf<WorkoutExerciseRecord?>(null) }
+    val snackbarHost = remember { SnackbarHostState() }
+
+    // 운동 중에는 화면이 꺼지지 않게 한다(설정에서 끌 수 있다). 세트 사이 휴식 때마다 잠금을 푸는 일이 없게 한다.
+    val view = LocalView.current
+    val keepScreenOn = state.settings.keepScreenOnDuringWorkout
+    DisposableEffect(keepScreenOn) {
+        view.keepScreenOn = keepScreenOn
+        onDispose { view.keepScreenOn = false }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
                 is WorkoutSessionEvent.Finished -> onFinished(event.workoutId)
                 WorkoutSessionEvent.Discarded -> onDiscarded()
+                WorkoutSessionEvent.SetRemoved -> {
+                    // 이전 안내가 떠 있으면 바로 새 것으로 바꾼다.
+                    snackbarHost.currentSnackbarData?.dismiss()
+                    val result = snackbarHost.showSnackbar(
+                        message = "세트를 삭제했어요",
+                        actionLabel = "실행 취소",
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) viewModel.undoRemoveSet()
+                }
             }
         }
     }
@@ -87,6 +114,7 @@ fun WorkoutSessionScreen(
     val workout = state.workout
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 title = {
@@ -157,7 +185,9 @@ fun WorkoutSessionScreen(
                     onCycleSetType = viewModel::cycleSetType,
                     onAddSet = { viewModel.addSet(record.id) },
                     onRemoveSet = viewModel::removeSet,
-                    onRemoveExercise = { viewModel.removeExercise(record.id) },
+                    onRemoveExercise = {
+                        if (record.completedSets.isEmpty()) viewModel.removeExercise(record.id) else pendingRemoveExercise = record
+                    },
                     onStartRest = { seconds -> viewModel.startRestTimer(seconds) },
                 )
                 Hairline()
@@ -203,15 +233,31 @@ fun WorkoutSessionScreen(
     }
 
     if (showFinishDialog) {
+        val exercises = workout?.exercises.orEmpty()
+        val completed = exercises.sumOf { it.completedSets.size }
+        val prompt = finishPrompt(completed, incompleteSets = exercises.sumOf { it.sets.size } - completed)
         ConfirmDialog(
-            title = "운동을 종료할까요?",
-            message = "완료하지 않은 세트는 저장되지 않습니다.",
-            confirmLabel = "종료",
+            title = prompt.title,
+            message = prompt.message,
+            confirmLabel = prompt.confirmLabel,
             onConfirm = {
                 showFinishDialog = false
                 viewModel.finishWorkout()
             },
             onDismiss = { showFinishDialog = false },
+        )
+    }
+
+    pendingRemoveExercise?.let { record ->
+        ConfirmDialog(
+            title = "종목을 뺄까요?",
+            message = removeExercisePrompt(record.exercise.name, record.completedSets.size),
+            confirmLabel = "빼기",
+            onConfirm = {
+                pendingRemoveExercise = null
+                viewModel.removeExercise(record.id)
+            },
+            onDismiss = { pendingRemoveExercise = null },
         )
     }
 
