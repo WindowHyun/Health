@@ -123,6 +123,33 @@ class PipSpaceTest {
         assertThat(PipSpace(widthPercent = 40).heightDp(400f)).isLessThan(full)
     }
 
+    /**
+     * 5% 단위로는 한 칸이 약 10dp 라 PiP 창에 딱 맞출 수 없었다(실제 폰: PiP 가로가 화면의 약 91%).
+     * 1% 단위라면 한 칸이 2dp 안팎이라 창 높이와 거의 같은 값을 고를 수 있다.
+     */
+    @Test
+    fun `one step changes the height by only a couple of dp so the space can match the window`() {
+        listOf(360f, 393f, 411f, 430f).forEach { width ->
+            val step = PipSpace(widthPercent = 80 + PipSpace.STEP_PERCENT).heightDp(width) - PipSpace(widthPercent = 80).heightDp(width)
+            assertThat(step).isLessThan(3.5f)
+            assertThat(step).isGreaterThan(0f)
+        }
+    }
+
+    @Test
+    fun `a window that is 91 percent wide can be matched within three dp`() {
+        val width = 411f
+        val window = width * 0.907f * 9f / 16f // 실제 PiP 창(16:9)의 높이
+
+        val best = (PipSpace.MIN_WIDTH_PERCENT..PipSpace.MAX_WIDTH_PERCENT)
+            .minBy { kotlin.math.abs(PipSpace(widthPercent = it).heightDp(width) - window) }
+        val gap = PipSpace(widthPercent = best).heightDp(width) - window
+
+        // 창보다 아주 조금(여백만큼) 크게 비우되, 몇 dp 이상 남거나 모자라지 않는다.
+        assertThat(gap).isAtLeast(0f)
+        assertThat(gap).isAtMost(PipSpace.MARGIN_DP + 3f)
+    }
+
     /** 가로 화면이나 태블릿에서 너비만으로 높이를 정하면 자리가 화면을 다 차지해 앱을 쓸 수 없다. */
     @Test
     fun `the blank space never takes most of a short screen`() {

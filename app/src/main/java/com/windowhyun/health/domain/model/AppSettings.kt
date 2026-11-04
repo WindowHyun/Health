@@ -39,7 +39,12 @@ data class PipSpace(
         const val DEFAULT_WIDTH_PERCENT = 65
         const val MIN_WIDTH_PERCENT = 30
         const val MAX_WIDTH_PERCENT = 100
-        const val STEP_PERCENT = 5
+
+        /**
+         * 크기를 바꾸는 단위. 1% 는 폰 화면(약 410dp 폭)에서 높이로 약 2dp 라서 PiP 창에 딱 맞출 수 있다.
+         * 5% 단위였을 때는 한 칸이 약 10dp 라, 어느 값으로 해도 PiP 보다 작거나(겹침) 크게(빈틈) 남았다.
+         */
+        const val STEP_PERCENT = 1
 
         /** PiP 창과 화면 가장자리 사이 여백 + 약간의 여유. */
         const val MARGIN_DP = 12f
