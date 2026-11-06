@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +59,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
     backupViewModel: BackupViewModel = hiltViewModel(),
+    cloudBackupViewModel: CloudBackupViewModel = hiltViewModel(),
     healthConnectViewModel: HealthConnectViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -263,6 +265,8 @@ fun SettingsScreen(
 
             item { SettingSectionTitle("데이터") }
             item { DataSection(backupViewModel) }
+            item { SettingSectionTitle("클라우드 백업") }
+            item { CloudBackupSection(cloudBackupViewModel) }
         }
     }
 }
@@ -677,3 +681,144 @@ private fun <T> ChipRow(
 
 /** 러닝 목표를 한 번에 올리고 내리는 양(km 또는 mile). */
 private const val WEEKLY_RUN_STEP = 5.0
+
+/**
+ * 구글 계정으로 로그인해 기록을 클라우드에 백업 · 복원한다.
+ * Firebase 설정이 앱에 없으면 안내 한 줄만 보인다(앱의 나머지 기능은 그대로 동작한다).
+ */
+@Composable
+private fun CloudBackupSection(viewModel: CloudBackupViewModel) {
+    if (!viewModel.isAvailable) {
+        Text(
+            text = "클라우드 백업은 아직 설정되지 않았어요. 개발자가 Firebase 설정 파일을 넣고 다시 빌드하면 쓸 수 있어요.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 12.dp),
+        )
+        return
+    }
+    val user by viewModel.user.collectAsStateWithLifecycle()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var restoreTarget by remember { mutableStateOf<com.windowhyun.health.domain.cloud.CloudBackupInfo?>(null) }
+    var confirmDeleteAll by remember { mutableStateOf(false) }
+    var confirmSignOut by remember { mutableStateOf(false) }
+
+    Column {
+        val signedIn = user
+        if (signedIn == null) {
+            ActionRow(
+                title = "구글 계정으로 로그인",
+                subtitle = "로그인하면 운동 · 러닝(GPS 경로) · 루틴 · 설정을 내 계정에 백업할 수 있어요.",
+                enabled = !state.working,
+                onClick = { viewModel.signIn(context) },
+            )
+        } else {
+            Text(
+                text = signedIn.email ?: signedIn.displayName ?: "로그인됨",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            SwitchRow(
+                title = "하루에 한 번 자동 백업",
+                subtitle = "앱을 켤 때 하루가 지났으면 조용히 올려요.",
+                checked = settings.cloudAutoBackup,
+                onCheckedChange = viewModel::setAutoBackup,
+            )
+            if (settings.lastCloudBackupAt > 0) {
+                Text(
+                    text = "마지막 백업 ${formatBackupTime(settings.lastCloudBackupAt)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            settings.lastCloudBackupError?.let {
+                Text(
+                    text = "마지막 자동 백업 실패: $it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            ActionRow(
+                title = "지금 백업",
+                subtitle = "현재 기록을 클라우드에 올립니다. 최근 5개만 남겨요.",
+                enabled = !state.working,
+                onClick = viewModel::backupNow,
+            )
+            ActionRow(
+                title = if (state.backups == null) "백업 목록 불러오기" else "백업 목록 새로고침",
+                subtitle = "복원할 백업을 고릅니다.",
+                enabled = !state.working,
+                onClick = viewModel::loadList,
+            )
+            state.backups?.let { list ->
+                if (list.isEmpty()) {
+                    Text(
+                        text = "클라우드에 올려 둔 백업이 없어요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+                list.forEach { info ->
+                    ActionRow(
+                        title = formatBackupTime(info.createdAt),
+                        subtitle = "운동 ${info.workoutCount}회 · 러닝 ${info.runCount}회 · 루틴 ${info.routineCount}개 · " +
+                            "${(info.sizeBytes / 1024).coerceAtLeast(1)}KB",
+                        enabled = !state.working,
+                        onClick = { restoreTarget = info },
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                TextButton(onClick = { confirmSignOut = true }, enabled = !state.working) { Text("로그아웃") }
+                TextButton(onClick = { confirmDeleteAll = true }, enabled = !state.working) { Text("클라우드 백업 모두 지우기") }
+            }
+        }
+
+        if (state.working) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        }
+        state.message?.let { ResultText(text = it, color = MaterialTheme.colorScheme.onSurface) }
+        state.error?.let { ResultText(text = it, color = MaterialTheme.colorScheme.error) }
+    }
+
+    restoreTarget?.let { info ->
+        ConfirmDialog(
+            title = "이 백업으로 바꿀까요?",
+            message = "${formatBackupTime(info.createdAt)} 백업으로 복원하면 이 기기의 운동·러닝·루틴 기록이 모두 " +
+                "지워지고 백업 내용으로 바뀝니다. 복원하기 직전의 기록은 클라우드에 먼저 백업해 둡니다.",
+            confirmLabel = "복원",
+            onConfirm = {
+                restoreTarget = null
+                viewModel.restore(info.id)
+            },
+            onDismiss = { restoreTarget = null },
+        )
+    }
+    if (confirmDeleteAll) {
+        ConfirmDialog(
+            title = "클라우드 백업을 모두 지울까요?",
+            message = "이 계정으로 올려 둔 백업이 전부 삭제됩니다. 이 기기의 기록은 그대로입니다.",
+            confirmLabel = "지우기",
+            onConfirm = {
+                confirmDeleteAll = false
+                viewModel.deleteAll()
+            },
+            onDismiss = { confirmDeleteAll = false },
+        )
+    }
+    if (confirmSignOut) {
+        ConfirmDialog(
+            title = "로그아웃할까요?",
+            message = "자동 백업이 멈춥니다. 이 기기의 기록과 클라우드 백업은 그대로예요.",
+            confirmLabel = "로그아웃",
+            onConfirm = {
+                confirmSignOut = false
+                viewModel.signOut()
+            },
+            onDismiss = { confirmSignOut = false },
+        )
+    }
+}

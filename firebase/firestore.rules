@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 로그인한 본인의 백업만 읽고 쓸 수 있다. 그 밖의 모든 경로는 막는다.
+    match /users/{uid}/backups/{backupId} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+      match /chunks/{chunkId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+  }
+}

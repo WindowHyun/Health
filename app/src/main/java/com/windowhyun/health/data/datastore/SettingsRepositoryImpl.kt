@@ -53,6 +53,9 @@ class SettingsRepositoryImpl @Inject constructor(
         val AUTO_BACKUP_DAYS = intPreferencesKey("auto_backup_every_days")
         val LAST_AUTO_BACKUP_AT = longPreferencesKey("last_auto_backup_at")
         val LAST_AUTO_BACKUP_ERROR = stringPreferencesKey("last_auto_backup_error")
+        val CLOUD_AUTO_BACKUP = booleanPreferencesKey("cloud_auto_backup")
+        val LAST_CLOUD_BACKUP_AT = longPreferencesKey("last_cloud_backup_at")
+        val LAST_CLOUD_BACKUP_ERROR = stringPreferencesKey("last_cloud_backup_error")
     }
 
     override val settings: Flow<AppSettings> = dataStore.data.map { it.toSettings() }
@@ -96,6 +99,9 @@ class SettingsRepositoryImpl @Inject constructor(
             autoBackupEveryDays = prefs[Keys.AUTO_BACKUP_DAYS] ?: defaults.autoBackupEveryDays,
             lastAutoBackupAt = prefs[Keys.LAST_AUTO_BACKUP_AT] ?: defaults.lastAutoBackupAt,
             lastAutoBackupError = prefs[Keys.LAST_AUTO_BACKUP_ERROR],
+            cloudAutoBackup = prefs[Keys.CLOUD_AUTO_BACKUP] ?: defaults.cloudAutoBackup,
+            lastCloudBackupAt = prefs[Keys.LAST_CLOUD_BACKUP_AT] ?: defaults.lastCloudBackupAt,
+            lastCloudBackupError = prefs[Keys.LAST_CLOUD_BACKUP_ERROR],
         )
     }
 
@@ -140,6 +146,9 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.AUTO_BACKUP_DAYS] = updated.autoBackupEveryDays
             prefs[Keys.LAST_AUTO_BACKUP_AT] = updated.lastAutoBackupAt
             prefs.putOrRemove(Keys.LAST_AUTO_BACKUP_ERROR, updated.lastAutoBackupError)
+            prefs[Keys.CLOUD_AUTO_BACKUP] = updated.cloudAutoBackup
+            prefs[Keys.LAST_CLOUD_BACKUP_AT] = updated.lastCloudBackupAt
+            prefs.putOrRemove(Keys.LAST_CLOUD_BACKUP_ERROR, updated.lastCloudBackupError)
         }
     }
 }

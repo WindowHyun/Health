@@ -36,6 +36,10 @@ import com.windowhyun.health.ui.navigation.Routes
 import com.windowhyun.health.ui.session.WorkoutSummaryScreen
 import com.windowhyun.health.ui.session.WorkoutSummaryViewModel
 import com.windowhyun.health.ui.settings.BackupViewModel
+import com.windowhyun.health.ui.settings.CloudBackupViewModel
+import com.windowhyun.health.data.cloud.CloudBackupService
+import com.windowhyun.health.data.cloud.FakeAccount
+import com.windowhyun.health.data.cloud.FakeStore
 import com.windowhyun.health.ui.settings.SettingsScreen
 import com.windowhyun.health.data.healthconnect.HealthConnectSyncer
 import com.windowhyun.health.domain.model.HealthConnectLedger
@@ -174,7 +178,7 @@ class ScreensScreenshotTest {
         compose.saveScreenshot(name)
     }
 
-    private fun settings(name: String, dark: Boolean, autoBackup: Boolean = false) {
+    private fun settings(name: String, dark: Boolean, autoBackup: Boolean = false, showCloud: Boolean = false) {
         val viewModel = SettingsViewModel(fixture.settings)
         val backupRepository = BackupRepositoryImpl(fixture.db, fixture.db.backupDao(), fixture.settings, InMemoryUserTemplateRepository(), Dispatchers.IO)
         if (autoBackup) {
@@ -193,6 +197,12 @@ class ScreensScreenshotTest {
             fixture.settings,
             AutoBackupManager(backupRepository, fixture.settings, FakeBackupFolder()),
         )
+        val cloudStore = FakeStore()
+        val cloud = CloudBackupViewModel(
+            FakeAccount(signedIn = true),
+            CloudBackupService(FakeAccount(signedIn = true), cloudStore, backupRepository, fixture.settings),
+            fixture.settings,
+        )
         val healthConnect = HealthConnectViewModel(
             UnavailableHealthConnect,
             fixture.settings,
@@ -209,11 +219,14 @@ class ScreensScreenshotTest {
             ),
         )
         show(dark) {
-            SettingsScreen(onBack = {}, viewModel = viewModel, backupViewModel = backup, healthConnectViewModel = healthConnect)
+            SettingsScreen(onBack = {}, viewModel = viewModel, backupViewModel = backup, cloudBackupViewModel = cloud, healthConnectViewModel = healthConnect)
         }
         if (autoBackup) {
             // 데이터 구역은 화면 아래쪽이라 그 자리까지 스크롤한 뒤 찍는다.
             compose.onNode(hasScrollAction()).performScrollToNode(hasText("자동 백업 · 켜짐"))
+        }
+        if (showCloud) {
+            compose.onNode(hasScrollAction()).performScrollToNode(hasText("지금 백업"))
         }
         compose.saveScreenshot(name)
     }
@@ -232,6 +245,7 @@ class ScreensScreenshotTest {
     @Test fun `detail light`() = workoutDetail("detail_light", dark = false)
     @Test fun `exercise light`() = exerciseDetail("exercise_light", dark = false)
     @Test fun `settings light`() = settings("settings_light", dark = false)
+    @Test fun `settings cloud backup light`() = settings("settings_cloud_light", dark = false, showCloud = true)
     @Test fun `settings auto backup light`() = settings("settings_autobackup_light", dark = false, autoBackup = true)
     @Test fun `settings dark`() = settings("settings_dark", dark = true)
 }

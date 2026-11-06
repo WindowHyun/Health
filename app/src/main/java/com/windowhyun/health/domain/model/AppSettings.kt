@@ -103,6 +103,13 @@ data class AppSettings(
     val lastAutoBackupAt: Long = 0,
     /** 마지막 시도가 실패했다면 그 이유. 성공하면 지운다. */
     val lastAutoBackupError: String? = null,
+    // 클라우드 백업(구글 로그인). 이것도 기기마다 다른 값이라 백업 파일에는 넣지 않는다.
+    /** 로그인한 상태에서 하루 한 번(앱을 켤 때) 클라우드에 자동으로 백업한다. */
+    val cloudAutoBackup: Boolean = false,
+    /** 마지막으로 클라우드 백업에 성공한 시각(epoch ms). 0 이면 아직 없다. */
+    val lastCloudBackupAt: Long = 0,
+    /** 마지막 클라우드 백업이 실패했다면 그 이유. 성공하면 지운다. */
+    val lastCloudBackupError: String? = null,
 ) {
     val autoBackupEnabled: Boolean get() = autoBackupFolderUri != null
 

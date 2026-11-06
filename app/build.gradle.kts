@@ -10,6 +10,14 @@ plugins {
 }
 
 /**
+ * Firebase 설정 파일(google-services.json)이 있을 때만 Google 서비스 플러그인을 적용한다.
+ * 파일이 없으면 빌드는 그대로 성공하고, 클라우드 백업 기능만 "설정되지 않음" 으로 꺼져 있다(docs/CLOUD.md).
+ */
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
+/**
  * 릴리즈 서명 정보는 keystore.properties 에서 읽는다.
  * 이 파일과 .jks 키스토어는 .gitignore 에 있으므로 저장소에 올라가지 않는다.
  *
@@ -36,8 +44,8 @@ android {
         applicationId = "com.windowhyun.health"
         minSdk = 26
         targetSdk = 35
-        versionCode = 36
-        versionName = "0.13.6"
+        versionCode = 37
+        versionName = "0.14.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -152,6 +160,14 @@ dependencies {
     implementation(project(":shared"))
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.coroutines.play.services)
+
+    // 클라우드 백업(구글 로그인 + Firestore). docs/CLOUD.md
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
 
     // 지도. API 키가 필요 없고 타일을 기기에 캐시해 둔다.
     implementation(libs.osmdroid.android)
