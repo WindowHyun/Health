@@ -107,7 +107,12 @@ fun RunActiveScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Box(modifier = Modifier.weight(1f)) {
-                    GpsIndicator(accuracyMeters = tracking.lastAccuracyMeters, signalLost = tracking.signalLost)
+                    GpsIndicator(
+                        accuracyMeters = tracking.lastAccuracyMeters,
+                        signalLost = tracking.signalLost,
+                        problem = tracking.locationProblem,
+                        searchingSeconds = tracking.durationSeconds,
+                    )
                 }
                 HealthOutlinedButton(onClick = { showMap = !showMap }, compact = true) {
                     Icon(
@@ -423,29 +428,54 @@ private fun MetricColumn(label: String, value: String, modifier: Modifier = Modi
 }
 
 @Composable
-private fun GpsIndicator(accuracyMeters: Float?, signalLost: Boolean) {
+private fun GpsIndicator(accuracyMeters: Float?, signalLost: Boolean, problem: String?, searchingSeconds: Long) {
     if (signalLost) {
         // 거리가 쌓이지 않는 것을 모르고 계속 달리지 않도록 눈에 띄게 알린다.
-        Text(
-            text = "위치를 받지 못하고 있어요\n거리가 기록되지 않습니다",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.error,
-        )
+        Column {
+            Text(
+                text = "위치를 받지 못하고 있어요\n거리가 기록되지 않습니다",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.error,
+            )
+            // 원인을 알면 무엇을 고치면 되는지 함께 보여 준다.
+            problem?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
         return
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        val good = accuracyMeters != null && accuracyMeters <= 20f
-        Icon(
-            imageVector = if (good) Icons.Filled.GpsFixed else Icons.Filled.GpsNotFixed,
-            contentDescription = null,
-            tint = if (good) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            text = accuracyMeters?.let { "GPS ±${it.toInt()}m" } ?: "GPS 신호 찾는 중",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp),
-        )
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val good = accuracyMeters != null && accuracyMeters <= 20f
+            Icon(
+                imageVector = if (good) Icons.Filled.GpsFixed else Icons.Filled.GpsNotFixed,
+                contentDescription = null,
+                tint = if (good) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = accuracyMeters?.let { "GPS ±${it.toInt()}m" } ?: "GPS 신호 찾는 중",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+        }
+        // 첫 신호는 10~40초 걸릴 수 있다. 기다리는 동안 무엇을 하면 좋은지 알려 준다.
+        if (accuracyMeters == null && searchingSeconds >= SEARCH_HINT_SECONDS) {
+            Text(
+                text = problem ?: "하늘이 트인 곳에서 잠시 기다려 주세요(${searchingSeconds}초)",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
     }
 }
+
+/** 첫 신호를 이만큼 못 받으면 기다려 달라는 안내를 보인다. */
+private const val SEARCH_HINT_SECONDS = 8L

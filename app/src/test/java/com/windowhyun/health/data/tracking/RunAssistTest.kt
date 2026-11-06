@@ -74,6 +74,79 @@ class RunAssistTest {
 
     private suspend fun RunTracker.begin(goal: RunGoal = RunGoal(RunGoalType.FREE, 0.0)) = start(goal)
 
+    // ----- GPS 첫 신호와 위치 문제 -----
+
+    /** GPS 첫 신호는 10~40초 걸린다. 시작하고 15초 만에 빨간 "위치를 받지 못하고 있어요" 를 띄우면 시작할 때마다 고장난 것처럼 보인다. */
+    @Test
+    fun `waits for the first fix before saying the signal is lost`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+
+        now += 20_000
+        tracker.tick()
+        assertThat(tracker.state.value.signalLost).isFalse()
+
+        now += 38_000 // 시작한 지 58초
+        tracker.tick()
+        assertThat(tracker.state.value.signalLost).isFalse()
+
+        now += 4_000 // 62초
+        tracker.tick()
+        assertThat(tracker.state.value.signalLost).isTrue()
+        tracker.discard()
+    }
+
+    /** 한 번 받은 뒤에 끊기면 예전처럼 15초 뒤에 알린다. */
+    @Test
+    fun `after a fix the signal is lost after fifteen seconds`() = runTest {
+        settings.update { it.copy(autoPauseRun = false) } // 서 있으면 8초 뒤 자동 일시정지가 걸려 신호 판정이 멈춘다
+        val tracker = tracker()
+        tracker.begin()
+        tracker.onLocation(at(0.0))
+
+        now += 14_000
+        tracker.tick()
+        assertThat(tracker.state.value.signalLost).isFalse()
+
+        now += 2_000
+        tracker.tick()
+        assertThat(tracker.state.value.signalLost).isTrue()
+        tracker.discard()
+    }
+
+    /** 위치 서비스가 요청을 거절했다고 알려 오면, 기다릴 이유가 없으니 바로 원인과 함께 알린다. */
+    @Test
+    fun `a reported location problem is shown at once with its reason`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+        tracker.reportLocationProblem("Google Play 서비스에 연결하지 못했어요(코드 17).")
+
+        now += 1_000
+        tracker.tick()
+
+        assertThat(tracker.state.value.signalLost).isTrue()
+        assertThat(tracker.state.value.locationProblem).contains("코드 17")
+        tracker.discard()
+    }
+
+    /** 위치가 들어오기 시작하면(예: 기기 GPS 로 이어 받음) 문제 표시도 경고도 지워진다. */
+    @Test
+    fun `receiving a location clears the problem and the warning`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+        tracker.reportLocationProblem("Google 위치 서비스에서 위치가 오지 않아 기기 GPS 로 직접 받는 중이에요.")
+        now += 1_000
+        tracker.tick()
+        assertThat(tracker.state.value.signalLost).isTrue()
+
+        now += 1_000
+        tracker.onLocation(at(0.0))
+
+        assertThat(tracker.state.value.locationProblem).isNull()
+        assertThat(tracker.state.value.signalLost).isFalse()
+        tracker.discard()
+    }
+
     // ----- 저장 실패에도 경로를 잃지 않는다 -----
 
     /** 경로 저장이 한 번 실패해도(DB 오류) 꺼내 둔 점을 잃지 않고 다음 저장 때 함께 저장한다. 오류가 러닝을 끝내지도 않는다. */

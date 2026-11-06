@@ -33,6 +33,8 @@ data class RunSetupUiState(
     val interval: RunInterval = RunInterval(),
     val hasLocationPermission: Boolean = false,
     val gpsEnabled: Boolean = false,
+    /** 시작 화면에서 미리 받아 본 GPS 정확도. null 이면 아직 첫 신호를 못 받았다. */
+    val gpsAccuracyMeters: Float? = null,
     val stepSensorAvailable: Boolean = false,
     val stepPermissionGranted: Boolean = false,
     val settings: AppSettings = AppSettings(),
@@ -83,6 +85,28 @@ class RunSetupViewModel @Inject constructor(
         )
     }
 
+    /**
+     * 시작 화면이 보이는 동안 GPS 를 미리 켜 둔다. GPS 는 처음 켜서 신호를 잡기까지 10~40초가 걸리는데,
+     * 눌러서 시작한 뒤에 기다리면 그 시간이 러닝 시간에 들어가고 빨간 경고도 뜬다. 화면이 보이는 동안만 받고,
+     * 화면을 벗어나면(수집이 취소되면) 멈춘다. 러닝 중에는 서비스가 받으므로 하지 않는다.
+     */
+    suspend fun watchGps() {
+        if (uiState.value.tracking.isActive || !locationTracker.hasLocationPermission() || !locationTracker.isLocationAvailable()) {
+            selection.update { it.copy(gpsAccuracyMeters = null) }
+            return
+        }
+        try {
+            locationTracker.locationUpdates(WARM_UP_INTERVAL_MILLIS)
+                .collect { sample -> selection.update { it.copy(gpsAccuracyMeters = sample.accuracyMeters) } }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // 미리 보는 것일 뿐이다. 실패해도 시작은 막지 않는다(시작하면 서비스가 원인을 화면에 알린다).
+        } finally {
+            selection.update { it.copy(gpsAccuracyMeters = null) }
+        }
+    }
+
     fun setGoalType(type: RunGoalType) = selection.update { it.copy(goalType = type) }
 
     fun changeGoalDistance(deltaKm: Double) = selection.update {
@@ -112,5 +136,9 @@ class RunSetupViewModel @Inject constructor(
         val state = uiState.value
         if (!state.canStart) return
         runServiceController.start(state.toGoal(), state.toInterval())
+    }
+
+    private companion object {
+        const val WARM_UP_INTERVAL_MILLIS = 2_000L
     }
 }

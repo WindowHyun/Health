@@ -150,7 +150,7 @@ class RunTracker internal constructor(
                 )
             }
             publish(accumulator, lastAccuracy = sample.accuracyMeters)
-            _state.update { it.copy(signalLost = false) }
+            _state.update { it.copy(signalLost = false, locationProblem = null) }
         }
     }
 
@@ -167,6 +167,11 @@ class RunTracker internal constructor(
         }
     }
 
+    /** 위치를 못 받는 원인을 알려 온다(null 이면 지운다). 위치가 들어오면 저절로 지워진다. */
+    fun reportLocationProblem(message: String?) {
+        _state.update { it.copy(locationProblem = message) }
+    }
+
     /** 1초마다 호출된다. */
     suspend fun tick() {
         mutex.withLock {
@@ -174,7 +179,11 @@ class RunTracker internal constructor(
             if (_state.value.status != RunStatus.TRACKING) return
 
             syncClock(accumulator)
-            val signalLost = clock() - lastLocationAt > SIGNAL_LOST_MILLIS
+            // 위치를 한 번도 못 받은 시작 직후에는 GPS 첫 신호(보통 10~40초, 실내에서는 더 걸림)를 기다려 준다.
+            // 그때까지 빨간 "위치를 받지 못하고 있어요" 를 띄우면 시작할 때마다 고장난 것처럼 보인다.
+            // 위치 서비스가 요청을 거절했다고 알려 오면(원인이 분명하면) 기다리지 않고 바로 알린다.
+            val patience = if (_state.value.lastAccuracyMeters == null) FIRST_FIX_PATIENCE_MILLIS else SIGNAL_LOST_MILLIS
+            val signalLost = _state.value.locationProblem != null || clock() - lastLocationAt > patience
             _state.update { it.copy(signalLost = signalLost) }
             publish(accumulator, lastAccuracy = _state.value.lastAccuracyMeters)
 
@@ -414,6 +423,9 @@ class RunTracker internal constructor(
 
         /** 위치를 이만큼 못 받으면 신호가 끊긴 것으로 본다. 위치는 2초마다 온다. */
         const val SIGNAL_LOST_MILLIS = 15_000L
+
+        /** 첫 위치를 받기 전에는 이만큼 기다린 뒤에야 "위치를 받지 못하고 있어요" 로 본다. */
+        const val FIRST_FIX_PATIENCE_MILLIS = 60_000L
 
         /** 이만큼 못 움직였으면 멈춘 것으로 본다. 신호등 대기처럼 짧은 정지도 잡도록 짧게. */
         const val AUTO_PAUSE_MILLIS = 8_000L

@@ -20,6 +20,7 @@ import com.windowhyun.health.MainActivity
 import com.windowhyun.health.R
 import com.windowhyun.health.core.util.formatDistance
 import com.windowhyun.health.core.util.formatDuration
+import com.windowhyun.health.data.location.describeLocationError
 import com.windowhyun.health.data.tracking.RunTracker
 import com.windowhyun.health.domain.model.RunGoal
 import com.windowhyun.health.domain.model.RunInterval
@@ -79,6 +80,7 @@ class RunTrackingService : LifecycleService() {
 
     private var locationJob: Job? = null
     private var stepJob: Job? = null
+    private var problemJob: Job? = null
     private var tickerJob: Job? = null
     private var notificationJob: Job? = null
     private var cueJob: Job? = null
@@ -134,8 +136,16 @@ class RunTrackingService : LifecycleService() {
         // 끊긴 동안에는 15초 뒤 "GPS 신호 끊김" 이 화면과 알림에 나온다.
         locationJob = lifecycleScope.launch(taskFailureHandler) {
             locationTracker.locationUpdates(LOCATION_INTERVAL_MILLIS)
-                .retryForever { error -> Log.w(TAG, "위치 수신이 끊겨 다시 시도합니다", error) }
+                .retryForever { error ->
+                    Log.w(TAG, "위치 수신이 끊겨 다시 시도합니다", error)
+                    runTracker.reportLocationProblem(describeLocationError(error))
+                }
                 .collect { sample -> guarded("위치") { runTracker.onLocation(sample) } }
+        }
+
+        // 위치 서비스가 요청을 거절했거나 조용할 때의 이유를 화면에 알린다.
+        problemJob = lifecycleScope.launch(taskFailureHandler) {
+            locationTracker.problem.collect { message -> if (message != null) runTracker.reportLocationProblem(message) }
         }
 
         // 걸음 센서가 없거나 권한이 없으면 스트림이 비어 있어 아무 일도 하지 않는다.
@@ -198,6 +208,8 @@ class RunTrackingService : LifecycleService() {
         locationJob = null
         stepJob?.cancel()
         stepJob = null
+        problemJob?.cancel()
+        problemJob = null
         tickerJob?.cancel()
         tickerJob = null
         notificationJob?.cancel()
@@ -212,6 +224,7 @@ class RunTrackingService : LifecycleService() {
         cueJob?.cancel()
         locationJob?.cancel()
         stepJob?.cancel()
+        problemJob?.cancel()
         tickerJob?.cancel()
         notificationJob?.cancel()
         super.onDestroy()

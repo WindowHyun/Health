@@ -78,6 +78,11 @@ data class RunTrackingState(
      * 이 동안은 시간만 흐르고 거리는 쌓이지 않는다.
      */
     val signalLost: Boolean = false,
+    /**
+     * 위치를 못 받는 원인(사람이 읽는 문장). 위치 서비스가 요청을 거절했거나 조용할 때 화면에 이유를 보여 준다.
+     * 위치를 받으면 지워진다. 원인을 모르는 채 "신호 끊김" 만 보이면 무엇을 고쳐야 할지 알 수 없어서다.
+     */
+    val locationProblem: String? = null,
     /** 멈춰서 자동으로 일시정지된 상태. 움직이면 저절로 이어진다(직접 누른 일시정지와 구분). */
     val autoPaused: Boolean = false,
     /** 인터벌 러닝이면 그 계획. 아니면 null. */

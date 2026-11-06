@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.core.designsystem.theme.healthColors
@@ -99,6 +100,11 @@ fun RunSetupScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // 이 화면이 보이는 동안 GPS 를 미리 켜 둔다(시작한 뒤에 첫 신호를 기다리지 않도록).
+    LaunchedEffect(lifecycleOwner, state.hasLocationPermission, state.gpsEnabled) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.watchGps() }
+    }
+
     // 서비스가 기록을 시작하면 바로 진행 화면으로 넘어간다.
     LaunchedEffect(state.tracking.isActive) {
         if (state.tracking.isActive) onRunStarted()
@@ -116,6 +122,7 @@ fun RunSetupScreen(
                 GpsStatusCard(
                     hasPermission = state.hasLocationPermission,
                     gpsEnabled = state.gpsEnabled,
+                    accuracyMeters = state.gpsAccuracyMeters,
                     onRequestPermission = { permissionLauncher.launch(requiredPermissions) },
                     onOpenLocationSettings = {
                         context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
@@ -229,6 +236,7 @@ fun RunSetupScreen(
 private fun GpsStatusCard(
     hasPermission: Boolean,
     gpsEnabled: Boolean,
+    accuracyMeters: Float?,
     onRequestPermission: () -> Unit,
     onOpenLocationSettings: () -> Unit,
 ) {
@@ -252,11 +260,21 @@ private fun GpsStatusCard(
                 text = when {
                     !hasPermission -> "위치 권한이 필요합니다"
                     !gpsEnabled -> "위치(GPS)가 꺼져 있습니다"
-                    else -> "GPS 준비됨"
+                    accuracyMeters == null -> "GPS 신호 찾는 중..."
+                    else -> "GPS 준비됨 · ±${accuracyMeters.toInt()}m"
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = content,
                 modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+
+        if (ready && accuracyMeters == null) {
+            Text(
+                text = "하늘이 트인 곳에서 잠시 기다리면 신호를 잡습니다. 지금 시작해도 되지만, 잡힌 뒤에 시작하면 첫 구간부터 기록돼요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = content,
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
 
