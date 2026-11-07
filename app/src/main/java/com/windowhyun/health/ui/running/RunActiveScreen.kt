@@ -124,6 +124,8 @@ fun RunActiveScreen(
                 }
             }
 
+            tracking.courseGuidance?.let { CourseBanner(it, state.settings.distanceUnit) }
+
             if (tracking.autoPaused) {
                 Text(
                     text = "멈춰서 자동 일시정지했어요 · 움직이면 이어집니다",
@@ -361,6 +363,7 @@ private fun MapPane(state: RunActiveUiState, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
         RunRouteMap(
             route = tracking.route,
+            course = tracking.course,
             followLatest = true,
             modifier = Modifier
                 .fillMaxWidth()
@@ -479,3 +482,23 @@ private fun GpsIndicator(accuracyMeters: Float?, signalLost: Boolean, problem: S
 
 /** 첫 신호를 이만큼 못 받으면 기다려 달라는 안내를 보인다. */
 private const val SEARCH_HINT_SECONDS = 8L
+
+/** 코스를 따라가는 중의 한 줄 안내. 벗어나면 오류색 면으로 바뀐다(글자도 함께 바뀐다). */
+@Composable
+private fun CourseBanner(guidance: com.windowhyun.health.domain.model.CourseGuidance, unit: com.windowhyun.health.core.model.DistanceUnit) {
+    val off = guidance.offCourse && !guidance.finished
+    val container = if (off) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceVariant
+    val content = if (off) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurface
+    val text = when {
+        guidance.finished -> "코스 완주 · 총 ${formatDistance(guidance.totalMeters, unit)}"
+        off -> "코스를 벗어났어요 · ${guidance.offCourseMeters.toInt()}m 떨어짐"
+        else -> "코스 ${formatDistance(guidance.remainingMeters, unit)} 남음 · ${(guidance.fraction * 100).toInt()}%"
+    }
+    androidx.compose.material3.Surface(
+        color = container,
+        contentColor = content,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    ) {
+        Text(text = text, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+    }
+}

@@ -47,6 +47,9 @@ internal fun RunCue.vibrationPattern(): LongArray = when (this) {
         IntervalPhase.WALK -> longArrayOf(0, 900)
     }
     RunCue.IntervalsFinished -> longArrayOf(0, 300, 100, 300, 100, 300, 100, 600)
+    RunCue.OffCourse -> longArrayOf(0, 700, 150, 700)
+    RunCue.BackOnCourse -> longArrayOf(0, 120, 80, 120)
+    RunCue.CourseFinished -> longArrayOf(0, 400, 150, 400, 150, 700)
 }
 
 /** 러닝 알림에 붙는 버튼. 기록 중이면 일시정지, 멈춰 있으면 계속, 그리고 항상 종료. */

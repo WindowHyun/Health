@@ -19,6 +19,9 @@ internal object RunVoiceScript {
         RunCue.AutoResumed -> "다시 시작"
         is RunCue.IntervalChanged -> interval(cue)
         RunCue.IntervalsFinished -> "인터벌이 모두 끝났어요."
+        RunCue.OffCourse -> "코스를 벗어났어요."
+        RunCue.BackOnCourse -> "코스로 돌아왔어요."
+        RunCue.CourseFinished -> "코스 끝에 도착했어요. 수고하셨어요."
     }
 
     private fun lap(cue: RunCue.LapCompleted, unit: DistanceUnit): String? {

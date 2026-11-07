@@ -127,7 +127,7 @@ class RunFlowBottomBarTest {
                     composable(Routes.RUNNING) {
                         RunSetupScreen(
                             onRunStarted = { nav.navigate(Routes.RUN_ACTIVE) { launchSingleTop = true } },
-                            viewModel = remember { RunSetupViewModel(location, steps, serviceController, tracker, fixture.settings) },
+                            viewModel = remember { RunSetupViewModel(location, steps, serviceController, tracker, fixture.settings, com.windowhyun.health.data.tracking.InMemoryCourses(), com.windowhyun.health.data.tracking.ActiveCourse()) },
                         )
                     }
                     composable(Routes.RUN_ACTIVE) {

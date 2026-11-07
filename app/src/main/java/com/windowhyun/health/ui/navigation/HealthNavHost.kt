@@ -16,6 +16,7 @@ import com.windowhyun.health.ui.history.WorkoutDetailScreen
 import com.windowhyun.health.ui.home.HomeScreen
 import com.windowhyun.health.ui.running.RunActiveScreen
 import com.windowhyun.health.ui.running.RunDetailScreen
+import com.windowhyun.health.ui.running.CourseEditorScreen
 import com.windowhyun.health.ui.running.RunSetupScreen
 import com.windowhyun.health.ui.running.RunSummaryScreen
 import com.windowhyun.health.ui.session.WorkoutSessionScreen
@@ -60,12 +61,17 @@ fun HealthNavHost(
 
         composable(Routes.RUNNING) {
             RunSetupScreen(
+                onCreateCourse = { navController.navigate(Routes.COURSE_EDIT) },
                 onRunStarted = {
                     navController.navigate(Routes.RUN_ACTIVE) {
                         launchSingleTop = true
                     }
                 },
             )
+        }
+
+        composable(Routes.COURSE_EDIT) {
+            CourseEditorScreen(onClose = { navController.popBackStack() })
         }
 
         composable(Routes.RUN_ACTIVE) {

@@ -29,6 +29,9 @@ object Routes {
     const val WORKOUT_DETAIL = "workout_detail"
     fun workoutDetail(workoutId: Long) = "$WORKOUT_DETAIL/$workoutId"
 
+    /** 러닝 코스 만들기. */
+    const val COURSE_EDIT = "course_edit"
+
     /** 러닝 진행 화면. 상태는 RunTracker 가 들고 있어 인자가 필요 없다. */
     const val RUN_ACTIVE = "run_active"
 

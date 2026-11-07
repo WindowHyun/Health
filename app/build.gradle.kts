@@ -44,8 +44,8 @@ android {
         applicationId = "com.windowhyun.health"
         minSdk = 26
         targetSdk = 35
-        versionCode = 37
-        versionName = "0.14.0"
+        versionCode = 38
+        versionName = "0.15.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

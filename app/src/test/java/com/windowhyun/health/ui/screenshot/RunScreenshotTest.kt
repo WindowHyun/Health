@@ -40,6 +40,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
+import androidx.compose.ui.test.performScrollToNode
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -116,6 +117,7 @@ class RunScreenshotTest {
         val viewModel = RunSetupViewModel(
             location, noSteps, RunServiceController(context),
             RunTracker(fixture.runs, fixture.settings, noSteps), fixture.settings,
+            com.windowhyun.health.data.tracking.InMemoryCourses(), com.windowhyun.health.data.tracking.ActiveCourse(),
         )
         viewModel.setGoalType(RunGoalType.DISTANCE)
         show(dark) { RunSetupScreen(onRunStarted = {}, viewModel = viewModel) }
@@ -124,6 +126,49 @@ class RunScreenshotTest {
     }
 
     /** 저장된 러닝의 결과 · 상세가 공유하는 부분(머리글 · 지표 · 구간). 지도는 빼고 그린다. */
+    private val sampleCourse = com.windowhyun.health.domain.model.Course(
+        id = 1, name = "한강 5km",
+        points = (0..24).map { com.windowhyun.health.domain.model.CoursePoint(37.5 + it * 0.0018, 127.0 + if (it % 2 == 0) 0.0 else 0.0005) },
+    )
+
+    private fun setupWithCourses(name: String, dark: Boolean) {
+        val location = object : LocationTracker {
+            override fun isLocationAvailable() = true
+            override fun hasLocationPermission() = true
+            override fun locationUpdates(intervalMillis: Long) = emptyFlow<LocationSample>()
+        }
+        val courses = com.windowhyun.health.data.tracking.InMemoryCourses(
+            listOf(sampleCourse, sampleCourse.copy(id = 2, name = "공원 한 바퀴", points = sampleCourse.points.take(8))),
+        )
+        val viewModel = RunSetupViewModel(
+            location, noSteps, RunServiceController(context),
+            RunTracker(fixture.runs, fixture.settings, noSteps), fixture.settings,
+            courses, com.windowhyun.health.data.tracking.ActiveCourse(),
+        )
+        viewModel.selectCourse(1)
+        show(dark) { RunSetupScreen(onRunStarted = {}, viewModel = viewModel) }
+        waitFor { viewModel.uiState.value.selectedCourseId == 1L }
+        compose.saveScreenshot(name)
+    }
+
+    /** 코스를 따라 달리는 중([offNorth] 가 크면 코스에서 벗어난 상태)의 진행 화면. */
+    private fun activeWithCourse(name: String, offNorthMeters: Double) {
+        val tracker = RunTracker(fixture.runs, fixture.settings, noSteps) { now }
+        runBlocking {
+            tracker.start(RunGoal(), null, sampleCourse)
+            tracker.onLocation(LocationSample(37.5, 127.0, accuracyMeters = 6f, timestamp = 0))
+            repeat(12) { i ->
+                now += 33_000
+                val off = if (i >= 10) offNorthMeters else 0.0
+                tracker.onLocation(LocationSample(37.5 + (i + 1) * 0.0009 + off / 111_195.0 * 0, 127.0 + off / 90_000.0, accuracyMeters = 6f, timestamp = now))
+            }
+        }
+        val viewModel = RunActiveViewModel(tracker, fixture.settings, RunServiceController(context))
+        show(false) { RunActiveScreen(onFinished = {}, viewModel = viewModel) }
+        waitFor { viewModel.uiState.value.tracking.courseGuidance != null }
+        compose.saveScreenshot(name)
+    }
+
     private fun result(name: String, dark: Boolean) {
         val run = runBlocking { fixture.runs.getRun(1)!! }.copy(
             laps = listOf(
@@ -164,6 +209,9 @@ class RunScreenshotTest {
     @Test fun `active dark`() = active("run_active_dark", dark = true)
     @Test fun `setup light`() = setup("run_setup_light", dark = false, gpsOn = true)
     @Test fun `setup gps off dark`() = setup("run_setup_off_dark", dark = true, gpsOn = false)
+    @Test fun `setup with courses light`() = setupWithCourses("run_setup_course_light", dark = false)
+    @Test fun `active on course`() = activeWithCourse("run_active_course", offNorthMeters = 0.0)
+    @Test fun `active off course`() = activeWithCourse("run_active_offcourse", offNorthMeters = 120.0)
     @Test fun `result light`() = result("run_result_light", dark = false)
     @Test fun `result dark`() = result("run_result_dark", dark = true)
 }

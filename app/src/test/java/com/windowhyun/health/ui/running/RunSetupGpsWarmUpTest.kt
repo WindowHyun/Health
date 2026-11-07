@@ -64,7 +64,7 @@ class RunSetupGpsWarmUpTest {
     }
 
     private fun viewModel(location: LocationTracker) =
-        RunSetupViewModel(location, steps, RunServiceController(context), fixture.tracker, fixture.settings)
+        RunSetupViewModel(location, steps, RunServiceController(context), fixture.tracker, fixture.settings, com.windowhyun.health.data.tracking.InMemoryCourses(), com.windowhyun.health.data.tracking.ActiveCourse())
 
     private fun sample(accuracy: Float) = LocationSample(37.5, 127.0, accuracyMeters = accuracy, timestamp = 1_000)
 

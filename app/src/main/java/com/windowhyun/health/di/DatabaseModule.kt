@@ -45,5 +45,8 @@ object DatabaseModule {
     fun providePersonalRecordDao(db: HealthDatabase): PersonalRecordDao = db.personalRecordDao()
 
     @Provides
+    fun provideCourseDao(db: HealthDatabase): com.windowhyun.health.data.local.dao.CourseDao = db.courseDao()
+
+    @Provides
     fun provideBackupDao(db: HealthDatabase): BackupDao = db.backupDao()
 }

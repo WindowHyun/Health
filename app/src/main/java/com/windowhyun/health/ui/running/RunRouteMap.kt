@@ -62,6 +62,8 @@ fun RunRouteMap(
     followLatest: Boolean = false,
     /** 타일을 받아 오는 방법. 비워 두면 OpenStreetMap 에서 받는다(화면 캡처 테스트가 미리 받아 둔 타일을 넣는 자리). */
     tileProvider: MapTileProviderBase? = null,
+    /** 따라가는 코스. 점선으로 그려 달린 경로와 구분한다. */
+    course: com.windowhyun.health.domain.model.Course? = null,
 ) {
     val context = LocalContext.current
     if (LocalInspectionMode.current) return
@@ -109,6 +111,10 @@ fun RunRouteMap(
                 }
                 view.overlays.clear()
 
+                if (course != null && course.points.size >= 2) {
+                    view.overlays.add(CourseOverlay(course.points, outlineColor, view.resources.displayMetrics.density))
+                }
+
                 val displayed = route.downsample()
                 if (displayed.size >= 2) {
                     view.overlays.add(
@@ -131,6 +137,8 @@ fun RunRouteMap(
                 }
 
                 when {
+                    route.isEmpty() && course != null && course.points.size >= 2 -> view.zoomToCourse(course.points)
+
                     route.isEmpty() -> Unit
 
                     followLatest -> {
@@ -334,7 +342,7 @@ private fun MapView.zoomToRoute(route: List<RunPoint>) {
 }
 
 /** osmdroid 는 전역 설정을 한 번 해 주어야 타일 캐시를 쓸 수 있다. */
-private fun initOsmdroid(context: Context) {
+internal fun initOsmdroid(context: Context) {
     val configuration = Configuration.getInstance()
     // osmdroid 전용 SharedPreferences 를 쓴다(앱 기본 설정과 섞이지 않게).
     configuration.load(context, context.getSharedPreferences(OSMDROID_PREFS, Context.MODE_PRIVATE))
@@ -364,3 +372,70 @@ private const val MAX_ZOOM = 18.0
 private const val MIN_HALF_SPAN_DEGREES = 0.00025
 
 private const val MAX_DISPLAY_POINTS = 600
+
+/** 코스 선(점선) + 출발 · 도착 표시. 달린 경로 아래에 깔려서 달린 곳이 위에 겹쳐 보인다. */
+internal class CourseOverlay(
+    private val points: List<com.windowhyun.health.domain.model.CoursePoint>,
+    outlineColor: Int,
+    private val density: Float,
+) : Overlay() {
+    private val outlinePaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        strokeWidth = 8f * density
+        color = outlineColor
+    }
+    private val linePaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.BUTT
+        strokeJoin = Paint.Join.ROUND
+        strokeWidth = 4f * density
+        color = COURSE_COLOR
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(14f * density, 9f * density), 0f)
+    }
+    private val dotPaint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL }
+    private val ringPaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f * density
+        color = Color.WHITE
+    }
+    private val pixel = Point()
+    private val path = Path()
+
+    override fun draw(canvas: Canvas, projection: Projection) {
+        path.rewind()
+        points.forEachIndexed { i, p ->
+            projection.toPixels(GeoPoint(p.latitude, p.longitude), pixel)
+            if (i == 0) path.moveTo(pixel.x.toFloat(), pixel.y.toFloat()) else path.lineTo(pixel.x.toFloat(), pixel.y.toFloat())
+        }
+        canvas.drawPath(path, outlinePaint)
+        canvas.drawPath(path, linePaint)
+        dot(canvas, projection, points.first(), COURSE_COLOR, 6f)
+        dot(canvas, projection, points.last(), Color.BLACK, 6f)
+    }
+
+    private fun dot(canvas: Canvas, projection: Projection, at: com.windowhyun.health.domain.model.CoursePoint, color: Int, radiusDp: Float) {
+        projection.toPixels(GeoPoint(at.latitude, at.longitude), pixel)
+        dotPaint.color = color
+        canvas.drawCircle(pixel.x.toFloat(), pixel.y.toFloat(), radiusDp * density, dotPaint)
+        canvas.drawCircle(pixel.x.toFloat(), pixel.y.toFloat(), radiusDp * density, ringPaint)
+    }
+
+    companion object {
+        const val COURSE_COLOR = 0xFF2F80ED.toInt()
+    }
+}
+
+/** 코스 전체가 보이도록 맞춘다. */
+internal fun MapView.zoomToCourse(points: List<com.windowhyun.health.domain.model.CoursePoint>) {
+    val lats = points.map { it.latitude }
+    val lons = points.map { it.longitude }
+    val halfLat = maxOf((lats.max() - lats.min()) / 2, MIN_HALF_SPAN_DEGREES)
+    val halfLon = maxOf((lons.max() - lons.min()) / 2, MIN_HALF_SPAN_DEGREES)
+    val box = BoundingBox(lats.average() + halfLat, lons.average() + halfLon, lats.average() - halfLat, lons.average() - halfLon)
+    post { zoomToBoundingBox(box.increaseByScale(1.3f), false, 0, MAX_ZOOM, null) }
+}

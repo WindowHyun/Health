@@ -262,3 +262,13 @@ interface BackupRepository {
     /** 러닝 기록을 CSV 로 쓴다. 반환값은 줄 수(머리글 제외). */
     suspend fun exportRunCsv(output: OutputStream): Int
 }
+
+/** 미리 찍어 둔 러닝 코스 저장소. */
+interface CourseRepository {
+    fun observeAll(): kotlinx.coroutines.flow.Flow<List<com.windowhyun.health.domain.model.Course>>
+    suspend fun get(id: Long): com.windowhyun.health.domain.model.Course?
+
+    /** 이름은 앞뒤 공백을 지우고 비어 있으면 "코스" 로 한다. 지점이 2개 미만이면 거부한다. 새 id 를 돌려준다. */
+    suspend fun save(course: com.windowhyun.health.domain.model.Course): Long
+    suspend fun delete(id: Long)
+}

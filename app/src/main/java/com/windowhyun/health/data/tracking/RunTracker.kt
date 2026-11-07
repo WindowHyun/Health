@@ -3,6 +3,8 @@ package com.windowhyun.health.data.tracking
 import android.os.SystemClock
 import com.windowhyun.health.core.util.estimateRunCalories
 import com.windowhyun.health.core.util.haversineMeters
+import com.windowhyun.health.domain.course.CourseFollower
+import com.windowhyun.health.domain.model.Course
 import com.windowhyun.health.domain.model.LocationSample
 import com.windowhyun.health.domain.model.IntervalProgress
 import com.windowhyun.health.domain.model.RunCue
@@ -84,11 +86,16 @@ class RunTracker internal constructor(
     private var lastIntervalKey: Int? = null
     private var intervalFinishedCueSent = false
 
+    // 코스 따라가기.
+    private var follower: CourseFollower? = null
+    private var courseCueSent = false
+    private var wasOffCourse = false
+
     /**
      * 러닝을 시작한다. 이미 진행 중이면 아무것도 하지 않는다.
      * [interval] 을 주면 달리기/걷기 구간을 알려 준다(기록과 거리 계산은 그대로).
      */
-    suspend fun start(goal: RunGoal, interval: RunInterval? = null) {
+    suspend fun start(goal: RunGoal, interval: RunInterval? = null, course: Course? = null) {
         mutex.withLock {
             if (_state.value.isActive) return
             val settings = settingsRepository.current()
@@ -105,6 +112,9 @@ class RunTracker internal constructor(
             goalCueSent = false
             lastIntervalKey = null
             intervalFinishedCueSent = false
+            follower = course?.takeIf { it.points.size >= 2 }?.let { CourseFollower(it.points) }
+            courseCueSent = false
+            wasOffCourse = false
 
             val runId = runRepository.startRun(goal.type, goal.value)
             _state.value = RunTrackingState(
@@ -113,6 +123,7 @@ class RunTracker internal constructor(
                 goal = goal,
                 interval = interval,
                 intervalProgress = interval?.progressAt(0),
+                course = course?.takeIf { it.points.size >= 2 },
                 startTime = System.currentTimeMillis(),
                 stepCountAvailable = stepCounter.isAvailable() && stepCounter.hasPermission(),
             )
@@ -151,6 +162,7 @@ class RunTracker internal constructor(
             }
             publish(accumulator, lastAccuracy = sample.accuracyMeters)
             _state.update { it.copy(signalLost = false, locationProblem = null) }
+            followCourse(sample)
         }
     }
 
@@ -210,6 +222,24 @@ class RunTracker internal constructor(
                 flush(accumulator)
             }
         }
+    }
+
+    /** 위치를 코스 위로 옮겨 안내를 갱신하고, 벗어남 · 돌아옴 · 도착을 한 번씩만 알린다. [mutex] 를 잡은 채로 부른다. */
+    private fun followCourse(sample: LocationSample) {
+        val follower = follower ?: return
+        // 정확도가 나쁜 위치는 코스를 벗어났다는 근거로 쓰지 않는다.
+        val accuracy = sample.accuracyMeters
+        if (accuracy != null && accuracy > COURSE_MAX_ACCURACY_METERS) return
+        val guidance = follower.update(sample.latitude, sample.longitude)
+        _state.update { it.copy(courseGuidance = guidance) }
+        if (guidance.finished && !courseCueSent) {
+            courseCueSent = true
+            _cues.tryEmit(RunCue.CourseFinished)
+        } else if (!guidance.finished) {
+            if (guidance.offCourse && !wasOffCourse) _cues.tryEmit(RunCue.OffCourse)
+            if (!guidance.offCourse && wasOffCourse) _cues.tryEmit(RunCue.BackOnCourse)
+        }
+        wasOffCourse = guidance.offCourse
     }
 
     /** 인터벌 진행을 갱신하고, 구간이 바뀐 순간 한 번만 알린다. [mutex] 를 잡은 채로 부른다. */
@@ -438,6 +468,9 @@ class RunTracker internal constructor(
 
         /** 움직임 판단에 쓰는 위치의 최대 오차. */
         const val MOVEMENT_MAX_ACCURACY_METERS = 20f
+
+        /** 이보다 부정확한 위치는 코스를 벗어났다는 판단에 쓰지 않는다. */
+        const val COURSE_MAX_ACCURACY_METERS = 30f
 
         const val DEFAULT_BODY_WEIGHT_KG = 70.0
     }

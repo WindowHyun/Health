@@ -6,6 +6,8 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.windowhyun.health.data.local.dao.BackupDao
+import com.windowhyun.health.data.local.dao.CourseDao
+import com.windowhyun.health.data.local.entity.CourseEntity
 import com.windowhyun.health.data.local.dao.ExerciseDao
 import com.windowhyun.health.data.local.dao.PersonalRecordDao
 import com.windowhyun.health.data.local.dao.RoutineDao
@@ -40,8 +42,9 @@ import com.windowhyun.health.data.local.entity.WorkoutSetEntity
         RunEntity::class,
         RunLapEntity::class,
         RunLocationEntity::class,
+        CourseEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -52,6 +55,7 @@ abstract class HealthDatabase : RoomDatabase() {
     abstract fun runDao(): RunDao
     abstract fun personalRecordDao(): PersonalRecordDao
     abstract fun backupDao(): BackupDao
+    abstract fun courseDao(): CourseDao
 
     companion object {
         const val NAME = "health.db"
@@ -110,6 +114,16 @@ abstract class HealthDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        /** v4 -> v5: 미리 찍어 둔 러닝 코스 표. 기존 기록은 건드리지 않는다. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `course` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `points` TEXT NOT NULL)",
+                )
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
     }
 }

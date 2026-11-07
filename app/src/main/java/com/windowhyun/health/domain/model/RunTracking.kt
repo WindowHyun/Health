@@ -88,6 +88,9 @@ data class RunTrackingState(
     /** 인터벌 러닝이면 그 계획. 아니면 null. */
     val interval: RunInterval? = null,
     val intervalProgress: IntervalProgress? = null,
+    /** 따라가는 코스와 지금의 안내. 코스 없이 달리면 둘 다 null. */
+    val course: Course? = null,
+    val courseGuidance: CourseGuidance? = null,
     val startTime: Long = 0,
 ) {
     val isActive: Boolean get() = status == RunStatus.TRACKING || status == RunStatus.PAUSED

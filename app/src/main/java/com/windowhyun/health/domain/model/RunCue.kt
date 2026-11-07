@@ -29,4 +29,13 @@ sealed interface RunCue {
 
     /** 다시 움직여서 자동으로 이어 간다. */
     data object AutoResumed : RunCue
+
+    /** 코스를 벗어났다. */
+    data object OffCourse : RunCue
+
+    /** 코스로 돌아왔다. */
+    data object BackOnCourse : RunCue
+
+    /** 코스 끝에 도착했다. */
+    data object CourseFinished : RunCue
 }

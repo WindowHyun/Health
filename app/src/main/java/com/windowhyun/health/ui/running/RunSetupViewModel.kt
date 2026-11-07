@@ -2,7 +2,10 @@ package com.windowhyun.health.ui.running
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.windowhyun.health.data.tracking.ActiveCourse
 import com.windowhyun.health.data.tracking.RunTracker
+import com.windowhyun.health.domain.model.Course
+import com.windowhyun.health.domain.repository.CourseRepository
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.RunGoal
 import com.windowhyun.health.domain.model.RunGoalType
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** 러닝 시작 화면에서 고르는 값들. */
@@ -37,10 +41,15 @@ data class RunSetupUiState(
     val gpsAccuracyMeters: Float? = null,
     val stepSensorAvailable: Boolean = false,
     val stepPermissionGranted: Boolean = false,
+    /** 저장해 둔 코스들과, 따라갈 코스(null 이면 코스 없이 달린다). */
+    val courses: List<Course> = emptyList(),
+    val selectedCourseId: Long? = null,
     val settings: AppSettings = AppSettings(),
     val tracking: RunTrackingState = RunTrackingState(),
 ) {
     val canStart: Boolean get() = hasLocationPermission && gpsEnabled && !tracking.isActive
+
+    val selectedCourse: Course? get() = courses.firstOrNull { it.id == selectedCourseId }
 
     /** 인터벌을 켰을 때만 계획을 돌려준다. */
     fun toInterval(): RunInterval? = interval.takeIf { intervalEnabled }
@@ -59,6 +68,8 @@ class RunSetupViewModel @Inject constructor(
     private val runServiceController: RunServiceController,
     runTracker: RunTracker,
     settingsRepository: SettingsRepository,
+    private val courseRepository: CourseRepository,
+    private val activeCourse: ActiveCourse,
 ) : ViewModel() {
 
     private val selection = MutableStateFlow(RunSetupUiState())
@@ -67,8 +78,15 @@ class RunSetupViewModel @Inject constructor(
         selection,
         settingsRepository.settings,
         runTracker.state,
-    ) { current, settings, tracking ->
-        current.copy(settings = settings, tracking = tracking)
+        courseRepository.observeAll(),
+    ) { current, settings, tracking, courses ->
+        // 지운 코스를 고른 채로 남겨 두지 않는다.
+        current.copy(
+            settings = settings,
+            tracking = tracking,
+            courses = courses,
+            selectedCourseId = current.selectedCourseId?.takeIf { id -> courses.any { it.id == id } },
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RunSetupUiState())
 
     init {
@@ -107,6 +125,12 @@ class RunSetupViewModel @Inject constructor(
         }
     }
 
+    fun selectCourse(id: Long?) = selection.update { it.copy(selectedCourseId = id) }
+
+    fun deleteCourse(id: Long) {
+        viewModelScope.launch { courseRepository.delete(id) }
+    }
+
     fun setGoalType(type: RunGoalType) = selection.update { it.copy(goalType = type) }
 
     fun changeGoalDistance(deltaKm: Double) = selection.update {
@@ -135,6 +159,8 @@ class RunSetupViewModel @Inject constructor(
     fun startRun() {
         val state = uiState.value
         if (!state.canStart) return
+        // 서비스가 시작할 때 이 코스를 읽어 간다.
+        activeCourse.select(state.selectedCourse)
         runServiceController.start(state.toGoal(), state.toInterval())
     }
 

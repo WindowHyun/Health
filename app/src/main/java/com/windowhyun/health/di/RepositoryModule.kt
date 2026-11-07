@@ -42,6 +42,9 @@ abstract class RepositoryModule {
     abstract fun bindRunRepository(impl: RunRepositoryImpl): RunRepository
 
     @Binds
+    abstract fun bindCourseRepository(impl: com.windowhyun.health.data.repository.CourseRepositoryImpl): com.windowhyun.health.domain.repository.CourseRepository
+
+    @Binds
     @Singleton
     abstract fun bindSettingsRepository(impl: SettingsRepositoryImpl): SettingsRepository
 

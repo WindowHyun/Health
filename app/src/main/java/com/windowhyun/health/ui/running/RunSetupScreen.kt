@@ -7,6 +7,8 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,11 +33,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +72,7 @@ import com.windowhyun.health.ui.components.SectionLabel
 @Composable
 fun RunSetupScreen(
     onRunStarted: () -> Unit,
+    onCreateCourse: () -> Unit = {},
     viewModel: RunSetupViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -174,6 +180,16 @@ fun RunSetupScreen(
                         onPlus = { viewModel.changeGoalDuration(5) },
                     )
                 }
+            }
+
+            item {
+                CourseSection(
+                    courses = state.courses,
+                    selectedId = state.selectedCourseId,
+                    onSelect = viewModel::selectCourse,
+                    onCreate = onCreateCourse,
+                    onDelete = viewModel::deleteCourse,
+                )
             }
 
             item {
@@ -385,5 +401,55 @@ private fun GoalStepper(
             MetricValue(number = number, unit = unit, modifier = Modifier.padding(horizontal = 4.dp))
             IconButton(onClick = onPlus) { Icon(Icons.Filled.Add, contentDescription = "늘리기") }
         }
+    }
+}
+
+/** 미리 찍어 둔 코스를 고른다. 고르면 러닝 중 지도에 점선으로 보이고, 남은 거리와 벗어남을 알려 준다. */
+@Composable
+private fun CourseSection(
+    courses: List<com.windowhyun.health.domain.model.Course>,
+    selectedId: Long?,
+    onSelect: (Long?) -> Unit,
+    onCreate: () -> Unit,
+    onDelete: (Long) -> Unit,
+) {
+    var deleting by remember { mutableStateOf<com.windowhyun.health.domain.model.Course?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionLabel("코스 따라가기")
+        if (courses.isEmpty()) {
+            Text(
+                text = "미리 가고 싶은 길을 지도에 찍어 두면, 달리면서 그 길을 따라가도록 안내해요.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(selected = selectedId == null, onClick = { onSelect(null) }, label = { Text("코스 없이") })
+                courses.forEach { course ->
+                    FilterChip(
+                        selected = selectedId == course.id,
+                        onClick = { onSelect(course.id) },
+                        label = { Text("${course.name} · ${CourseEditorViewModel.formatKm(course.distanceMeters)}") },
+                    )
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onCreate) { Text("새 코스 만들기") }
+            val selected = courses.firstOrNull { it.id == selectedId }
+            if (selected != null) TextButton(onClick = { deleting = selected }) { Text("이 코스 지우기") }
+        }
+    }
+    deleting?.let { course ->
+        com.windowhyun.health.ui.components.ConfirmDialog(
+            title = "코스를 지울까요?",
+            message = "'${course.name}' 코스를 지웁니다. 지난 러닝 기록은 그대로예요.",
+            confirmLabel = "지우기",
+            onConfirm = { deleting = null; onDelete(course.id) },
+            onDismiss = { deleting = null },
+        )
     }
 }

@@ -154,7 +154,7 @@ class MigrationTest {
         val db = openCurrentDatabase()
         try {
             // 열리기만 하면 스키마 검증을 통과한 것이다.
-            assertThat(db.openHelper.readableDatabase.version).isEqualTo(4)
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(5)
         } finally {
             db.close()
         }
@@ -246,7 +246,7 @@ class MigrationTest {
 
         val db = openCurrentDatabase()
         try {
-            assertThat(db.openHelper.readableDatabase.version).isEqualTo(4)
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(5)
             assertThat(db.exerciseDao().getByName("플랭크")!!.trackingType)
                 .isEqualTo(ExerciseTrackingType.TIME)
         } finally {
@@ -296,5 +296,38 @@ class MigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test.db"
+    }
+
+    @Test
+    fun `migrates courses table from version 4 to 5 and keeps runs`() = runTest {
+        createOldDatabase(4) { db ->
+            db.execSQL(
+                "INSERT INTO run (date, startTime, endTime, durationSeconds, distanceMeters, averagePaceSecPerKm, " +
+                    "bestPaceSecPerKm, calories, steps, goalType, goalValue, memo) " +
+                    "VALUES (20000, 1000, 2000, 600, 2000.0, 300.0, 280.0, 100, 0, 'FREE', 0.0, NULL)",
+            )
+        }
+        val db = openCurrentDatabase()
+        try {
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(5)
+            assertThat(RunRepositoryImpl(db.runDao()).getRun(1)).isNotNull()
+            val repo = com.windowhyun.health.data.repository.CourseRepositoryImpl(db.courseDao())
+            val id = repo.save(
+                com.windowhyun.health.domain.model.Course(
+                    name = "  한강  ",
+                    points = listOf(
+                        com.windowhyun.health.domain.model.CoursePoint(37.5, 127.0),
+                        com.windowhyun.health.domain.model.CoursePoint(37.51, 127.01),
+                    ),
+                ),
+            )
+            val back = repo.get(id)!!
+            assertThat(back.name).isEqualTo("한강")
+            assertThat(back.points[1].latitude).isWithin(1e-6).of(37.51)
+            repo.delete(id)
+            assertThat(repo.get(id)).isNull()
+        } finally {
+            db.close()
+        }
     }
 }
