@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.map
 class InMemoryCourses(initial: List<Course> = emptyList()) : CourseRepository {
     private val state = MutableStateFlow(initial)
     override fun observeAll() = state.map { it }
+    fun snapshot() = state.value
     override suspend fun get(id: Long) = state.value.firstOrNull { it.id == id }
     override suspend fun save(course: Course): Long {
         require(course.points.size >= 2)

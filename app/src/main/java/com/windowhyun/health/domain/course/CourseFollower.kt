@@ -25,6 +25,9 @@ class CourseFollower(private val points: List<CoursePoint>) {
     private var farStreak = 0
     private var finished = false
 
+    /** 코스에 한 번이라도 들어섰는가. 그 전에는 출발점으로 가는 중이라 "벗어남" 이 아니다. */
+    private var entered = false
+
     fun update(latitude: Double, longitude: Double): CourseGuidance {
         if (points.size < 2) return CourseGuidance(totalMeters = totalMeters)
 
@@ -33,6 +36,19 @@ class CourseFollower(private val points: List<CoursePoint>) {
             ?: search(latitude, longitude, 0, points.size - 2)!!
 
         val candidateProgress = progressOf(best)
+        if (!entered) {
+            if (best.off > OFF_COURSE_METERS) {
+                return CourseGuidance(
+                    remainingMeters = totalMeters,
+                    totalMeters = totalMeters,
+                    offCourseMeters = best.off,
+                    approaching = true,
+                    distanceToStartMeters = CourseGeometry.distance(latitude, longitude, points[0].latitude, points[0].longitude),
+                )
+            }
+            entered = true
+        }
+
         // 코스를 벗어나 있는 동안에는 진행 위치를 바꾸지 않는다(엉뚱한 곳에 붙어 거리가 튀지 않게).
         if (best.off <= OFF_COURSE_METERS) {
             segment = best.segment

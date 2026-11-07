@@ -25,6 +25,7 @@ data class RunSummaryUiState(
     val memo: String = "",
     val closed: Boolean = false,
     val loading: Boolean = true,
+    val courseStats: com.windowhyun.health.domain.model.CourseRunStats? = null,
 )
 
 /**
@@ -63,6 +64,7 @@ class RunSummaryViewModel @Inject constructor(
                 it.copy(
                     run = run,
                     personalBests = runRepository.comparePersonalBests(run),
+                    courseStats = runRepository.courseStats(run),
                     memo = run.memo.orEmpty(),
                     loading = false,
                 )

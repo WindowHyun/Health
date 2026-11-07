@@ -104,4 +104,38 @@ class CourseTrackingTest {
             db.close()
         }
     }
+
+    @Test
+    fun `starting far from the course says nothing until the runner reaches it`() = runTest {
+        val f = fixture()
+        val cues = mutableListOf<RunCue>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { f.tracker.cues.collect { cues += it } }
+        f.tracker.start(RunGoal(), null, course)
+        repeat(4) { f.tracker.onLocation(at(0.0, offNorthMeters = 600.0)) }
+        assertThat(f.tracker.state.value.courseGuidance!!.approaching).isTrue()
+        assertThat(cues.filter { it is RunCue.OffCourse || it is RunCue.CourseEntered }).isEmpty()
+        f.tracker.onLocation(at(10.0, offNorthMeters = 5.0))
+        assertThat(cues.filterIsInstance<RunCue.CourseEntered>()).hasSize(1)
+        f.tracker.onLocation(at(30.0, offNorthMeters = 5.0))
+        assertThat(cues.filterIsInstance<RunCue.CourseEntered>()).hasSize(1)
+    }
+
+    @Test
+    fun `starting on the course does not announce entering`() = runTest {
+        val f = fixture()
+        val cues = mutableListOf<RunCue>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { f.tracker.cues.collect { cues += it } }
+        f.tracker.start(RunGoal(), null, course)
+        f.tracker.onLocation(at(5.0))
+        f.tracker.onLocation(at(40.0))
+        assertThat(cues.filterIsInstance<RunCue.CourseEntered>()).isEmpty()
+    }
+
+    @Test
+    fun `a selected course is handed over once and then cleared`() {
+        val active = ActiveCourse()
+        active.select(course)
+        assertThat(active.take()).isEqualTo(course)
+        assertThat(active.take()).isNull()
+    }
 }

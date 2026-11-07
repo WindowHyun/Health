@@ -163,7 +163,10 @@ interface RunRepository {
      * 러닝을 시작하며 endTime = null 인 행을 먼저 만든다.
      * 기록 중 위치/Lap 을 계속 붙이기 때문에 앱이 죽어도 데이터가 남는다.
      */
-    suspend fun startRun(goalType: RunGoalType, goalValue: Double): Long
+    suspend fun startRun(goalType: RunGoalType, goalValue: Double, courseName: String? = null): Long
+
+    /** [run] 이 코스를 따라 달린 기록이면, 같은 코스를 달린 횟수와 최고 기록. 코스 없이 달렸으면 null. */
+    suspend fun courseStats(run: Run): com.windowhyun.health.domain.model.CourseRunStats? = null
 
     /** 아직 끝나지 않은 러닝(복구용). */
     suspend fun getActiveRun(): Run?
@@ -235,6 +238,8 @@ data class BackupSummary(
     val runCount: Int = 0,
     /** 가져온 루틴 템플릿의 수. */
     val userTemplateCount: Int = 0,
+    /** 저장해 둔 러닝 코스 수. */
+    val courseCount: Int = 0,
     /** 연결이 끊어져 버린 행 수. 정상 파일이면 0 이다. */
     val droppedRows: Int = 0,
 )

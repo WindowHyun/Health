@@ -47,6 +47,7 @@ internal fun RunCue.vibrationPattern(): LongArray = when (this) {
         IntervalPhase.WALK -> longArrayOf(0, 900)
     }
     RunCue.IntervalsFinished -> longArrayOf(0, 300, 100, 300, 100, 300, 100, 600)
+    RunCue.CourseEntered -> longArrayOf(0, 120, 80, 120, 80, 250)
     RunCue.OffCourse -> longArrayOf(0, 700, 150, 700)
     RunCue.BackOnCourse -> longArrayOf(0, 120, 80, 120)
     RunCue.CourseFinished -> longArrayOf(0, 400, 150, 400, 150, 700)

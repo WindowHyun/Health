@@ -24,6 +24,10 @@ data class CourseEditorUiState(
     val center: CoursePoint? = null,
     val saving: Boolean = false,
     val error: String? = null,
+    /** 저장된 코스를 고치는 중이면 그 id(0 이면 새 코스). */
+    val courseId: Long = 0,
+    /** 처음 열 때 코스 전체가 보이게 맞출 점들(고치는 코스를 불러온 직후에만 값이 있다). */
+    val fit: List<CoursePoint>? = null,
 ) {
     val distanceMeters: Double get() = CourseGeometry.length(points)
     val canSave: Boolean get() = points.size >= 2 && !saving
@@ -34,12 +38,28 @@ data class CourseEditorUiState(
 class CourseEditorViewModel @Inject constructor(
     private val courses: CourseRepository,
     private val locationTracker: LocationTracker,
+    savedStateHandle: androidx.lifecycle.SavedStateHandle,
 ) : ViewModel() {
+
+    private val editingId: Long = savedStateHandle[com.windowhyun.health.ui.navigation.Routes.ARG_COURSE_ID] ?: 0L
 
     private val _state = MutableStateFlow(CourseEditorUiState())
     val state: StateFlow<CourseEditorUiState> = _state.asStateFlow()
 
     init {
+        if (editingId != 0L) {
+            viewModelScope.launch {
+                val course = courses.get(editingId)
+                if (course == null) {
+                    _state.update { it.copy(error = "코스를 찾을 수 없어요.") }
+                } else {
+                    _state.update { it.copy(courseId = course.id, name = course.name, points = course.points, fit = course.points) }
+                }
+            }
+        } else loadCurrentLocation()
+    }
+
+    private fun loadCurrentLocation() {
         // 지금 있는 곳 근처에서 코스를 찍는 일이 대부분이라, 위치를 얻으면 지도를 그리로 옮긴다. 못 얻어도 괜찮다.
         viewModelScope.launch {
             if (!locationTracker.hasLocationPermission() || !locationTracker.isLocationAvailable()) return@launch
@@ -55,6 +75,11 @@ class CourseEditorViewModel @Inject constructor(
         else it.copy(points = it.points + point, error = null)
     }
 
+    /** [index] 번째 점을 뺀다(찍은 점을 다시 눌렀을 때). */
+    fun removePoint(index: Int) = _state.update {
+        if (index !in it.points.indices) it else it.copy(points = it.points.toMutableList().also { list -> list.removeAt(index) }, error = null)
+    }
+
     fun undo() = _state.update { it.copy(points = it.points.dropLast(1), error = null) }
 
     fun clear() = _state.update { it.copy(points = emptyList(), error = null) }
@@ -68,7 +93,7 @@ class CourseEditorViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val name = current.name.ifBlank { "코스 ${formatKm(current.distanceMeters)}" }
-                courses.save(Course(name = name, points = current.points))
+                courses.save(Course(id = current.courseId, name = name, points = current.points))
                 onSaved()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

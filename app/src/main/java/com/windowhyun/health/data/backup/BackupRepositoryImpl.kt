@@ -91,6 +91,8 @@ class BackupRepositoryImpl @Inject constructor(
                 runs = backupDao.allRuns().map { it.toBackup() },
                 runLaps = backupDao.allRunLaps().map { it.toBackup() },
                 runLocations = backupDao.allRunLocations().map { it.toBackup() },
+                courses = backupDao.allCourses().map { it.toBackup() },
+                hasCourses = true,
                 userTemplates = importedTemplates.takeIf { it.isNotEmpty() }?.let { CatalogWriter.write(it) },
                 hasUserTemplates = true,
             )
@@ -134,6 +136,7 @@ class BackupRepositoryImpl @Inject constructor(
                 }
 
                 // 자식부터 지운다. 중간에 실패하면 트랜잭션이 통째로 되돌아간다.
+                if (clean.hasCourses) backupDao.deleteAllCourses()
                 backupDao.deleteAllRunLocations()
                 backupDao.deleteAllRunLaps()
                 backupDao.deleteAllRuns()
@@ -156,6 +159,7 @@ class BackupRepositoryImpl @Inject constructor(
                 backupDao.insertRuns(clean.runs.map { it.toEntity() })
                 backupDao.insertRunLaps(clean.runLaps.map { it.toEntity() })
                 backupDao.insertRunLocations(clean.runLocations.map { it.toEntity() })
+                if (clean.hasCourses) backupDao.insertCourses(clean.courses.map { it.toEntity() })
             }
 
             settingsRepository.update { file.settings.toSettings(it) }
@@ -415,12 +419,12 @@ private fun BackupPersonalRecord.toEntity() = PersonalRecordEntity(
 
 private fun RunEntity.toBackup() = BackupRun(
     id, date, startTime, endTime, durationSeconds, distanceMeters, averagePaceSecPerKm,
-    bestPaceSecPerKm, calories, steps, goalType, goalValue, memo,
+    bestPaceSecPerKm, calories, steps, goalType, goalValue, memo, courseName,
 )
 
 private fun BackupRun.toEntity() = RunEntity(
     id, date, startTime, endTime, durationSeconds, distanceMeters, averagePaceSecPerKm,
-    bestPaceSecPerKm, calories, steps, goalType, goalValue, memo,
+    bestPaceSecPerKm, calories, steps, goalType, goalValue, memo, courseName,
 )
 
 private fun RunLapEntity.toBackup() =
@@ -434,6 +438,10 @@ private fun RunLocationEntity.toBackup() =
 
 private fun BackupRunLocation.toEntity() =
     RunLocationEntity(id, runId, latitude, longitude, altitude, timestamp, isSegmentStart)
+
+private fun com.windowhyun.health.data.local.entity.CourseEntity.toBackup() = BackupCourse(id, name, createdAt, points)
+
+private fun BackupCourse.toEntity() = com.windowhyun.health.data.local.entity.CourseEntity(id, name, createdAt, points)
 
 // ----- 파일 검사 -----
 
@@ -475,6 +483,9 @@ internal fun BackupFile.dropOrphans(): BackupFile {
     val workoutExerciseIds = keptWorkoutExercises.map { it.id }.toSet()
 
     return copy(
+        // 읽을 수 없는 코스(점이 2개 미만이거나 깨진 글)는 버린다. 한 줄 때문에 복원 전체가 멈추면 안 된다.
+        courses = courses.distinctBy { it.id }
+            .filter { com.windowhyun.health.data.repository.CourseRepositoryImpl.decode(it.points) != null },
         exercises = keptByName,
         routines = routines,
         routineExercises = keptRoutineExercises,
@@ -501,7 +512,7 @@ internal fun BackupFile.dropOrphans(): BackupFile {
 internal fun BackupFile.rowCount(): Int =
     exercises.size + routines.size + routineExercises.size + workouts.size +
         workoutExercises.size + workoutSets.size + personalRecords.size +
-        runs.size + runLaps.size + runLocations.size
+        runs.size + runLaps.size + runLocations.size + courses.size
 
 internal fun BackupFile.summarize() = BackupSummary(
     createdAt = createdAt,
@@ -511,4 +522,5 @@ internal fun BackupFile.summarize() = BackupSummary(
     workoutCount = workouts.size,
     setCount = workoutSets.size,
     runCount = runs.size,
+    courseCount = courses.size,
 )

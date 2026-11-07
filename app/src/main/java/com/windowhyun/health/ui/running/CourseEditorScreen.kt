@@ -45,7 +45,7 @@ fun CourseEditorScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("코스 만들기") },
+                title = { Text(if (state.courseId == 0L) "코스 만들기" else "코스 고치기") },
                 navigationIcon = {
                     IconButton(onClick = leave) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
                 },
@@ -56,7 +56,9 @@ fun CourseEditorScreen(
             CourseEditMap(
                 points = state.points,
                 center = state.center,
+                fit = state.fit,
                 onAddPoint = viewModel::addPoint,
+                onRemovePoint = viewModel::removePoint,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -66,7 +68,7 @@ fun CourseEditorScreen(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "찍은 점들을 직선으로 이어요. 길을 따라 꺾이는 곳마다 점을 찍으면 더 정확해요.",
+                    text = "찍은 점들을 직선으로 이어요. 길이 꺾이는 곳마다 점을 찍으면 더 정확해요. 찍어 둔 점을 다시 누르면 그 점이 빠져요.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -86,7 +88,7 @@ fun CourseEditorScreen(
                     onClick = { viewModel.save(onClose) },
                     enabled = state.canSave,
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(if (state.points.size < 2) "지점을 2개 이상 찍어 주세요" else "코스 저장") }
+                ) { Text(if (state.points.size < 2) "지점을 2개 이상 찍어 주세요" else if (state.courseId == 0L) "코스 저장" else "고친 코스 저장") }
             }
         }
     }

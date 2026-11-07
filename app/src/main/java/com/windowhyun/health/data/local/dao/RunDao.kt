@@ -131,4 +131,11 @@ interface RunDao {
     /** 이 날짜 이전에 끝난 러닝 수. 목록이 보여 주지 않은 옛 기록이 있는지 알려 준다. */
     @Query("SELECT COUNT(*) FROM run WHERE endTime IS NOT NULL AND date < :beforeEpochDay")
     fun observeRunCountBefore(beforeEpochDay: Long): Flow<Int>
+
+    /** 이 코스를 끝까지 기록한 러닝 중 [startTime] 까지(이 러닝 포함)의 수. */
+    @Query("SELECT COUNT(*) FROM run WHERE courseName = :name AND endTime IS NOT NULL AND startTime <= :startTime")
+    suspend fun countCourseRunsUpTo(name: String, startTime: Long): Int
+
+    @Query("SELECT MIN(durationSeconds) FROM run WHERE courseName = :name AND endTime IS NOT NULL AND durationSeconds > 0")
+    suspend fun bestCourseDuration(name: String): Long?
 }

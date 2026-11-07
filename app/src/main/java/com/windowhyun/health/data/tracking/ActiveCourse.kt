@@ -4,6 +4,7 @@ import com.windowhyun.health.domain.model.Course
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,4 +20,10 @@ class ActiveCourse @Inject constructor() {
     fun select(course: Course?) {
         _course.value = course
     }
+
+    /**
+     * 서비스가 러닝을 시작하며 고른 코스를 **한 번만** 가져간다. 가져가면 비운다.
+     * 그렇지 않으면 시계에서 시작한 러닝 같은, 코스를 고르지 않은 러닝에 지난번 코스가 따라붙는다.
+     */
+    fun take(): Course? = _course.getAndUpdate { null }
 }

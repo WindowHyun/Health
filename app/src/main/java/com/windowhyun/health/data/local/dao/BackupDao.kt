@@ -57,6 +57,9 @@ interface BackupDao {
     @Query("SELECT * FROM run ORDER BY id")
     suspend fun allRuns(): List<RunEntity>
 
+    @Query("SELECT * FROM course ORDER BY id")
+    suspend fun allCourses(): List<com.windowhyun.health.data.local.entity.CourseEntity>
+
     @Query("SELECT * FROM run_lap ORDER BY id")
     suspend fun allRunLaps(): List<RunLapEntity>
 
@@ -88,6 +91,9 @@ interface BackupDao {
     suspend fun insertRuns(rows: List<RunEntity>)
 
     @Insert
+    suspend fun insertCourses(rows: List<com.windowhyun.health.data.local.entity.CourseEntity>)
+
+    @Insert
     suspend fun insertRunLaps(rows: List<RunLapEntity>)
 
     @Insert
@@ -95,6 +101,9 @@ interface BackupDao {
 
     // 지우는 순서는 자식 -> 부모. CASCADE 가 걸려 있어도 순서를 지켜 두면
     // 외래키 설정이 바뀌어도 안전하다.
+
+    @Query("DELETE FROM course")
+    suspend fun deleteAllCourses()
 
     @Query("DELETE FROM run_location")
     suspend fun deleteAllRunLocations()

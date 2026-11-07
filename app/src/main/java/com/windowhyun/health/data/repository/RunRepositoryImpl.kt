@@ -71,6 +71,7 @@ class RunRepositoryImpl @Inject constructor(
             goalType = run.goalType.name,
             goalValue = run.goalValue,
             memo = run.memo,
+            courseName = run.courseName,
         )
         if (run.id != 0L && runDao.getRun(run.id) != null) {
             runDao.updateRun(entity)
@@ -109,7 +110,7 @@ class RunRepositoryImpl @Inject constructor(
 
     // ----- 기록 중 증분 저장 -----
 
-    override suspend fun startRun(goalType: RunGoalType, goalValue: Double): Long {
+    override suspend fun startRun(goalType: RunGoalType, goalValue: Double, courseName: String?): Long {
         val now = System.currentTimeMillis()
         return runDao.insertRun(
             RunEntity(
@@ -118,6 +119,7 @@ class RunRepositoryImpl @Inject constructor(
                 endTime = null,
                 goalType = goalType.name,
                 goalValue = goalValue,
+                courseName = courseName,
             ),
         )
     }
@@ -155,6 +157,13 @@ class RunRepositoryImpl @Inject constructor(
                 }
             }
         return closed
+    }
+
+    override suspend fun courseStats(run: Run): com.windowhyun.health.domain.model.CourseRunStats? {
+        val name = run.courseName ?: return null
+        val count = runDao.countCourseRunsUpTo(name, run.startTime)
+        val best = runDao.bestCourseDuration(name) ?: return null
+        return com.windowhyun.health.domain.model.CourseRunStats(count = count, bestDurationSeconds = best)
     }
 
     override suspend fun getActiveRun(): Run? {

@@ -127,6 +127,10 @@ fun RunSummaryScreen(
                 )
             }
 
+            if (run?.courseName != null) {
+                item { CourseRunLine(run, state.courseStats) }
+            }
+
             item {
                 SectionLabel("이동 경로")
             }

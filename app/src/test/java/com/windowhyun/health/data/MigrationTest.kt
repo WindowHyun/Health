@@ -154,7 +154,7 @@ class MigrationTest {
         val db = openCurrentDatabase()
         try {
             // 열리기만 하면 스키마 검증을 통과한 것이다.
-            assertThat(db.openHelper.readableDatabase.version).isEqualTo(5)
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(6)
         } finally {
             db.close()
         }
@@ -246,7 +246,7 @@ class MigrationTest {
 
         val db = openCurrentDatabase()
         try {
-            assertThat(db.openHelper.readableDatabase.version).isEqualTo(5)
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(6)
             assertThat(db.exerciseDao().getByName("플랭크")!!.trackingType)
                 .isEqualTo(ExerciseTrackingType.TIME)
         } finally {
@@ -309,7 +309,7 @@ class MigrationTest {
         }
         val db = openCurrentDatabase()
         try {
-            assertThat(db.openHelper.readableDatabase.version).isEqualTo(5)
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(6)
             assertThat(RunRepositoryImpl(db.runDao()).getRun(1)).isNotNull()
             val repo = com.windowhyun.health.data.repository.CourseRepositoryImpl(db.courseDao())
             val id = repo.save(
@@ -326,6 +326,26 @@ class MigrationTest {
             assertThat(back.points[1].latitude).isWithin(1e-6).of(37.51)
             repo.delete(id)
             assertThat(repo.get(id)).isNull()
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun `migrates the course name column from version 5 to 6`() = runTest {
+        createOldDatabase(5) { db ->
+            db.execSQL(
+                "INSERT INTO run (date, startTime, endTime, durationSeconds, distanceMeters, averagePaceSecPerKm, " +
+                    "bestPaceSecPerKm, calories, steps, goalType, goalValue, memo) " +
+                    "VALUES (20000, 1000, 2000, 600, 2000.0, 300.0, 280.0, 100, 0, 'FREE', 0.0, NULL)",
+            )
+            db.execSQL("INSERT INTO course (name, createdAt, points) VALUES ('옛 코스', 5, '1.0,1.0;1.1,1.1')")
+        }
+        val db = openCurrentDatabase()
+        try {
+            val run = RunRepositoryImpl(db.runDao()).getRun(1)!!
+            assertThat(run.courseName).isNull()
+            assertThat(db.courseDao().get(1)!!.name).isEqualTo("옛 코스")
         } finally {
             db.close()
         }

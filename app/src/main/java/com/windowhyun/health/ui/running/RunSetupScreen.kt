@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -73,6 +74,7 @@ import com.windowhyun.health.ui.components.SectionLabel
 fun RunSetupScreen(
     onRunStarted: () -> Unit,
     onCreateCourse: () -> Unit = {},
+    onEditCourse: (Long) -> Unit = {},
     viewModel: RunSetupViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -188,6 +190,7 @@ fun RunSetupScreen(
                     selectedId = state.selectedCourseId,
                     onSelect = viewModel::selectCourse,
                     onCreate = onCreateCourse,
+                    onEdit = onEditCourse,
                     onDelete = viewModel::deleteCourse,
                 )
             }
@@ -411,6 +414,7 @@ private fun CourseSection(
     selectedId: Long?,
     onSelect: (Long?) -> Unit,
     onCreate: () -> Unit,
+    onEdit: (Long) -> Unit,
     onDelete: (Long) -> Unit,
 ) {
     var deleting by remember { mutableStateOf<com.windowhyun.health.domain.model.Course?>(null) }
@@ -437,10 +441,21 @@ private fun CourseSection(
                 }
             }
         }
+        val selected = courses.firstOrNull { it.id == selectedId }
+        if (selected != null) {
+            // 고르기 전에 모양을 알아볼 수 있게, 고른 코스의 윤곽을 그려 보여 준다.
+            CoursePreview(
+                points = selected.points,
+                modifier = Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = onCreate) { Text("새 코스 만들기") }
-            val selected = courses.firstOrNull { it.id == selectedId }
-            if (selected != null) TextButton(onClick = { deleting = selected }) { Text("이 코스 지우기") }
+            if (selected != null) {
+                TextButton(onClick = { onEdit(selected.id) }) { Text("고치기") }
+                TextButton(onClick = { deleting = selected }) { Text("지우기") }
+            }
         }
     }
     deleting?.let { course ->

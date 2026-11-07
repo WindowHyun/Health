@@ -251,3 +251,26 @@ fun RunHeadline(dateText: String, distanceMeters: Double, unit: DistanceUnit, mo
         )
     }
 }
+
+/**
+ * "한강 5km · 3번째 · 최고 28:10 (이번 +0:42)". 코스를 따라 달린 러닝에서, 같은 길을 달린 지난 기록과 견주어 본다.
+ */
+@Composable
+fun CourseRunLine(run: Run, stats: com.windowhyun.health.domain.model.CourseRunStats?) {
+    val name = run.courseName ?: return
+    val parts = mutableListOf("코스 · $name")
+    if (stats != null) {
+        parts += "${stats.count}번째"
+        val diff = run.durationSeconds - stats.bestDurationSeconds
+        parts += when {
+            stats.count <= 1 -> "첫 기록"
+            diff <= 0L -> "최고 기록"
+            else -> "최고 ${formatDuration(stats.bestDurationSeconds)} (이번 +${formatDuration(diff)})"
+        }
+    }
+    Text(
+        text = parts.joinToString(" · "),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}

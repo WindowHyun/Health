@@ -32,4 +32,6 @@ data class RunEntity(
     val goalType: String = "FREE",
     val goalValue: Double = 0.0,
     val memo: String? = null,
+    /** 코스를 따라 달렸다면 그 코스 이름. 코스를 지워도 기록에는 이름이 남는다. */
+    val courseName: String? = null,
 )

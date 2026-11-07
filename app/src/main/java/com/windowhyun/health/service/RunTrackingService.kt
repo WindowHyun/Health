@@ -132,7 +132,9 @@ class RunTrackingService : LifecycleService() {
 
         startForegroundWithNotification(buildNotification(distanceText = "0.00km", durationText = "0:00"))
 
-        lifecycleScope.launch(taskFailureHandler) { runTracker.start(goal, interval, activeCourse.course.value) }
+        // 고른 코스는 이번 시작에서만 쓴다(시계 등 코스를 고르지 않은 시작에 지난번 코스가 붙지 않게 여기서 비운다).
+        val course = activeCourse.take()
+        lifecycleScope.launch(taskFailureHandler) { runTracker.start(goal, interval, course) }
 
         // 위치 수신이 끊기면(GPS 를 껐다 켬, 권한 화면을 다녀옴, 일시적인 오류) 포기하지 않고 다시 붙는다.
         // 끊긴 동안에는 15초 뒤 "GPS 신호 끊김" 이 화면과 알림에 나온다.

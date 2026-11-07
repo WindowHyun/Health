@@ -40,6 +40,8 @@ data class Run(
     val goalType: RunGoalType = RunGoalType.FREE,
     val goalValue: Double = 0.0,
     val memo: String? = null,
+    /** 따라간 코스 이름. 코스 없이 달렸으면 null. */
+    val courseName: String? = null,
     val laps: List<RunLap> = emptyList(),
     val route: List<RunPoint> = emptyList(),
 ) {

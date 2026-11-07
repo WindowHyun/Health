@@ -44,7 +44,7 @@ import com.windowhyun.health.data.local.entity.WorkoutSetEntity
         RunLocationEntity::class,
         CourseEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -124,6 +124,13 @@ abstract class HealthDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        /** v5 -> v6: 러닝에 따라간 코스 이름 칸. 기존 러닝은 코스 없음(NULL). */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE run ADD COLUMN courseName TEXT")
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
     }
 }

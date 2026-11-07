@@ -125,7 +125,28 @@ class RunSetupViewModel @Inject constructor(
         }
     }
 
-    fun selectCourse(id: Long?) = selection.update { it.copy(selectedCourseId = id) }
+    /**
+     * 코스를 고른다. 자유 러닝이면 "목표 거리" 를 코스 길이(0.5km 단위로 반올림)로 맞춰, 코스를 끝까지 달리면 목표도 채워지게 한다.
+     * 이미 목표를 정해 두었으면 건드리지 않는다.
+     */
+    fun selectCourse(id: Long?) {
+        // 고른 칩은 바로 표시한다. 코스 길이는 저장소에서 읽어 목표에 반영한다.
+        selection.update { it.copy(selectedCourseId = id) }
+        if (id == null) return
+        viewModelScope.launch {
+            val course = courseRepository.get(id) ?: return@launch
+            selection.update {
+                if (it.selectedCourseId == id && it.goalType == RunGoalType.FREE) {
+                    it.copy(
+                        goalType = RunGoalType.DISTANCE,
+                        goalDistanceKm = (Math.round(course.distanceMeters / 500.0) * 0.5).coerceIn(1.0, 100.0),
+                    )
+                } else {
+                    it
+                }
+            }
+        }
+    }
 
     fun deleteCourse(id: Long) {
         viewModelScope.launch { courseRepository.delete(id) }

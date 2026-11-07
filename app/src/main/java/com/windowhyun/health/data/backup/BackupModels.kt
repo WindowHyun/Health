@@ -52,6 +52,10 @@ data class BackupFile(
      * true 인데 [userTemplates] 가 null 이면 복원할 때 지금 가진 템플릿을 비운다. 옛 백업(false)은 지금 것을 그대로 둔다.
      */
     val hasUserTemplates: Boolean = false,
+    /** 저장해 둔 러닝 코스. */
+    val courses: List<BackupCourse> = emptyList(),
+    /** 이 백업이 코스 항목을 담고 있는가. 옛 백업(false)을 복원해도 지금 코스를 지우지 않는다. */
+    val hasCourses: Boolean = false,
 ) {
     companion object {
         /** 지금 쓰는 형식 버전. 필드를 지우거나 뜻을 바꿀 때만 올린다. */
@@ -171,6 +175,7 @@ data class BackupRun(
     val goalType: String = "FREE",
     val goalValue: Double = 0.0,
     val memo: String? = null,
+    val courseName: String? = null,
 )
 
 @Serializable
@@ -192,4 +197,13 @@ data class BackupRunLocation(
     val altitude: Double = 0.0,
     val timestamp: Long = 0,
     val isSegmentStart: Boolean = false,
+)
+
+@Serializable
+data class BackupCourse(
+    val id: Long = 0,
+    val name: String = "",
+    val createdAt: Long = 0,
+    /** "위도,경도;위도,경도" 형식(저장소와 같다). */
+    val points: String = "",
 )

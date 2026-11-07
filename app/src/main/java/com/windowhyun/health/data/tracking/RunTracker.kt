@@ -90,6 +90,7 @@ class RunTracker internal constructor(
     private var follower: CourseFollower? = null
     private var courseCueSent = false
     private var wasOffCourse = false
+    private var wasApproaching = false
 
     /**
      * 러닝을 시작한다. 이미 진행 중이면 아무것도 하지 않는다.
@@ -115,8 +116,9 @@ class RunTracker internal constructor(
             follower = course?.takeIf { it.points.size >= 2 }?.let { CourseFollower(it.points) }
             courseCueSent = false
             wasOffCourse = false
+            wasApproaching = false
 
-            val runId = runRepository.startRun(goal.type, goal.value)
+            val runId = runRepository.startRun(goal.type, goal.value, course?.takeIf { it.points.size >= 2 }?.name)
             _state.value = RunTrackingState(
                 status = RunStatus.TRACKING,
                 runId = runId,
@@ -232,6 +234,15 @@ class RunTracker internal constructor(
         if (accuracy != null && accuracy > COURSE_MAX_ACCURACY_METERS) return
         val guidance = follower.update(sample.latitude, sample.longitude)
         _state.update { it.copy(courseGuidance = guidance) }
+        if (guidance.approaching) {
+            wasApproaching = true
+            return
+        }
+        // 출발점으로 가다가 처음 코스에 들어선 순간에만 알린다(코스 위에서 시작했으면 알리지 않는다).
+        if (wasApproaching) {
+            wasApproaching = false
+            _cues.tryEmit(RunCue.CourseEntered)
+        }
         if (guidance.finished && !courseCueSent) {
             courseCueSent = true
             _cues.tryEmit(RunCue.CourseFinished)

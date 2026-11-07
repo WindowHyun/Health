@@ -45,7 +45,10 @@ fun CourseEditMap(
     points: List<CoursePoint>,
     /** 처음 보여 줄 중심. 바뀌면 그 자리로 옮긴다(현재 위치를 찾은 순간). */
     center: CoursePoint?,
+    /** 코스를 불러온 직후 전체가 보이게 맞출 점들. */
+    fit: List<CoursePoint>? = null,
     onAddPoint: (CoursePoint) -> Unit,
+    onRemovePoint: (Int) -> Unit,
     modifier: Modifier = Modifier,
     tileProvider: MapTileProviderBase? = null,
 ) {
@@ -54,6 +57,7 @@ fun CourseEditMap(
     val darkMap = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val outline = if (darkMap) 0xCC0B0D10.toInt() else 0xE6FFFFFF.toInt()
     val onAdd by rememberUpdatedState(onAddPoint)
+    val onRemove by rememberUpdatedState(onRemovePoint)
 
     val mapView = remember {
         initOsmdroid(context)
@@ -70,6 +74,9 @@ fun CourseEditMap(
     DisposableEffect(mapView) {
         mapView.onResume()
         onDispose { mapView.onPause(); mapView.onDetach() }
+    }
+    LaunchedEffect(fit) {
+        if (fit != null && fit.size >= 2) mapView.zoomToCourse(fit)
     }
     LaunchedEffect(center) {
         center?.let { mapView.controller.animateTo(GeoPoint(it.latitude, it.longitude)) }
@@ -88,7 +95,9 @@ fun CourseEditMap(
                 view.overlays.clear()
                 if (points.size >= 2) view.overlays.add(CourseOverlay(points, outline, view.resources.displayMetrics.density))
                 view.overlays.add(PointsOverlay(points, view.resources.displayMetrics.density))
-                view.overlays.add(TapOverlay { geo -> onAdd(CoursePoint(geo.latitude, geo.longitude)) })
+                view.overlays.add(
+                    TapOverlay(points, view.resources.displayMetrics.density, onAdd = { geo -> onAdd(CoursePoint(geo.latitude, geo.longitude)) }, onRemove = { onRemove(it) }),
+                )
                 view.invalidate()
             },
         )
@@ -101,12 +110,39 @@ fun CourseEditMap(
     }
 }
 
-/** 한 번 누르면 그 자리를 알린다. 끌기 · 두 번 누르기(확대) · 여러 손가락은 지도가 처리한다. */
-private class TapOverlay(private val onTap: (GeoPoint) -> Unit) : Overlay() {
+/**
+ * 한 번 누르면 새 점을 찍는다. 이미 찍은 점(약 24dp 안)을 누르면 그 점을 뺀다.
+ * 끌기 · 두 번 누르기(확대) · 여러 손가락은 지도가 처리한다.
+ */
+private class TapOverlay(
+    private val points: List<CoursePoint>,
+    private val density: Float,
+    private val onAdd: (GeoPoint) -> Unit,
+    private val onRemove: (Int) -> Unit,
+) : Overlay() {
+    private val pixel = Point()
+
     override fun onSingleTapConfirmed(e: MotionEvent, mapView: MapView): Boolean {
-        val geo = mapView.projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint
-        onTap(geo)
+        val projection = mapView.projection
+        val hit = HIT_RADIUS_DP * density
+        var nearest = -1
+        var nearestDistance = Float.MAX_VALUE
+        points.forEachIndexed { i, p ->
+            projection.toPixels(GeoPoint(p.latitude, p.longitude), pixel)
+            val dx = pixel.x - e.x
+            val dy = pixel.y - e.y
+            val d = kotlin.math.sqrt(dx * dx + dy * dy)
+            if (d <= hit && d < nearestDistance) {
+                nearest = i
+                nearestDistance = d
+            }
+        }
+        if (nearest >= 0) onRemove(nearest) else onAdd(projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint)
         return true
+    }
+
+    private companion object {
+        const val HIT_RADIUS_DP = 24f
     }
 }
 

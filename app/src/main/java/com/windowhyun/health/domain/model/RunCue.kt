@@ -38,4 +38,7 @@ sealed interface RunCue {
 
     /** 코스 끝에 도착했다. */
     data object CourseFinished : RunCue
+
+    /** 출발점으로 가던 중 코스에 들어섰다. 이때부터 코스 안내가 시작된다. */
+    data object CourseEntered : RunCue
 }

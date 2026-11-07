@@ -61,7 +61,8 @@ fun HealthNavHost(
 
         composable(Routes.RUNNING) {
             RunSetupScreen(
-                onCreateCourse = { navController.navigate(Routes.COURSE_EDIT) },
+                onCreateCourse = { navController.navigate(Routes.courseEdit()) },
+                onEditCourse = { id -> navController.navigate(Routes.courseEdit(id)) },
                 onRunStarted = {
                     navController.navigate(Routes.RUN_ACTIVE) {
                         launchSingleTop = true
@@ -70,7 +71,10 @@ fun HealthNavHost(
             )
         }
 
-        composable(Routes.COURSE_EDIT) {
+        composable(
+            route = "${Routes.COURSE_EDIT}?${Routes.ARG_COURSE_ID}={${Routes.ARG_COURSE_ID}}",
+            arguments = listOf(navArgument(Routes.ARG_COURSE_ID) { type = NavType.LongType; defaultValue = 0L }),
+        ) {
             CourseEditorScreen(onClose = { navController.popBackStack() })
         }
 

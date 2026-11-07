@@ -490,6 +490,7 @@ private fun CourseBanner(guidance: com.windowhyun.health.domain.model.CourseGuid
     val container = if (off) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceVariant
     val content = if (off) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurface
     val text = when {
+        guidance.approaching -> "코스 출발점까지 ${formatDistance(guidance.distanceToStartMeters, unit)}"
         guidance.finished -> "코스 완주 · 총 ${formatDistance(guidance.totalMeters, unit)}"
         off -> "코스를 벗어났어요 · ${guidance.offCourseMeters.toInt()}m 떨어짐"
         else -> "코스 ${formatDistance(guidance.remainingMeters, unit)} 남음 · ${(guidance.fraction * 100).toInt()}%"

@@ -42,6 +42,7 @@ fun RunEntity.toDomain(
     goalType = runCatching { RunGoalType.valueOf(goalType) }.getOrDefault(RunGoalType.FREE),
     goalValue = goalValue,
     memo = memo,
+    courseName = courseName,
     laps = laps.map { it.toDomain() },
     route = locations.map { it.toDomain() },
 )

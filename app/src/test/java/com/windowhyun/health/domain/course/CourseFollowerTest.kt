@@ -70,4 +70,30 @@ class CourseFollowerTest {
     @Test fun `length of a known leg`() {
         assertThat(CourseGeometry.distance(37.0, 127.0, 37.001, 127.0)).isWithin(1.0).of(111.2)
     }
+
+    @Test fun `far from the start is approaching not off course and reports distance to start`() {
+        val f = CourseFollower(east)
+        val g = f.update(latOff(1_000.0), lon(0.0))
+        assertThat(g.approaching).isTrue()
+        assertThat(g.offCourse).isFalse()
+        assertThat(g.distanceToStartMeters).isWithin(15.0).of(1_000.0)
+        assertThat(f.update(latOff(800.0), lon(0.0)).offCourse).isFalse()
+        assertThat(f.update(latOff(300.0), lon(0.0)).offCourse).isFalse()
+    }
+
+    @Test fun `once on the course the off course rules apply again`() {
+        val f = CourseFollower(east)
+        f.update(latOff(500.0), lon(0.0))
+        assertThat(f.update(latOff(10.0), lon(20.0)).approaching).isFalse()
+        f.update(latOff(80.0), lon(100.0))
+        assertThat(f.update(latOff(80.0), lon(110.0)).offCourse).isTrue()
+    }
+
+    @Test fun `joining the course in the middle also counts as entered`() {
+        val f = CourseFollower(east)
+        assertThat(f.update(latOff(300.0), lon(500.0)).approaching).isTrue()
+        val g = f.update(latOff(5.0), lon(500.0))
+        assertThat(g.approaching).isFalse()
+        assertThat(g.progressMeters).isWithin(8.0).of(500.0)
+    }
 }

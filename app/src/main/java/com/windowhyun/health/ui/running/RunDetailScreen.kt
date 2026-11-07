@@ -119,6 +119,10 @@ fun RunDetailScreen(
                 RunStatGrid(run = run, distanceUnit = state.settings.distanceUnit)
             }
 
+            if (run.courseName != null) {
+                item { CourseRunLine(run, state.courseStats) }
+            }
+
             state.heartRate?.let { heartRate ->
                 item { HeartRateLine(heartRate) }
             }
@@ -128,6 +132,16 @@ fun RunDetailScreen(
             }
             item {
                 RunRouteSection(run = run)
+            }
+            if (run.route.size >= 2) {
+                item {
+                    Column {
+                        androidx.compose.material3.TextButton(onClick = viewModel::saveRouteAsCourse) { Text("이 경로를 코스로 저장") }
+                        state.courseSaveMessage?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
 
             if (run.laps.isNotEmpty()) {

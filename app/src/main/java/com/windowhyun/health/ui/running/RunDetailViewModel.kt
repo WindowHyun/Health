@@ -35,6 +35,10 @@ data class RunDetailUiState(
     val deleted: Boolean = false,
     /** Health Connect 에서 가져온 이 러닝 시간대의 심박. 허용하지 않았거나 기록이 없으면 null. */
     val heartRate: HeartRateSummary? = null,
+    /** 코스를 따라 달린 러닝이면 같은 코스의 횟수 · 최고 기록. */
+    val courseStats: com.windowhyun.health.domain.model.CourseRunStats? = null,
+    /** "코스로 저장" 결과 안내(성공 · 실패 모두). */
+    val courseSaveMessage: String? = null,
 )
 
 /**
@@ -53,6 +57,7 @@ class RunDetailViewModel @Inject constructor(
      */
     @ApplicationScope private val appScope: CoroutineScope,
     private val healthConnect: HealthConnectGateway = UnavailableHealthConnect,
+    private val courseRepository: com.windowhyun.health.domain.repository.CourseRepository = com.windowhyun.health.data.repository.NoCourseRepository,
 ) : ViewModel() {
 
     private val runId: Long = savedStateHandle[Routes.ARG_RUN_ID] ?: 0L
@@ -100,6 +105,7 @@ class RunDetailViewModel @Inject constructor(
                 memoDirty = false,
                 loading = false,
                 heartRate = heartRate,
+                courseStats = run?.let { runRepository.courseStats(it) },
                 // 기록이 사라졌다면(다른 화면에서 삭제) 머무를 이유가 없다.
                 deleted = run == null,
             )
@@ -133,6 +139,28 @@ class RunDetailViewModel @Inject constructor(
     /** 뒤로 가기로 화면이 사라질 때의 마지막 기회. */
     override fun onCleared() {
         saveMemoIfNeeded()
+    }
+
+    /** 이 러닝의 경로를 점 수를 줄여 코스로 저장한다. 다음에 같은 길을 따라 달릴 수 있다. */
+    fun saveRouteAsCourse() {
+        val run = local.value.run ?: return
+        viewModelScope.launch {
+            val message = try {
+                val points = com.windowhyun.health.domain.course.CourseSimplifier.fromRoute(run.route)
+                if (points.size < 2) {
+                    "경로가 너무 짧아 코스로 저장할 수 없어요."
+                } else {
+                    val name = run.courseName ?: "${run.date.monthValue}/${run.date.dayOfMonth} 러닝 코스"
+                    courseRepository.save(com.windowhyun.health.domain.model.Course(name = name, points = points))
+                    "코스로 저장했어요. 러닝 탭에서 고를 수 있어요."
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.message ?: "코스를 저장하지 못했어요."
+            }
+            local.update { it.copy(courseSaveMessage = message) }
+        }
     }
 
     fun delete() {
