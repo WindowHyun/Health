@@ -52,6 +52,10 @@ fun CourseEditMap(
     modifier: Modifier = Modifier,
     tileProvider: MapTileProviderBase? = null,
 ) {
+    if (LocalMapStyleMode.current == com.windowhyun.health.domain.model.MapStyleMode.MODERN && tileProvider == null) {
+        com.windowhyun.health.ui.running.maplibre.MapLibreEditMap(points, center, fit, onAddPoint, onRemovePoint, modifier)
+        return
+    }
     val context = LocalContext.current
     if (LocalInspectionMode.current) return
     val darkMap = MaterialTheme.colorScheme.background.luminance() < 0.5f

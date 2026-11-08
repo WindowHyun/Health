@@ -113,6 +113,10 @@ fun HealthRoot(
     content: @Composable () -> Unit,
 ) {
     com.windowhyun.health.core.designsystem.theme.HealthTheme(themeMode = settings.themeMode) {
-        PipSpaceHost(settings.pipSpace, content = content)
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.windowhyun.health.ui.running.LocalMapStyleMode provides settings.mapStyle,
+        ) {
+            PipSpaceHost(settings.pipSpace, content = content)
+        }
     }
 }

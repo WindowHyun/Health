@@ -36,6 +36,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val AUTO_LAP_METERS = intPreferencesKey("auto_lap_meters")
         val BODY_WEIGHT_KG = doublePreferencesKey("body_weight_kg")
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val MAP_STYLE = stringPreferencesKey("map_style")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val RUN_VIBRATION_CUES = booleanPreferencesKey("run_vibration_cues")
         val RUN_VOICE_CUES = booleanPreferencesKey("run_voice_cues")
@@ -79,6 +80,9 @@ class SettingsRepositoryImpl @Inject constructor(
             themeMode = prefs[Keys.THEME_MODE]?.let { name ->
                 runCatching { ThemeMode.valueOf(name) }.getOrNull()
             } ?: defaults.themeMode,
+            mapStyle = prefs[Keys.MAP_STYLE]?.let { name ->
+                runCatching { com.windowhyun.health.domain.model.MapStyleMode.valueOf(name) }.getOrNull()
+            } ?: defaults.mapStyle,
             keepScreenOnDuringWorkout = prefs[Keys.KEEP_SCREEN_ON] ?: defaults.keepScreenOnDuringWorkout,
             runVibrationCues = prefs[Keys.RUN_VIBRATION_CUES] ?: defaults.runVibrationCues,
             // 새로 설치한 사람은 기본으로 켜지만, 이 설정이 생기기 전부터 쓰던 사람(저장된 값은 있는데 이 키만 없다)은
@@ -131,6 +135,7 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.AUTO_LAP_METERS] = updated.autoLapMeters
             prefs[Keys.BODY_WEIGHT_KG] = updated.bodyWeightKg
             prefs[Keys.THEME_MODE] = updated.themeMode.name
+            prefs[Keys.MAP_STYLE] = updated.mapStyle.name
             prefs[Keys.KEEP_SCREEN_ON] = updated.keepScreenOnDuringWorkout
             prefs[Keys.RUN_VIBRATION_CUES] = updated.runVibrationCues
             prefs[Keys.RUN_VOICE_CUES] = updated.runVoiceCues

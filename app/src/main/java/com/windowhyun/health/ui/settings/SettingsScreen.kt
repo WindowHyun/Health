@@ -133,6 +133,21 @@ fun SettingsScreen(
             item { SettingSectionTitle("러닝") }
 
             item {
+                ChipRow(
+                    title = "러닝 지도",
+                    options = com.windowhyun.health.domain.model.MapStyleMode.entries.map { it to it.label },
+                    selected = settings.mapStyle,
+                    onSelect = viewModel::setMapStyle,
+                )
+                Text(
+                    text = "새 지도는 연한 바탕에 경로선이 돋보이는 깔끔한 지도입니다(OpenFreeMap, 인터넷 연결 필요). 이상하면 '기본'으로 되돌리세요.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+
+            item {
                 SwitchRow(
                     title = "자동 일시정지",
                     subtitle = "멈추면 시간도 멈추고, 다시 움직이면 이어서 기록합니다.",

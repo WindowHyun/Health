@@ -46,6 +46,8 @@ class SettingsViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
 
+    fun setMapStyle(mode: com.windowhyun.health.domain.model.MapStyleMode) = update { it.copy(mapStyle = mode) }
+
     fun setKeepScreenOn(enabled: Boolean) = update { it.copy(keepScreenOnDuringWorkout = enabled) }
 
     fun setRunVibrationCues(enabled: Boolean) = update { it.copy(runVibrationCues = enabled) }

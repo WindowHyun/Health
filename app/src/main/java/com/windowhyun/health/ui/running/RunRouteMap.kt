@@ -65,6 +65,11 @@ fun RunRouteMap(
     /** 따라가는 코스. 점선으로 그려 달린 경로와 구분한다. */
     course: com.windowhyun.health.domain.model.Course? = null,
 ) {
+    // 설정에서 "새 지도" 를 골랐으면 MapLibre(OpenFreeMap)로 그린다. 타일 공급자를 직접 넣은 경우(화면 캡처 테스트)는 예전 지도를 쓴다.
+    if (LocalMapStyleMode.current == com.windowhyun.health.domain.model.MapStyleMode.MODERN && tileProvider == null) {
+        com.windowhyun.health.ui.running.maplibre.MapLibreRouteMap(route, course, followLatest, modifier)
+        return
+    }
     val context = LocalContext.current
     if (LocalInspectionMode.current) return
 

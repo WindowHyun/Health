@@ -44,11 +44,17 @@ android {
         applicationId = "com.windowhyun.health"
         minSdk = 26
         targetSdk = 35
-        versionCode = 41
-        versionName = "0.16.2"
+        versionCode = 42
+        versionName = "0.17.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+
+        // 새 지도(MapLibre)의 네이티브 라이브러리는 CPU 종류마다 따로 들어 있어 4종을 다 넣으면 앱이 50MB 를 넘는다.
+        // 실제 폰은 arm64(최근 기기)와 armeabi-v7a(오래된 32비트 기기)뿐이라 x86 계열(에뮬레이터)은 뺀다.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
@@ -171,6 +177,8 @@ dependencies {
 
     // 지도. API 키가 필요 없고 타일을 기기에 캐시해 둔다.
     implementation(libs.osmdroid.android)
+    // 새 지도(OpenFreeMap 벡터 타일). 설정에서 고를 때만 쓰인다.
+    implementation(libs.maplibre.android)
 
     // Phase 4 에서 사용.
     implementation(libs.health.connect.client)

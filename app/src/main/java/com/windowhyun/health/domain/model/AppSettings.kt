@@ -11,6 +11,15 @@ enum class ThemeMode(val label: String) {
 }
 
 /** PiP(작은 창으로 띄운 유튜브 등)가 뜨는 쪽. 앱 화면의 이 끝에 빈 자리를 만든다. */
+/** 지도를 그리는 방식. */
+enum class MapStyleMode(val label: String) {
+    /** OpenStreetMap 기본 타일(osmdroid). 안정적이고 오프라인 캐시가 쌓인다. */
+    CLASSIC("기본"),
+
+    /** OpenFreeMap 벡터 지도(MapLibre). 연한 바탕에 경로선이 돋보이는 깔끔한 모양. */
+    MODERN("새 지도"),
+}
+
 enum class PipSpacePosition(val label: String) {
     TOP("위"),
     BOTTOM("아래"),
@@ -70,6 +79,8 @@ data class AppSettings(
     /** 러닝 칼로리 추정에 쓰는 체중(kg). */
     val bodyWeightKg: Double = 70.0,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** 러닝 지도 방식. 새 지도가 마음에 들지 않으면 기본으로 되돌린다. */
+    val mapStyle: MapStyleMode = MapStyleMode.CLASSIC,
     val keepScreenOnDuringWorkout: Boolean = true,
     /** 러닝 중 1km 구간 · 목표 달성 · 자동 일시정지를 진동으로 알린다. */
     val runVibrationCues: Boolean = true,
