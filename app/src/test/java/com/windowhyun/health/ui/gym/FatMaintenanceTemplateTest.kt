@@ -92,7 +92,7 @@ class FatMaintenanceTemplateTest {
             "인클라인 덤벨 프레스" to 3,
             "케이블 크로스오버" to 3,
             "어시스티드 딥스" to 3,
-            "와이드 푸시업" to 1,
+            "와이드 푸시업" to 2,
         ).inOrder()
     }
 
@@ -110,16 +110,18 @@ class FatMaintenanceTemplateTest {
     }
 
     @Test
-    fun `leg and shoulder day pairs the romanian deadlift with the lateral raise`() = runTest(dispatcher) {
+    fun `leg and shoulder day keeps the heavy hinge alone and pairs the lateral raise with the calf raise`() = runTest(dispatcher) {
         val legs = applied().getValue("체지방 유지 · 하체 + 어깨")
 
         assertThat(legs.items.map { it.exercise.name }).containsExactly(
-            "스쿼트", "오버헤드 프레스", "루마니안 데드리프트", "사이드 레터럴 레이즈", "레그프레스", "카프레이즈",
+            "스쿼트", "오버헤드 프레스", "루마니안 데드리프트", "레그 컬", "사이드 레터럴 레이즈", "카프레이즈",
         ).inOrder()
         val group = legs.items.associate { it.exercise.name to it.supersetGroup }
-        assertThat(group.getValue("루마니안 데드리프트")).isNotEqualTo(SupersetGroups.NONE)
-        assertThat(group.getValue("루마니안 데드리프트")).isEqualTo(group.getValue("사이드 레터럴 레이즈"))
-        listOf("스쿼트", "오버헤드 프레스", "레그프레스", "카프레이즈").forEach {
+        // 고중량 힌지(RPE 8~9)는 다른 운동과 묶지 않는다.
+        assertThat(group.getValue("루마니안 데드리프트")).isEqualTo(SupersetGroups.NONE)
+        assertThat(group.getValue("사이드 레터럴 레이즈")).isNotEqualTo(SupersetGroups.NONE)
+        assertThat(group.getValue("사이드 레터럴 레이즈")).isEqualTo(group.getValue("카프레이즈"))
+        listOf("스쿼트", "오버헤드 프레스", "레그 컬").forEach {
             assertThat(group.getValue(it)).isEqualTo(SupersetGroups.NONE)
         }
     }
@@ -155,8 +157,8 @@ class FatMaintenanceTemplateTest {
         assertThat(rest("체지방 유지 · 등", "페이스풀")).isEqualTo(60)
         assertThat(rest("체지방 유지 · 하체 + 어깨", "스쿼트")).isEqualTo(150)
         assertThat(rest("체지방 유지 · 하체 + 어깨", "카프레이즈")).isEqualTo(45)
-        // 슈퍼셋은 묶음의 마지막 종목을 마친 뒤에 쉬므로 그 값이 쓰인다.
-        assertThat(rest("체지방 유지 · 하체 + 어깨", "사이드 레터럴 레이즈")).isEqualTo(90)
+        // 슈퍼셋은 묶음의 마지막 종목을 마친 뒤에 쉬므로 그 값(카프레이즈 45초)이 쓰인다.
+        assertThat(rest("체지방 유지 · 하체 + 어깨", "카프레이즈")).isEqualTo(45)
         assertThat(rest("체지방 유지 · 팔 + 복근 (토)", "케이블 푸시다운")).isEqualTo(60)
     }
 
@@ -181,13 +183,19 @@ class FatMaintenanceTemplateTest {
         assertThat(all.getValue("체지방 유지 · 팔 + 복근 (토)").scheduledDays).containsExactly(DayOfWeek.SATURDAY)
     }
 
-    /** 다른 템플릿은 요일을 정하지 않는다(홈의 오늘의 루틴을 마음대로 채우지 않는다). */
+    /** 요일을 정한 템플릿은 홈의 오늘의 루틴에 나오고, 번갈아 하는 A/B 템플릿이나 러닝에 맞춰야 하는 템플릿은 정하지 않는다. */
     @Test
-    fun `other templates do not schedule days`() = runTest(dispatcher) {
+    fun `scheduling follows the program shape`() = runTest(dispatcher) {
         viewModel.applyTemplate(RoutineTemplates.all.first { it.id == "ppl" })
         viewModel.applied.first()
+        assertThat(routines.observeRoutines().first().flatMap { it.scheduledDays })
+            .containsExactly(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
 
-        routines.observeRoutines().first().forEach { assertThat(it.scheduledDays).isEmpty() }
+        listOf("5x5", "starting_strength", "runner_strength").forEach { id ->
+            RoutineTemplates.all.first { it.id == id }.days.forEach {
+                assertWithMessage("$id / ${it.routineName}").that(it.scheduledDays).isEmpty()
+            }
+        }
     }
 
     // ----- 계획한 시간 -----
@@ -244,14 +252,12 @@ class FatMaintenanceTemplateTest {
         }
     }
 
-    /** 이름난 프로그램 템플릿이 슈퍼셋이나 요일을 몰래 얻지 않았는지(이번에 바꾼 것은 새 템플릿뿐). */
+    /** 슈퍼셋은 이번에 짠 두 템플릿에만 쓴다(이름난 프로그램은 원래 구성을 지킨다). */
     @Test
-    fun `only the two newest templates use supersets rest overrides and schedules`() {
-        val withExtras = setOf("fat_maintenance_4day", "split_4day_lower_upper_back")
-        RoutineTemplates.all.filter { it.id !in withExtras }.flatMap { it.days }.forEach { day ->
+    fun `only the two newest templates use supersets`() {
+        val withSupersets = setOf("fat_maintenance_4day", "split_4day_lower_upper_back")
+        RoutineTemplates.all.filter { it.id !in withSupersets }.flatMap { it.days }.forEach { day ->
             assertWithMessage(day.routineName).that(day.supersets).isEmpty()
-            assertWithMessage(day.routineName).that(day.restSeconds).isEmpty()
-            assertWithMessage(day.routineName).that(day.scheduledDays).isEmpty()
         }
     }
 
