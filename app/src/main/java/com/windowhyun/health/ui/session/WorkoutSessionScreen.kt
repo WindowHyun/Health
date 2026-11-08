@@ -26,6 +26,14 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.os.Build
+import android.content.pm.PackageManager
+import android.Manifest
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -87,6 +95,21 @@ fun WorkoutSessionScreen(
     DisposableEffect(keepScreenOn) {
         view.keepScreenOn = keepScreenOn
         onDispose { view.keepScreenOn = false }
+    }
+
+    // Android 13 이상에서는 알림 권한이 있어야 휴식 종료 알림이 뜬다. 헬스만 쓰는 사람은 러닝 화면을 거치지 않으므로
+    // 운동 화면에서 한 번만 묻는다(거절해도 진동은 울리고, 다시 묻지 않는다).
+    val context = LocalContext.current
+    val askNotification = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val settingsLoaded = state.workout != null
+    LaunchedEffect(settingsLoaded) {
+        if (!settingsLoaded) return@LaunchedEffect
+        val granted = Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (shouldAskNotificationPermission(Build.VERSION.SDK_INT, granted, state.settings.notificationPromptShown)) {
+            viewModel.markNotificationPrompted()
+            askNotification.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -235,16 +258,27 @@ fun WorkoutSessionScreen(
     if (showFinishDialog) {
         val exercises = workout?.exercises.orEmpty()
         val completed = exercises.sumOf { it.completedSets.size }
-        val prompt = finishPrompt(completed, incompleteSets = exercises.sumOf { it.sets.size } - completed)
-        ConfirmDialog(
-            title = prompt.title,
-            message = prompt.message,
-            confirmLabel = prompt.confirmLabel,
-            onConfirm = {
-                showFinishDialog = false
-                viewModel.finishWorkout()
+        val unchecked = exercises.flatMap { it.sets }.count { !it.completed && it.hasValues }
+        val prompt = finishPrompt(completed, incompleteSets = exercises.sumOf { it.sets.size } - completed, uncheckedWithValues = unchecked)
+        AlertDialog(
+            onDismissRequest = { showFinishDialog = false },
+            title = { Text(prompt.title) },
+            text = { Text(prompt.message) },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    prompt.completeUncheckedLabel?.let { label ->
+                        TextButton(onClick = {
+                            showFinishDialog = false
+                            viewModel.finishWorkout(completeUnchecked = true)
+                        }) { Text(label) }
+                    }
+                    TextButton(onClick = {
+                        showFinishDialog = false
+                        viewModel.finishWorkout()
+                    }) { Text(prompt.confirmLabel) }
+                }
             },
-            onDismiss = { showFinishDialog = false },
+            dismissButton = { TextButton(onClick = { showFinishDialog = false }) { Text("취소") } },
         )
     }
 

@@ -302,13 +302,23 @@ private inline fun OutputStream.csvWriter(body: ((List<String>) -> Unit) -> Unit
     }
 }
 
-/** 쉼표·따옴표·줄바꿈이 들어간 값은 따옴표로 감싸고, 안의 따옴표는 두 번 쓴다. */
-private fun String.csvEscaped(): String =
-    if (any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
-        "\"" + replace("\"", "\"\"") + "\""
+/** 순수한 숫자(음수 · 소수 포함). 이것은 수식이 아니므로 그대로 둔다. */
+private val CSV_NUMBER = Regex("^-?\\d+(\\.\\d+)?$")
+
+/**
+ * 쉼표·따옴표·줄바꿈이 들어간 값은 따옴표로 감싸고, 안의 따옴표는 두 번 쓴다.
+ *
+ * 값이 `=` `+` `-` `@`(또는 탭) 로 시작하면 엑셀 · 시트가 수식으로 실행할 수 있다(CSV 수식 주입).
+ * 가져온 템플릿의 종목 이름이나 메모가 그런 글이면 앞에 작은따옴표를 붙여 글자로만 보이게 한다. 숫자는 건드리지 않는다.
+ */
+internal fun String.csvEscaped(): String {
+    val safe = if (isNotEmpty() && this[0] in "=+-@\t" && !CSV_NUMBER.matches(this)) "'$this" else this
+    return if (safe.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+        "\"" + safe.replace("\"", "\"\"") + "\""
     } else {
-        this
+        safe
     }
+}
 
 // ----- 엔티티 <-> 백업 모델 -----
 

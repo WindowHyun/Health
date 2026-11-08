@@ -41,4 +41,37 @@ class SessionPromptsTest {
         assertThat(text).contains("'벤치프레스'")
         assertThat(text).contains("완료한 3세트")
     }
+
+    @Test
+    fun `unchecked sets with values offer to be saved too`() {
+        val prompt = finishPrompt(completedSets = 9, incompleteSets = 3, uncheckedWithValues = 2)
+
+        assertThat(prompt.completeUncheckedLabel).isEqualTo("체크 안 한 2세트도 완료로 저장하고 종료")
+        // 안내 글은 그대로다(미리 채운 값 때문에 늘 뜨는 문장으로 화면을 어지럽히지 않는다).
+        assertThat(prompt.message).isEqualTo("완료한 9세트는 저장되고, 체크하지 않은 3세트는 저장되지 않습니다.")
+    }
+
+    @Test
+    fun `no such option when nothing unchecked has values`() {
+        assertThat(finishPrompt(9, 3, uncheckedWithValues = 0).completeUncheckedLabel).isNull()
+        assertThat(finishPrompt(12, 0).completeUncheckedLabel).isNull()
+    }
+
+    /** 한 세트도 체크하지 않았다면 미리 채워진 값을 완료로 바꾸는 선택지를 주지 않는다(하지 않은 운동이 기록되면 안 된다). */
+    @Test
+    fun `the discard prompt never offers to turn pre filled sets into records`() {
+        val prompt = finishPrompt(completedSets = 0, incompleteSets = 4, uncheckedWithValues = 4)
+
+        assertThat(prompt.confirmLabel).isEqualTo("버리고 종료")
+        assertThat(prompt.completeUncheckedLabel).isNull()
+    }
+
+    @Test
+    fun `notification permission is asked once on Android 13 or newer`() {
+        assertThat(shouldAskNotificationPermission(sdkInt = 34, granted = false, alreadyAsked = false)).isTrue()
+        assertThat(shouldAskNotificationPermission(sdkInt = 34, granted = true, alreadyAsked = false)).isFalse()
+        assertThat(shouldAskNotificationPermission(sdkInt = 34, granted = false, alreadyAsked = true)).isFalse()
+        assertThat(shouldAskNotificationPermission(sdkInt = 32, granted = false, alreadyAsked = false)).isFalse()
+        assertThat(shouldAskNotificationPermission(sdkInt = 33, granted = false, alreadyAsked = false)).isTrue()
+    }
 }

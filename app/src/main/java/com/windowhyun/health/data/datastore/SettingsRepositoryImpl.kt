@@ -54,6 +54,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val LAST_AUTO_BACKUP_AT = longPreferencesKey("last_auto_backup_at")
         val LAST_AUTO_BACKUP_ERROR = stringPreferencesKey("last_auto_backup_error")
         val CLOUD_AUTO_BACKUP = booleanPreferencesKey("cloud_auto_backup")
+        val NOTIFICATION_PROMPT_SHOWN = booleanPreferencesKey("notification_prompt_shown")
         val LAST_CLOUD_BACKUP_AT = longPreferencesKey("last_cloud_backup_at")
         val LAST_CLOUD_BACKUP_ERROR = stringPreferencesKey("last_cloud_backup_error")
     }
@@ -100,6 +101,7 @@ class SettingsRepositoryImpl @Inject constructor(
             lastAutoBackupAt = prefs[Keys.LAST_AUTO_BACKUP_AT] ?: defaults.lastAutoBackupAt,
             lastAutoBackupError = prefs[Keys.LAST_AUTO_BACKUP_ERROR],
             cloudAutoBackup = prefs[Keys.CLOUD_AUTO_BACKUP] ?: defaults.cloudAutoBackup,
+            notificationPromptShown = prefs[Keys.NOTIFICATION_PROMPT_SHOWN] ?: defaults.notificationPromptShown,
             lastCloudBackupAt = prefs[Keys.LAST_CLOUD_BACKUP_AT] ?: defaults.lastCloudBackupAt,
             lastCloudBackupError = prefs[Keys.LAST_CLOUD_BACKUP_ERROR],
         )
@@ -147,6 +149,7 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[Keys.LAST_AUTO_BACKUP_AT] = updated.lastAutoBackupAt
             prefs.putOrRemove(Keys.LAST_AUTO_BACKUP_ERROR, updated.lastAutoBackupError)
             prefs[Keys.CLOUD_AUTO_BACKUP] = updated.cloudAutoBackup
+            prefs[Keys.NOTIFICATION_PROMPT_SHOWN] = updated.notificationPromptShown
             prefs[Keys.LAST_CLOUD_BACKUP_AT] = updated.lastCloudBackupAt
             prefs.putOrRemove(Keys.LAST_CLOUD_BACKUP_ERROR, updated.lastCloudBackupError)
         }

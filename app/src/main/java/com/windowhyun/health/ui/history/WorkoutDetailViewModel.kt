@@ -90,8 +90,32 @@ class WorkoutDetailViewModel @Inject constructor(
         }
     }
 
+    /** 세트를 지웠다는 신호. 화면이 "실행 취소" 안내를 잠깐 보여 준다. */
+    private val _setRemoved = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val setRemoved: kotlinx.coroutines.flow.SharedFlow<Unit> = _setRemoved
+
+    /** 방금 지운 세트(어느 종목의 어느 세트였는지 포함). */
+    private var lastRemovedSet: Pair<Long, WorkoutSet>? = null
+
     fun deleteSet(setId: Long) {
-        viewModelScope.launch { workoutRepository.removeSet(setId) }
+        viewModelScope.launch {
+            // 지우기 전에 저장된 모습을 읽어 둔다.
+            val owner = workoutRepository.getWorkout(workoutId)?.exercises
+                ?.firstOrNull { record -> record.sets.any { it.id == setId } }
+            val set = owner?.sets?.firstOrNull { it.id == setId }
+            workoutRepository.removeSet(setId)
+            if (owner != null && set != null) {
+                lastRemovedSet = owner.id to set
+                _setRemoved.emit(Unit)
+            }
+        }
+    }
+
+    /** 잘못 지운 세트를 되살린다. */
+    fun undoDeleteSet() {
+        val (workoutExerciseId, set) = lastRemovedSet ?: return
+        lastRemovedSet = null
+        viewModelScope.launch { workoutRepository.restoreSet(workoutExerciseId, set) }
     }
 
     fun deleteWorkout() {

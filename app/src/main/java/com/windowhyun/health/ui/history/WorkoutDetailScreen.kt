@@ -64,7 +64,21 @@ fun WorkoutDetailScreen(
         if (state.deleted) onBack()
     }
 
+    val snackbarHost = remember { androidx.compose.material3.SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        viewModel.setRemoved.collect {
+            snackbarHost.currentSnackbarData?.dismiss()
+            val result = snackbarHost.showSnackbar(
+                message = "세트를 삭제했어요",
+                actionLabel = "실행 취소",
+                duration = androidx.compose.material3.SnackbarDuration.Long,
+            )
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) viewModel.undoDeleteSet()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 title = { Text(workout?.displayName ?: "운동 기록") },

@@ -52,6 +52,9 @@ data class WorkoutSet(
     val durationSeconds: Int = 0,
     val setType: SetType = SetType.NORMAL,
 ) {
+    /** 무게 · 횟수 · 시간 중 하나라도 들어 있는가. 비어 있는 미완료 세트는 종료할 때 버려도 잃는 것이 없다. */
+    val hasValues: Boolean get() = weightKg > 0 || reps > 0 || durationSeconds > 0
+
     /** 집계에 넣는 세트인가. 워밍업은 뺀다. */
     val counts: Boolean get() = completed && setType.countsTowardVolume
 

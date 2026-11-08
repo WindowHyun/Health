@@ -156,6 +156,7 @@ fun RoutineEditScreen(
                     onMoveDown = { viewModel.moveItem(index, index + 1) },
                     onRemove = { viewModel.removeItem(index) },
                     onSetsChange = { delta -> viewModel.changeSets(index, delta) },
+                    defaultRestSeconds = state.defaultRestSeconds,
                     onRestChange = { rest -> viewModel.changeRestSeconds(index, rest) },
                 )
             }
@@ -203,6 +204,7 @@ private fun RoutineItemCard(
     onMoveDown: () -> Unit,
     onRemove: () -> Unit,
     onSetsChange: (Int) -> Unit,
+    defaultRestSeconds: Int,
     onRestChange: (Int?) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -280,16 +282,16 @@ private fun RoutineItemCard(
                 Column {
                     Text("휴식시간", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        text = item.restSeconds?.let { "${it}초" } ?: "앱 기본값 사용",
+                        text = item.restSeconds?.let { "${it}초" } ?: "앱 기본값 사용 (${defaultRestSeconds}초)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { onRestChange((item.restSeconds ?: 60) - 15) }) {
+                    IconButton(onClick = { onRestChange(((item.restSeconds ?: defaultRestSeconds) - 15).coerceAtLeast(REST_MIN)) }) {
                         Icon(Icons.Filled.Remove, contentDescription = "휴식 줄이기")
                     }
-                    IconButton(onClick = { onRestChange((item.restSeconds ?: 60) + 15) }) {
+                    IconButton(onClick = { onRestChange(((item.restSeconds ?: defaultRestSeconds) + 15).coerceAtMost(REST_MAX)) }) {
                         Icon(Icons.Filled.Add, contentDescription = "휴식 늘리기")
                     }
                     if (item.restSeconds != null) {
@@ -302,3 +304,7 @@ private fun RoutineItemCard(
         }
     }
 }
+
+/** 루틴 휴식은 0~600초(0 은 쉬지 않음). */
+private const val REST_MIN = 0
+private const val REST_MAX = 600

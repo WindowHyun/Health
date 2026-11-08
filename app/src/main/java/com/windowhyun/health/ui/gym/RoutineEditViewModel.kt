@@ -33,6 +33,8 @@ data class RoutineEditUiState(
     val items: List<RoutineItem> = emptyList(),
     val saving: Boolean = false,
     val saved: Boolean = false,
+    /** 앱 설정의 기본 휴식. "앱 기본값 사용" 인 종목의 ± 가 이 값에서 출발한다. */
+    val defaultRestSeconds: Int = 60,
 ) {
     val isNew: Boolean get() = routineId == 0L
     val canSave: Boolean get() = name.isNotBlank() && items.isNotEmpty() && !saving && !saved
@@ -47,12 +49,22 @@ class RoutineEditViewModel @Inject constructor(
     private val routineRepository: RoutineRepository,
     private val exerciseRepository: ExerciseRepository,
     savedStateHandle: SavedStateHandle,
+    settingsRepository: com.windowhyun.health.domain.repository.SettingsRepository? = null,
 ) : ViewModel() {
 
     private val routineId: Long = savedStateHandle[Routes.ARG_ROUTINE_ID] ?: 0L
 
     private val _uiState = MutableStateFlow(RoutineEditUiState(routineId = routineId))
     val uiState: StateFlow<RoutineEditUiState> = _uiState.asStateFlow()
+
+    init {
+        // 설정의 기본 휴식을 따라간다(설정을 바꾸면 곧바로 반영).
+        settingsRepository?.let { repo ->
+            viewModelScope.launch {
+                repo.settings.collect { s -> _uiState.update { it.copy(defaultRestSeconds = s.defaultRestSeconds) } }
+            }
+        }
+    }
 
     private val baseExerciseManager = RepositoryExerciseManager(exerciseRepository)
 

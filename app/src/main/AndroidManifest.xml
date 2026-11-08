@@ -25,8 +25,9 @@
 
     <!--
         지도 타일 내려받기.
-        기록 자체는 전부 기기 안에 저장되고, 네트워크는 OpenStreetMap 타일을
-        받는 데에만 쓴다. 받은 타일은 캐시되어 다음부터는 오프라인에서도 보인다.
+        기록 자체는 전부 기기 안에 저장된다. 네트워크는 OpenStreetMap 타일을 받는 데,
+        그리고 사용자가 직접 켠 경우에만 구글 로그인 · 클라우드 백업(Firebase)에 쓴다. 받은 타일은 캐시되어
+        다음부터는 오프라인에서도 보인다.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

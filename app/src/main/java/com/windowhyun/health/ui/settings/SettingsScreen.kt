@@ -378,6 +378,7 @@ private fun openHealthConnectInStore(context: android.content.Context) {
 private fun DataSection(viewModel: BackupViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+    var confirmSnapshotRestore by remember { mutableStateOf(false) }
 
     val createBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -412,7 +413,7 @@ private fun DataSection(viewModel: BackupViewModel) {
         )
         ActionRow(
             title = "백업 파일 만들기",
-            subtitle = "모든 기록과 설정을 JSON 파일 하나로 저장합니다.",
+            subtitle = "모든 기록과 설정을 JSON 파일 하나로 저장합니다. GPS 경로와 메모가 그대로 들어 있으니 보관 위치에 주의하세요.",
             enabled = !state.working,
             onClick = { createBackup.launch(viewModel.backupFileName()) },
         )
@@ -422,6 +423,14 @@ private fun DataSection(viewModel: BackupViewModel) {
             enabled = !state.working,
             onClick = { openBackup.launch(arrayOf("*/*")) },
         )
+        state.snapshotAt?.let { at ->
+            ActionRow(
+                title = "복원 전으로 되돌리기",
+                subtitle = "마지막 복원 직전의 기록(${formatBackupTime(at)} 보관)으로 다시 바꿉니다.",
+                enabled = !state.working,
+                onClick = { confirmSnapshotRestore = true },
+            )
+        }
         ActionRow(
             title = "헬스 기록 CSV 내보내기",
             subtitle = "엑셀이나 스프레드시트에서 볼 수 있습니다.",
@@ -447,11 +456,25 @@ private fun DataSection(viewModel: BackupViewModel) {
         }
     }
 
+    if (confirmSnapshotRestore) {
+        ConfirmDialog(
+            title = "복원 전 기록으로 되돌릴까요?",
+            message = "지금 기록이 모두 지워지고 복원 직전의 기록으로 바뀝니다.",
+            confirmLabel = "되돌리기",
+            onConfirm = {
+                confirmSnapshotRestore = false
+                viewModel.restoreSnapshot()
+            },
+            onDismiss = { confirmSnapshotRestore = false },
+        )
+    }
+
     pendingRestoreUri?.let { uri ->
         ConfirmDialog(
             title = "지금 기록을 모두 바꿀까요?",
             message = "복원하면 이 기기에 있는 운동·러닝·루틴 기록이 모두 지워지고 " +
-                "백업 파일의 내용으로 바뀝니다. 되돌릴 수 없습니다.",
+                "백업 파일의 내용으로 바뀝니다. 바꾸기 직전의 기록은 앱 안에 한 개 보관해 두므로, " +
+                "잘못 골랐다면 '복원 전으로 되돌리기'로 한 번 되돌릴 수 있습니다.",
             confirmLabel = "복원",
             onConfirm = {
                 pendingRestoreUri = null
@@ -719,6 +742,12 @@ private fun CloudBackupSection(viewModel: CloudBackupViewModel) {
                 text = signedIn.email ?: signedIn.displayName ?: "로그인됨",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 12.dp),
+            )
+            Text(
+                text = "백업은 내 계정에만 보이지만 별도로 암호화하지는 않아요. 러닝의 GPS 경로와 메모도 함께 올라갑니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
             )
             SwitchRow(
                 title = "하루에 한 번 자동 백업",

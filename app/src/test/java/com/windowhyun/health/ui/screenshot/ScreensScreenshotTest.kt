@@ -196,6 +196,7 @@ class ScreensScreenshotTest {
             backupRepository,
             fixture.settings,
             AutoBackupManager(backupRepository, fixture.settings, FakeBackupFolder()),
+            com.windowhyun.health.data.backup.PreRestoreSnapshot(java.io.File(context.cacheDir, "snap-${System.nanoTime()}")) { 0L },
         )
         val cloudStore = FakeStore()
         val cloud = CloudBackupViewModel(

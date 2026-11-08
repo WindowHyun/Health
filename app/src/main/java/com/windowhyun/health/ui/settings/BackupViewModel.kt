@@ -29,6 +29,8 @@ data class BackupUiState(
     val working: Boolean = false,
     val message: String? = null,
     val error: String? = null,
+    /** 복원 직전에 보관해 둔 기록의 시각. 없으면 null("복원 전으로 되돌리기" 를 숨긴다). */
+    val snapshotAt: Long? = null,
 )
 
 /**
@@ -43,13 +45,14 @@ class BackupViewModel @Inject constructor(
     private val backupRepository: BackupRepository,
     private val settingsRepository: SettingsRepository,
     private val autoBackupManager: AutoBackupManager,
+    private val snapshot: com.windowhyun.health.data.backup.PreRestoreSnapshot,
 ) : ViewModel() {
 
     /** 자동 백업 설정(폴더 · 간격 · 마지막 결과). */
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
 
-    private val _uiState = MutableStateFlow(BackupUiState())
+    private val _uiState = MutableStateFlow(BackupUiState(snapshotAt = snapshot.savedAt()))
     val uiState: StateFlow<BackupUiState> = _uiState.asStateFlow()
 
     /** 파일 선택기에 미리 채워 넣을 이름. */
@@ -67,15 +70,29 @@ class BackupViewModel @Inject constructor(
     }
 
     fun restoreBackup(uri: Uri) = run("복원") {
+        // 지금 기록을 먼저 앱 안에 보관한다. 보관하지 못하면 되돌릴 길이 없으므로 복원하지 않는다.
+        val kept = try {
+            snapshot.save(backupRepository)
+        } catch (e: Exception) {
+            throw BackupFormatException("복원 전에 지금 기록을 따로 보관하지 못해 복원하지 않았습니다(${e.message ?: e::class.simpleName}). 기록은 그대로입니다.")
+        }
         val summary = context.contentResolver.openInputStream(uri)?.use {
             backupRepository.restoreBackup(it)
         } ?: error("파일을 열 수 없습니다.")
+        _uiState.update { it.copy(snapshotAt = snapshot.savedAt()) }
         buildString {
             append("복원 완료 · ${summary.describe()}")
+            if (kept) append("\n복원 전 기록은 앱 안에 보관해 두었어요. 잘못 복원했다면 '복원 전으로 되돌리기'를 쓰세요.")
             if (summary.droppedRows > 0) {
                 append("\n연결이 끊어진 ${summary.droppedRows}개 항목은 건너뛰었습니다.")
             }
         }
+    }
+
+    /** 복원 직전에 보관해 둔 기록으로 되돌린다. */
+    fun restoreSnapshot() = run("되돌리기") {
+        val summary = snapshot.restore(backupRepository)
+        "복원 전 기록으로 되돌렸어요 · ${summary.describe()}"
     }
 
     fun exportWorkoutCsv(uri: Uri) = run("내보내기") {

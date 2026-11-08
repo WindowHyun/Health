@@ -77,7 +77,7 @@ class WorkoutSessionViewModel internal constructor(
     private val exerciseRepository: ExerciseRepository,
     private val settingsRepository: SettingsRepository,
     private val restTimerNotifier: RestTimerNotifier,
-    savedStateHandle: SavedStateHandle,
+    private val savedStateHandle: SavedStateHandle,
     /**
      * 휴식 타이머가 쓰는 시계(밀리초). 기기가 잠든 시간도 세는 시계여야 한다.
      * 테스트에서는 직접 넣는다.
@@ -366,6 +366,11 @@ class WorkoutSessionViewModel internal constructor(
     private var restPausedLeftMillis = 0L
     private var restDoneSince: Long? = null
 
+    // 위의 상태 변수가 모두 만들어진 다음에 복원한다(그 전에 하면 초기값이 덮어쓴다).
+    init {
+        restoreRest()
+    }
+
     fun startRestTimer(seconds: Int) {
         val total = seconds.coerceAtLeast(1)
         restTimerNotifier.cancel()
@@ -375,6 +380,50 @@ class WorkoutSessionViewModel internal constructor(
         scheduleRestAlarm()
         runRestLoop()
         publishRestToWatch()
+        persistRest()
+    }
+
+    /**
+     * 휴식 타이머를 저장해 둔다. 앱이 백그라운드에서 정리돼도(알람은 남아 알림이 울린다) 돌아오면 타이머 바가 이어진다.
+     * 기기를 다시 켠 뒤에는 시계가 처음부터 다시 세므로, 말이 안 되는 값은 복원하지 않는다.
+     */
+    private fun persistRest() {
+        val state = _restTimer.value
+        if (!state.visible) {
+            clearSavedRest()
+            return
+        }
+        savedStateHandle[KEY_REST_TOTAL] = state.totalSeconds
+        savedStateHandle[KEY_REST_ENDS_AT] = restEndsAt
+        savedStateHandle[KEY_REST_PAUSED] = state.paused
+        savedStateHandle[KEY_REST_PAUSED_LEFT] = restPausedLeftMillis
+    }
+
+    private fun restoreRest() {
+        val total = savedStateHandle.get<Int>(KEY_REST_TOTAL) ?: return
+        val endsAt = savedStateHandle.get<Long>(KEY_REST_ENDS_AT) ?: return
+        val paused = savedStateHandle.get<Boolean>(KEY_REST_PAUSED) ?: false
+        if (paused) {
+            restPausedLeftMillis = (savedStateHandle.get<Long>(KEY_REST_PAUSED_LEFT) ?: 0L).coerceIn(0, total * 1_000L)
+            _restTimer.value = RestTimerState(visible = true, totalSeconds = total, remainingSeconds = ceilSeconds(restPausedLeftMillis), paused = true)
+            runRestLoop()
+            return
+        }
+        val left = endsAt - clock()
+        // 이미 오래전에 끝났거나, 기기를 다시 켜서 시계가 되돌아간 값이면 버린다.
+        if (left < -REST_AFTERGLOW_MILLIS || left > total * 1_000L) {
+            clearSavedRest()
+            return
+        }
+        restEndsAt = endsAt
+        restDoneSince = null
+        _restTimer.value = RestTimerState(visible = true, totalSeconds = total, remainingSeconds = ceilSeconds(left.coerceAtLeast(0)))
+        if (left > 0) scheduleRestAlarm()
+        runRestLoop()
+    }
+
+    private fun clearSavedRest() {
+        listOf(KEY_REST_TOTAL, KEY_REST_ENDS_AT, KEY_REST_PAUSED, KEY_REST_PAUSED_LEFT).forEach { savedStateHandle.remove<Any>(it) }
     }
 
     /** 지금 휴식 타이머 상태를 시계에 알린다. 타이머가 없으면 "없음"을 알려 시계 화면을 치운다. */
@@ -409,6 +458,7 @@ class WorkoutSessionViewModel internal constructor(
                     if (now - since >= REST_AFTERGLOW_MILLIS) {
                         _restTimer.update { it.copy(visible = false) }
                         publishRestToWatch()
+                        persistRest()
                         return@launch
                     }
                 }
@@ -452,6 +502,7 @@ class WorkoutSessionViewModel internal constructor(
             )
         }
         publishRestToWatch()
+        persistRest()
     }
 
     fun toggleRestPause() {
@@ -470,6 +521,7 @@ class WorkoutSessionViewModel internal constructor(
             scheduleRestAlarm()
         }
         publishRestToWatch()
+        persistRest()
     }
 
     fun stopRestTimer() {
@@ -478,6 +530,7 @@ class WorkoutSessionViewModel internal constructor(
         restTimerNotifier.cancel()
         _restTimer.value = RestTimerState()
         publishRestToWatch()
+        persistRest()
     }
 
     private fun ceilSeconds(millis: Long): Int = ((millis + 999) / 1_000).toInt()
@@ -487,12 +540,27 @@ class WorkoutSessionViewModel internal constructor(
     /** 종료 처리 중인지. 두 번 눌러 결과 화면이 두 번 열리지 않게 한다. */
     private var finishing = false
 
-    fun finishWorkout() {
+    /** 알림 권한을 물어봤다고 기억한다(다시 묻지 않는다). */
+    fun markNotificationPrompted() {
+        viewModelScope.launch { settingsRepository.update { it.copy(notificationPromptShown = true) } }
+    }
+
+    /**
+     * 운동을 마친다. [completeUnchecked] 가 true 면, 값(무게·횟수·시간)이 들어 있는데 체크하지 않은 세트를 먼저 완료로 바꾼다
+     * (마지막 세트를 치고 체크를 깜빡한 채 종료해도 기록이 사라지지 않게). 값이 비어 있는 세트는 그대로 버린다.
+     */
+    fun finishWorkout(completeUnchecked: Boolean = false) {
         if (finishing) return
         finishing = true
         viewModelScope.launch {
             stopRestTimer()
             lastRemovedSet = null
+            if (completeUnchecked) {
+                workoutRepository.getWorkout(workoutId)?.exercises.orEmpty()
+                    .flatMap { it.sets }
+                    .filter { !it.completed && it.hasValues }
+                    .forEach { workoutRepository.setCompleted(it.id, it.weightKg, it.reps, true, it.durationSeconds) }
+            }
             // 한 세트도 완료하지 않았다면 남길 기록이 없다. 빈 기록이 저장되어 주간 횟수에 들어가지 않게 버린다.
             val anythingDone = workoutRepository.getWorkout(workoutId)?.exercises?.any { it.completedSets.isNotEmpty() } == true
             if (!anythingDone) {
@@ -524,6 +592,10 @@ class WorkoutSessionViewModel internal constructor(
 
     private companion object {
         const val REST_TICK_MILLIS = 250L
+        const val KEY_REST_TOTAL = "rest_total_seconds"
+        const val KEY_REST_ENDS_AT = "rest_ends_at"
+        const val KEY_REST_PAUSED = "rest_paused"
+        const val KEY_REST_PAUSED_LEFT = "rest_paused_left"
         const val REST_AFTERGLOW_MILLIS = 2_000L
 
         /** 세트 값이 이만큼 가만히 있어야 시계로 보낸다. */
