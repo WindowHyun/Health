@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -86,7 +87,8 @@ fun CourseEditMap(
         center?.let { mapView.controller.animateTo(GeoPoint(it.latitude, it.longitude)) }
     }
 
-    Box(modifier = modifier) {
+    // 지도가 자기 영역 밖(아래 패널 뒤)까지 그려지지 않게 잘라 낸다.
+    Box(modifier = modifier.clipToBounds()) {
         AndroidView(
             factory = { mapView },
             modifier = Modifier.fillMaxSize(),

@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.viewinterop.AndroidView
@@ -71,7 +72,8 @@ internal fun MapLibreEditMap(
         if (fit != null && fit.size >= 2) holder.fit(fit.map { it.latitude }, fit.map { it.longitude })
     }
 
-    Box(modifier = modifier) {
+    // 지도가 자기 영역 밖(아래 패널 뒤)까지 그려지지 않게 잘라 낸다.
+    Box(modifier = modifier.clipToBounds()) {
         AndroidView(factory = { holder.view }, modifier = Modifier.fillMaxSize())
         Attribution(Modifier.align(Alignment.BottomEnd))
     }

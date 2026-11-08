@@ -1,6 +1,7 @@
 package com.windowhyun.health.ui.running
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -61,7 +62,14 @@ fun CourseEditorScreen(
                 onRemovePoint = viewModel::removePoint,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // 지도와 겹치지 않게 패널에 배경을 깐다(투명하면 지도가 비쳐 글자가 어지럽다).
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Text(
                     text = if (state.points.isEmpty()) "지도를 눌러 출발 지점부터 차례로 찍어 주세요."
                     else "${CourseEditorViewModel.formatKm(state.distanceMeters)} · 지점 ${state.points.size}개",
