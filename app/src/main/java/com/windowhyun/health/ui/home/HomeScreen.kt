@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -303,10 +304,12 @@ private fun WeeklyGoals(state: HomeUiState, onOpenSettings: () -> Unit) {
         Text(
             text = "이번 주 목표 정하기",
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onSurface,
+            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
             modifier = Modifier
+                .heightIn(min = 48.dp)
                 .clickable(role = Role.Button, onClick = onOpenSettings)
-                .padding(vertical = 8.dp),
+                .padding(vertical = 12.dp),
         )
         return
     }

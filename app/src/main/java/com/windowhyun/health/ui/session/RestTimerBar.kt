@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.windowhyun.health.core.designsystem.theme.LargeMetricTextStyle
 import com.windowhyun.health.core.designsystem.theme.healthColors
@@ -78,36 +79,35 @@ fun RestTimerBar(
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val outline = BorderStroke(1.dp, colors.onPanel.copy(alpha = 0.45f))
-            HealthButton(
-                onClick = { onAdjust(-10) },
-                modifier = Modifier.weight(1f),
-                container = Color.Transparent,
-                content = colors.onPanel,
-                border = outline,
-                compact = true,
-            ) { Text("-10초") }
-            HealthButton(
-                onClick = { onAdjust(10) },
-                modifier = Modifier.weight(1f),
-                container = Color.Transparent,
-                content = colors.onPanel,
-                border = outline,
-                compact = true,
-            ) { Text("+10초") }
-            HealthButton(
-                onClick = onTogglePause,
-                modifier = Modifier.weight(1f),
-                container = Color.Transparent,
-                content = colors.onPanel,
-                border = outline,
-                compact = true,
-            ) { Text(if (state.paused) "계속" else "일시정지") }
-            HealthButton(onClick = onSkip, modifier = Modifier.weight(1f), compact = true) { Text("건너뛰기") }
+        val outline = BorderStroke(1.dp, colors.onPanel.copy(alpha = 0.45f))
+        // 글자를 크게 쓰면 4버튼이 한 줄에 못 들어가 글자가 세로로 쪼개진다. 그때는 2줄로 나눈다.
+        val twoRows = LocalDensity.current.fontScale > 1.3f
+        @Composable
+        fun Minus(m: Modifier) = HealthButton(
+            onClick = { onAdjust(-10) }, modifier = m, container = Color.Transparent,
+            content = colors.onPanel, border = outline, compact = true,
+        ) { Text("-10초", maxLines = 1) }
+        @Composable
+        fun Plus(m: Modifier) = HealthButton(
+            onClick = { onAdjust(10) }, modifier = m, container = Color.Transparent,
+            content = colors.onPanel, border = outline, compact = true,
+        ) { Text("+10초", maxLines = 1) }
+        @Composable
+        fun Pause(m: Modifier) = HealthButton(
+            onClick = onTogglePause, modifier = m, container = Color.Transparent,
+            content = colors.onPanel, border = outline, compact = true,
+        ) { Text(if (state.paused) "계속" else "일시정지", maxLines = 1) }
+        @Composable
+        fun Skip(m: Modifier) = HealthButton(onClick = onSkip, modifier = m, compact = true) { Text("건너뛰기", maxLines = 1) }
+
+        val w = Modifier.weight(1f)
+        if (twoRows) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Minus(w); Plus(w) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Pause(w); Skip(w) }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Minus(w); Plus(w); Pause(w); Skip(w)
+            }
         }
     }
 }

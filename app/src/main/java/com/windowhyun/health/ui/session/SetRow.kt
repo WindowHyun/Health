@@ -4,10 +4,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -205,7 +211,7 @@ fun SetRow(
                 )
             }
 
-            IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onRemove, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "세트 삭제",
@@ -249,6 +255,7 @@ internal const val QUICK_SECONDS_STEP = 5
 private const val EDIT_ECHO_NANOS = 1_500_000_000L
 private const val WEIGHT_EPSILON_KG = 0.005
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QuickAdjustRow(
     trackingType: ExerciseTrackingType,
@@ -259,11 +266,12 @@ private fun QuickAdjustRow(
 ) {
     val step = quickWeightStep(weightUnit)
     val stepText = formatWeightValue(step)
-    Row(
+    FlowRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 48.dp, top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         when (trackingType) {
             ExerciseTrackingType.WEIGHT_REPS -> {
@@ -291,15 +299,15 @@ private fun QuickChip(label: String, description: String, onClick: () -> Unit) {
     val shape = MaterialTheme.shapes.small
     Box(
         modifier = Modifier
-            .height(36.dp)
+            .heightIn(min = 44.dp)
             .clip(shape)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .semantics { contentDescription = description }
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
     }
 }
 
@@ -368,6 +376,11 @@ private fun NumberField(
     label: String,
     modifier: Modifier = Modifier,
 ) {
+    // 입력칸 안의 숫자는 글자 크기를 1.3배까지만 키운다. 더 키우면 칸 폭이 모자라 값이 잘린다.
+    val density = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density, fontScale = density.fontScale.coerceAtMost(1.3f)),
+    ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -380,14 +393,15 @@ private fun NumberField(
             lineHeight = 28.sp,
             textAlign = TextAlign.Center,
         ),
-        suffix = { Text(suffix, style = MaterialTheme.typography.labelMedium) },
+        suffix = { Text(suffix, style = MaterialTheme.typography.labelMedium, maxLines = 1) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         colors = OutlinedTextFieldDefaults.colors(
-            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
             focusedBorderColor = MaterialTheme.colorScheme.onSurface,
             cursorColor = MaterialTheme.colorScheme.onSurface,
         ),
     )
+    }
 }
 
 /**
