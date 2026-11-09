@@ -37,6 +37,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.components.Hairline
+import com.windowhyun.health.ui.components.HealthButton
 import com.windowhyun.health.ui.components.HealthOutlinedButton
 
 /**
@@ -131,6 +132,17 @@ fun TemplateSheetBody(
     onExport: () -> Unit,
     onDeleteUserTemplate: (RoutineTemplates.Template) -> Unit,
 ) {
+    // 카드를 누르면 바로 만들지 않고, 어떤 루틴이 만들어지는지 먼저 보여 준다.
+    var previewing by remember { mutableStateOf<RoutineTemplates.Template?>(null) }
+    previewing?.let { template ->
+        TemplatePreview(
+            template = template,
+            onBack = { previewing = null },
+            onAdd = { onPick(template) },
+            working = state.working,
+        )
+        return
+    }
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
         Text(
             text = "루틴 템플릿",
@@ -183,7 +195,7 @@ fun TemplateSheetBody(
                 items(state.userTemplates, key = { "user-${it.id}" }) { template ->
                     TemplateCard(
                         template = template,
-                        onClick = { onPick(template) },
+                        onClick = { previewing = template },
                         onDelete = { onDeleteUserTemplate(template) },
                         modifier = Modifier.testTag("user-template-${template.id}"),
                     )
@@ -192,7 +204,7 @@ fun TemplateSheetBody(
             groups.forEach { (category, templates) ->
                 item(key = "category-${category.name}") { CategoryLabel(category.label) }
                 items(templates, key = { it.id }) { template ->
-                    TemplateCard(template = template, onClick = { onPick(template) })
+                    TemplateCard(template = template, onClick = { previewing = template })
                 }
             }
         }
@@ -238,6 +250,12 @@ private fun TemplateCard(
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(top = 6.dp),
                 )
+                Text(
+                    text = template.summary(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
             }
             if (onDelete != null) {
                 IconButton(
@@ -248,5 +266,103 @@ private fun TemplateCard(
                 Text("→", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+/** "루틴 3개 · 종목 18개 · 세트 54개" 같은 한 줄 요약. */
+internal fun RoutineTemplates.Template.summary(): String {
+    val exercises = days.sumOf { it.exercises.size }
+    val sets = days.sumOf { day -> day.exercises.sumOf { it.second } }
+    return "루틴 ${days.size}개 · 종목 ${exercises}개 · 세트 ${sets}개"
+}
+
+private fun restLabel(seconds: Int?): String = when {
+    seconds == null -> "기본 휴식"
+    seconds % 60 == 0 -> "휴식 ${seconds / 60}분"
+    else -> "휴식 ${seconds / 60}분 ${seconds % 60}초"
+}
+
+/**
+ * 템플릿을 누르면 보이는 미리보기. 날마다 어떤 종목을 몇 세트, 얼마 쉬며 하는지(슈퍼셋 · 요일 포함)를
+ * 보여 주고, 마음에 들면 아래 버튼으로 추가한다.
+ */
+@Composable
+fun TemplatePreview(
+    template: RoutineTemplates.Template,
+    onBack: () -> Unit,
+    onAdd: () -> Unit,
+    working: Boolean = false,
+) {
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        TextButton(onClick = onBack, modifier = Modifier.testTag("template-preview-back")) { Text("← 목록으로") }
+        LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+            // 설명이 길어도 구성이 가려지지 않게, 제목과 설명도 함께 스크롤한다.
+            item(key = "header") {
+                Column {
+                    Text(text = template.title, style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        text = template.summary(),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                    )
+                    Text(
+                        text = template.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+            items(template.days, key = { it.routineName }) { day ->
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                    Hairline()
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(day.routineName, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                        if (day.scheduledDays.isNotEmpty()) {
+                            Text(
+                                text = day.scheduledDays.sortedBy { it.value }
+                                    .joinToString(" · ") { it.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.KOREAN) },
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                    }
+                    day.exercises.forEach { (name, sets) ->
+                        val superset = day.supersets.indexOfFirst { name in it }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(name, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    text = restLabel(day.restSeconds[name]) +
+                                        if (superset >= 0) " · 슈퍼셋 ${superset + 1}" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text("${sets}세트", style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
+            }
+            item {
+                Text(
+                    text = "추가한 뒤에도 종목 · 세트 · 요일을 자유롭게 고칠 수 있습니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 16.dp),
+                )
+            }
+        }
+
+        HealthButton(
+            onClick = onAdd,
+            enabled = !working,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).testTag("template-add"),
+        ) { Text("내 루틴에 추가") }
     }
 }

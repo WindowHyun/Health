@@ -239,8 +239,25 @@ class TemplateImportUiTest {
         showSheet(onPick = { picked = it })
 
         compose.onNodeWithText("기본 템플릿").performClick()
+        // 누르면 바로 만들지 않고 미리보기가 먼저 나온다.
+        assertThat(picked).isNull()
+        compose.onNodeWithTag("template-add").performClick()
 
         assertThat(picked?.id).isEqualTo("builtin")
+    }
+
+    @Test
+    fun `a template preview lists its days and goes back to the list`() {
+        showSheet()
+
+        compose.onNodeWithText("기본 템플릿").performClick()
+        compose.onNodeWithText("루틴 builtin").assertExists()
+        compose.onNodeWithText("스쿼트").assertExists()
+        compose.onNodeWithText("3세트").assertExists()
+        compose.onNodeWithText("루틴 1개 · 종목 1개 · 세트 3개").assertExists()
+
+        compose.onNodeWithTag("template-preview-back").performClick()
+        compose.onNodeWithText("루틴 템플릿").assertExists()
     }
 
     @Test
@@ -252,7 +269,9 @@ class TemplateImportUiTest {
 
         compose.onNodeWithText("가져온 템플릿").assertExists()
         compose.onNodeWithText("내가 가져온 것").performClick()
+        compose.onNodeWithTag("template-add").performClick()
         assertThat(picked).isEqualTo(mine)
+        compose.onNodeWithTag("template-preview-back").performClick()
 
         compose.onNodeWithTag("user-template-delete-mine").performClick()
         assertThat(deleted).isEqualTo(mine)
