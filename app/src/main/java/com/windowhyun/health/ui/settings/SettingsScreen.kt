@@ -627,8 +627,8 @@ private fun ActionRow(
 /** 구역 제목. 위에 넉넉한 여백, 아래에 가는 선. 구역 안의 줄들은 선 없이 여백으로만 나눈다. */
 @Composable
 private fun SettingSectionTitle(title: String) {
-    Column(modifier = Modifier.padding(top = 32.dp, bottom = 6.dp)) {
-        Text(text = title, style = MaterialTheme.typography.headlineSmall)
+    Column(modifier = Modifier.padding(top = 24.dp, bottom = 4.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleLarge)
         Hairline(modifier = Modifier.padding(top = 10.dp))
     }
 }
@@ -679,7 +679,7 @@ private fun SwitchRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) {
                 Text(

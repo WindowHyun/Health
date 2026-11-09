@@ -35,6 +35,8 @@ private fun style(
     lineHeight = lineHeight.sp,
     letterSpacing = tracking.sp,
     fontFeatureSettings = if (tabular) TABULAR else null,
+    // 한국어를 글자 중간이 아니라 어절(구) 단위로 줄바꿈한다("줍니 / 다." 같은 한 글자 외톨이 방지).
+    lineBreak = androidx.compose.ui.text.style.LineBreak.Paragraph,
 )
 
 /**

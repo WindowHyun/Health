@@ -454,6 +454,14 @@ private fun TodayRoutine(routine: Routine, enabled: Boolean, onStart: () -> Unit
         )
         Spacer(Modifier.height(20.dp))
         AccentButton(text = "시작", onClick = onStart, enabled = enabled, modifier = Modifier.fillMaxWidth())
+        if (!enabled) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "진행 중인 운동이 있어요. 이어하거나 끝낸 뒤에 시작할 수 있어요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onPanel.copy(alpha = 0.7f),
+            )
+        }
     }
 }
 

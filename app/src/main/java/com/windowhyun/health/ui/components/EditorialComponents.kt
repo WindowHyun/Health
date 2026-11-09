@@ -193,7 +193,7 @@ fun OutlineBlockButton(
     BlockButton(text, onClick, Color.Transparent, ink, modifier, enabled, border = BorderStroke(1.dp, ink))
 }
 
-/** 진행 중인 운동 · 러닝으로 돌아가는 띠. 라임 면이라 다른 어떤 것보다 눈에 띈다. */
+/** 진행 중인 운동 · 러닝으로 돌아가는 띠. 어두운 면에 라임 단추만 얹어, 라임 면이 여러 개 겹쳐 시끄러워지지 않게 한다. */
 @Composable
 fun StatusStrip(
     label: String,
@@ -207,15 +207,15 @@ fun StatusStrip(
         modifier = modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.small)
-            .background(colors.accent)
+            .background(colors.panel)
             .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onAccent.copy(alpha = 0.7f))
-            Text(title, style = MaterialTheme.typography.titleMedium, color = colors.onAccent)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = colors.accent)
+            Text(title, style = MaterialTheme.typography.titleMedium, color = colors.onPanel)
         }
-        PanelButton(text = action, onClick = onClick)
+        AccentButton(text = action, onClick = onClick)
     }
 }

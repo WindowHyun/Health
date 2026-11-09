@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -210,16 +212,23 @@ private fun RoutineCard(
                     if (routine.scheduledDays.isNotEmpty()) {
                         val days = routine.scheduledDays
                             .sortedBy { it.value }
-                            .joinToString(" ") { it.getDisplayName(TextStyle.SHORT, Locale.KOREAN) }
+                            .joinToString(" · ") { it.getDisplayName(TextStyle.SHORT, Locale.KOREAN) }
                         Text(
-                            text = days,
+                            text = "매주 $days",
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
                 }
                 IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "루틴 수정") }
-                IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "루틴 삭제") }
+                Spacer(Modifier.width(16.dp))
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "루틴 삭제",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             if (routine.items.isNotEmpty()) {

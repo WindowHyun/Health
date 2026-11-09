@@ -209,7 +209,7 @@ fun RunSetupScreen(
             item {
                 Column {
                     Text(
-                        text = "자동 Lap: ${state.settings.autoLapMeters}m 마다",
+                        text = "자동 Lap: ${state.settings.autoLapMeters}m 마다 (설정 → 러닝에서 바꿔요)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -260,14 +260,15 @@ private fun GpsStatusCard(
     onOpenLocationSettings: () -> Unit,
 ) {
     val ready = hasPermission && gpsEnabled
-    val container = if (ready) MaterialTheme.healthColors.accent else MaterialTheme.colorScheme.errorContainer
-    val content = if (ready) MaterialTheme.healthColors.onAccent else MaterialTheme.colorScheme.onErrorContainer
+    // 준비 중이거나 준비됐을 때는 조용한 회색 면으로 둔다(눌러야 할 "러닝 시작"과 색이 겹치지 않게). 막힌 경우만 오류색.
+    val container = if (ready) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.errorContainer
+    val content = if (ready) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onErrorContainer
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.small)
             .background(container)
-            .padding(16.dp),
+            .padding(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -282,7 +283,7 @@ private fun GpsStatusCard(
                     accuracyMeters == null -> "GPS 신호 찾는 중..."
                     else -> "GPS 준비됨 · ±${accuracyMeters.toInt()}m"
                 },
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 color = content,
                 modifier = Modifier.padding(start = 8.dp),
             )
@@ -451,10 +452,10 @@ private fun CourseSection(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onCreate) { Text("새 코스 만들기") }
+            HealthOutlinedButton(onClick = onCreate, compact = true) { Text("새 코스 만들기") }
             if (selected != null) {
-                TextButton(onClick = { onEdit(selected.id) }) { Text("고치기") }
-                TextButton(onClick = { deleting = selected }) { Text("지우기") }
+                HealthOutlinedButton(onClick = { onEdit(selected.id) }, compact = true) { Text("고치기") }
+                HealthOutlinedButton(onClick = { deleting = selected }, compact = true) { Text("지우기") }
             }
         }
     }
