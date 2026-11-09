@@ -142,6 +142,7 @@ class WorkoutSessionViewModel internal constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WorkoutSessionUiState())
 
     init {
+        watchLink.attachSession()
         loadLastPerformance()
         startElapsedTicker()
         listenToWatch()
@@ -588,6 +589,8 @@ class WorkoutSessionViewModel internal constructor(
         // 화면이 사라지면 타이머도 멈추므로 시계에 남은 휴식 화면과 세트도 치운다.
         watchLink.clearRest()
         watchLink.clearWorkout()
+        // 화면이 없어진 뒤에는 앱 전역 다리가 시계와 이어 준다.
+        watchLink.detachSession()
     }
 
     private companion object {

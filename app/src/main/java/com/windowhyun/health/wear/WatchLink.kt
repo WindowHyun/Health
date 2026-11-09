@@ -59,6 +59,27 @@ class WatchLink internal constructor(
         _rest.value = RestSnapshot.None
     }
 
+    private var attachedSessions = 0
+    private val _sessionAttached = MutableStateFlow(false)
+
+    /**
+     * 운동 화면의 ViewModel 이 살아 있는지. 살아 있으면 그쪽이 세트와 휴식 타이머를 시계와 주고받고,
+     * 없으면 [BackgroundWorkoutBridge] 가 대신한다.
+     */
+    val sessionAttached: StateFlow<Boolean> = _sessionAttached.asStateFlow()
+
+    @Synchronized
+    fun attachSession() {
+        attachedSessions++
+        _sessionAttached.value = true
+    }
+
+    @Synchronized
+    fun detachSession() {
+        attachedSessions = (attachedSessions - 1).coerceAtLeast(0)
+        _sessionAttached.value = attachedSessions > 0
+    }
+
     private val _workout = MutableStateFlow(WorkoutSnapshot.None)
 
     /** 시계에 보낼 "지금 할 세트". 세션 화면이 열려 있는 동안만 있다. */

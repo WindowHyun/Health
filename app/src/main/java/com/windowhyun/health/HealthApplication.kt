@@ -17,6 +17,9 @@ class HealthApplication : Application() {
     lateinit var watchStatePublisher: WatchStatePublisher
 
     @Inject
+    lateinit var backgroundWorkoutBridge: com.windowhyun.health.wear.BackgroundWorkoutBridge
+
+    @Inject
     lateinit var healthConnectSyncer: HealthConnectSyncer
 
     override fun onCreate() {
@@ -25,6 +28,8 @@ class HealthApplication : Application() {
         createNotificationChannels()
         // 시계가 있으면 러닝 상태와 휴식 타이머를 계속 올려 보낸다. 없어도 아무 일 없다.
         watchStatePublisher.start()
+        // 폰의 운동 화면이 없을 때도 시계에서 세트를 보고 끝낼 수 있게 한다.
+        backgroundWorkoutBridge.start()
         // 연동을 켰다면 끝난 기록을 Health Connect 로 맞춘다. 꺼져 있으면 아무 일도 하지 않는다.
         healthConnectSyncer.start()
     }

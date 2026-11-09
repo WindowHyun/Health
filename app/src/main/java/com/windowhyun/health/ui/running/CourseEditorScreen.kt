@@ -17,7 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.windowhyun.health.ui.components.HealthOutlinedButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -89,8 +89,8 @@ fun CourseEditorScreen(
                 )
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = viewModel::undo, enabled = state.points.isNotEmpty()) { Text("되돌리기") }
-                    TextButton(onClick = viewModel::clear, enabled = state.points.isNotEmpty()) { Text("모두 지우기") }
+                    HealthOutlinedButton(onClick = viewModel::undo, enabled = state.points.isNotEmpty(), compact = true) { Text("되돌리기") }
+                    HealthOutlinedButton(onClick = viewModel::clear, enabled = state.points.isNotEmpty(), compact = true) { Text("모두 지우기") }
                 }
                 HealthButton(
                     onClick = { viewModel.save(onClose) },
