@@ -94,6 +94,9 @@ data class Workout(
     val isActive: Boolean get() = endTime == null
     val totalVolume: Double get() = exercises.sumOf { it.totalVolume }
 
+    /** 완료한 세트가 하나라도 있는가(워밍업 포함). 없으면 종료해도 남길 기록이 없다. */
+    val hasCompletedSets: Boolean get() = exercises.any { it.completedSets.isNotEmpty() }
+
     // 아래 집계는 모두 본세트 기준이다. 워밍업까지 세면 실제 운동량보다 부풀려진다.
     val totalCompletedSets: Int get() = exercises.sumOf { it.countedSets.size }
     val totalReps: Int get() = exercises.sumOf { ex -> ex.countedSets.sumOf { it.reps } }

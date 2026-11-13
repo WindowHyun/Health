@@ -370,8 +370,16 @@ class WorkoutSessionViewModel internal constructor(
         finishing = true
         viewModelScope.launch {
             stopRestTimer()
-            workoutRepository.finishWorkout(workoutId)
-            _events.emit(WorkoutSessionEvent.Finished(workoutId))
+            // 완료한 세트가 하나도 없으면 남길 기록이 없다. 그대로 종료하면 0세트짜리 운동이
+            // 기록·캘린더·주간 횟수에 잡히므로(실수로 루틴을 눌렀다 나오는 경우) 버린다.
+            val workout = workoutRepository.getWorkout(workoutId)
+            if (workout != null && !workout.hasCompletedSets) {
+                workoutRepository.discardWorkout(workoutId)
+                _events.emit(WorkoutSessionEvent.Discarded)
+            } else {
+                workoutRepository.finishWorkout(workoutId)
+                _events.emit(WorkoutSessionEvent.Finished(workoutId))
+            }
         }
     }
 

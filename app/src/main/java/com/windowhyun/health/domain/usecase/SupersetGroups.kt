@@ -30,14 +30,27 @@ object SupersetGroups {
         return result
     }
 
-    /** [index] 번째 운동을 바로 앞 운동과 묶는다. 첫 번째 운동이거나 범위 밖이면 그대로. */
+    /**
+     * [index] 번째 운동을 바로 앞 운동과 묶는다. 첫 번째 운동이거나 범위 밖이면 그대로.
+     *
+     * 이 운동이 이미 다른 묶음의 맨 앞이면 그 묶음을 통째로 데려온다. 이 운동 번호만 바꾸면
+     * 뒤에 남은 운동이 혼자가 되어 묶음에서 떨어져 나간다([0,1,1] 의 가운데를 묶으면 셋이 한 묶음이어야 한다).
+     */
     fun linkWithPrevious(groups: List<Int>, index: Int): List<Int> {
         if (index <= 0 || index >= groups.size) return normalize(groups)
-        val previous = groups[index - 1]
-        val group = if (previous != NONE) previous else (groups.maxOrNull() ?: NONE) + 1
-        val updated = groups.toMutableList().also {
+        // 번호가 같아도 떨어져 있으면 다른 묶음이다. 먼저 정리해 두어야 "이 운동의 묶음"을 번호로 가릴 수 있다.
+        val normalized = normalize(groups)
+        val previous = normalized[index - 1]
+        val own = normalized[index]
+        if (own != NONE && own == previous) return normalized
+        val group = if (previous != NONE) previous else (normalized.maxOrNull() ?: NONE) + 1
+        val updated = normalized.toMutableList().also {
             it[index - 1] = group
             it[index] = group
+            if (own != NONE) {
+                var next = index + 1
+                while (next < it.size && it[next] == own) it[next++] = group
+            }
         }
         return normalize(updated)
     }

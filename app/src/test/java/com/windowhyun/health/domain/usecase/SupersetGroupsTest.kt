@@ -23,6 +23,31 @@ class SupersetGroupsTest {
         assertThat(groups).containsExactly(1, 1, 1).inOrder()
     }
 
+    /** 묶음의 맨 앞 운동을 그 앞 운동과 묶으면, 뒤에 딸린 운동도 같이 온다. */
+    @Test
+    fun `linking the head of a group brings the whole group along`() {
+        assertThat(SupersetGroups.linkWithPrevious(listOf(none, 1, 1), 1))
+            .containsExactly(1, 1, 1).inOrder()
+        assertThat(SupersetGroups.linkWithPrevious(listOf(none, 1, 1, 1, none), 1))
+            .containsExactly(1, 1, 1, 1, none).inOrder()
+    }
+
+    /** 맞닿은 두 묶음의 경계를 묶으면 하나로 합쳐진다. */
+    @Test
+    fun `linking across two groups merges them`() {
+        assertThat(SupersetGroups.linkWithPrevious(listOf(1, 1, 2, 2), 2))
+            .containsExactly(1, 1, 1, 1).inOrder()
+        // 합친 묶음 뒤의 다른 묶음은 그대로 남고 번호만 당겨진다.
+        assertThat(SupersetGroups.linkWithPrevious(listOf(1, 1, 2, 2, none, 3, 3), 2))
+            .containsExactly(1, 1, 1, 1, none, 2, 2).inOrder()
+    }
+
+    @Test
+    fun `linking inside a group changes nothing`() {
+        assertThat(SupersetGroups.linkWithPrevious(listOf(1, 1, 1, none), 1))
+            .containsExactly(1, 1, 1, none).inOrder()
+    }
+
     @Test
     fun `the first exercise cannot link with a previous one`() {
         assertThat(SupersetGroups.linkWithPrevious(listOf(none, none), 0))
