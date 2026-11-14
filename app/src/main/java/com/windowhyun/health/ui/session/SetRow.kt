@@ -77,7 +77,7 @@ fun SetRow(
         mutableStateOf(if (set.durationSeconds > 0) (set.durationSeconds % 60).toString() else "")
     }
 
-    fun weightKg() = weightText.toDoubleOrNull()?.let { weightUnit.toKg(it) } ?: 0.0
+    fun weightKg() = weightKgOf(weightText, storedKg = set.weightKg, unit = weightUnit)
     fun reps() = repsText.toIntOrNull() ?: 0
     fun duration() = durationSecondsOf(minutesText, secondsText)
 
@@ -267,6 +267,19 @@ private fun NumberField(
             cursorColor = MaterialTheme.colorScheme.onSurface,
         ),
     )
+}
+
+/**
+ * 중량 입력칸의 글자를 kg 으로 바꾼다.
+ *
+ * 입력칸은 저장값을 소수 1자리로 반올림해 보여 준다. 그 글자를 그대로 kg 으로 되돌리면
+ * 손대지 않은 중량이 바뀐다(61.25kg -> "61.3" -> 61.3kg, lb 로 볼 때 100kg -> "220.5" -> 100.017kg).
+ * 완료만 눌러도 값이 올라가 가짜 최고 기록이 생기므로, 글자가 저장값을 표시한 것과 같으면
+ * 저장값을 그대로 쓴다.
+ */
+internal fun weightKgOf(text: String, storedKg: Double, unit: WeightUnit): Double {
+    if (text == formatWeightValue(unit.fromKg(storedKg))) return storedKg
+    return text.toDoubleOrNull()?.let { unit.toKg(it) } ?: 0.0
 }
 
 /**

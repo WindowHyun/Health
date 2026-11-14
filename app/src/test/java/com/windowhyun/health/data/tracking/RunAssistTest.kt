@@ -197,6 +197,71 @@ class RunAssistTest {
         tracker.discard()
     }
 
+    /**
+     * 오차가 20~30m 인 위치는 거리에는 쌓이지만 움직임 판단에는 못 쓴다.
+     * 그런 위치만 오는 동안 "안 움직였다"고 세면 달리는 중에 멈춰 버린다.
+     */
+    @Test
+    fun `keeps running while only poor accuracy locations arrive`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+        tracker.onLocation(at(0.0, accuracy = 25f))
+        repeat(15) { i ->
+            now += 2_000
+            tracker.onLocation(at((i + 1) * 6.0, accuracy = 25f))
+            tracker.tick()
+        }
+
+        assertThat(tracker.state.value.status).isEqualTo(RunStatus.TRACKING)
+        assertThat(tracker.state.value.distanceMeters).isGreaterThan(80.0)
+        tracker.discard()
+    }
+
+    /** 정확도가 돌아온 뒤 제자리에 서 있으면 그때는 멈춘다. */
+    @Test
+    fun `pauses once accurate locations show standing still`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+        tracker.onLocation(at(0.0, accuracy = 25f))
+        now += 2_000
+        tracker.onLocation(at(6.0, accuracy = 25f))
+        repeat(5) {
+            now += 2_000
+            tracker.onLocation(at(6.0))
+            tracker.tick()
+        }
+
+        assertThat(tracker.state.value.status).isEqualTo(RunStatus.PAUSED)
+        assertThat(tracker.state.value.autoPaused).isTrue()
+        tracker.discard()
+    }
+
+    /**
+     * 이어 간 직후 위치를 받기 전에 다시 멈추면 기준 위치가 없다.
+     * 그래도 다음 위치를 기준으로 삼아, 움직이면 이어 가야 한다.
+     */
+    @Test
+    fun `resumes even when it paused before any location arrived`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+        tracker.onLocation(at(0.0))
+        tracker.pause()
+        now += 20_000
+        tracker.resume()
+        now += 9_000
+        tracker.tick()
+        assertThat(tracker.state.value.autoPaused).isTrue()
+
+        now += 2_000
+        tracker.onLocation(at(0.0))
+        assertThat(tracker.state.value.status).isEqualTo(RunStatus.PAUSED)
+
+        now += 2_000
+        tracker.onLocation(at(20.0))
+        assertThat(tracker.state.value.status).isEqualTo(RunStatus.TRACKING)
+        tracker.discard()
+    }
+
     @Test
     fun `can be turned off in settings`() = runTest {
         settings.update { it.copy(autoPauseRun = false) }

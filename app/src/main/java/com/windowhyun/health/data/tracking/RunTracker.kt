@@ -110,8 +110,14 @@ class RunTracker internal constructor(
         mutex.withLock {
             val accumulator = accumulator ?: return
             // 자동으로 멈춘 상태에서 멈춘 자리를 벗어났으면 이어 간다.
-            if (_state.value.status == RunStatus.PAUSED && _state.value.autoPaused && movedAwayFromPause(sample)) {
-                resumeLocked(auto = true)
+            if (_state.value.status == RunStatus.PAUSED && _state.value.autoPaused) {
+                if (movedAwayFromPause(sample)) {
+                    resumeLocked(auto = true)
+                } else if (pauseAnchor == null && sample.isReliableForMovement()) {
+                    // 기준 위치 없이 멈췄다(이어 간 직후 위치를 받기 전에 다시 멈춘 경우).
+                    // 기준이 없으면 벗어났는지 잴 수 없어 영영 이어 가지 못하므로 지금 위치를 기준으로 삼는다.
+                    pauseAnchor = sample
+                }
             }
             if (_state.value.status != RunStatus.TRACKING) {
                 // 일시정지 중에도 정확도는 보여 준다(재개 직후 바로 잡히도록).
@@ -219,10 +225,18 @@ class RunTracker internal constructor(
         if (auto) _cues.tryEmit(RunCue.AutoResumed)
     }
 
-    /** 위치가 [MOVEMENT_METERS] 이상 옮겨 갔으면 "움직였다"고 적는다. 정확도가 나쁜 위치는 믿지 않는다. */
+    /**
+     * 위치가 [MOVEMENT_METERS] 이상 옮겨 갔으면 "움직였다"고 적는다.
+     *
+     * 오차가 큰 위치로는 움직였는지 멈췄는지 가릴 수 없다. 그런 위치만 오는 동안(도심, 주머니 속)
+     * "안 움직였다"고 세면 달리는 중에 멈춰 버린다. 거리는 [RunMetricsAccumulator] 가 더 느슨한
+     * 기준으로 계속 쌓고 있기 때문이다. 판단할 수 없을 때는 멈춘 시간을 세지 않는다.
+     */
     private fun noteMovement(sample: LocationSample) {
-        val accuracy = sample.accuracyMeters ?: return
-        if (accuracy > MOVEMENT_MAX_ACCURACY_METERS) return
+        if (!sample.isReliableForMovement()) {
+            lastMovementAt = clock()
+            return
+        }
         val anchor = movementAnchor
         if (anchor == null ||
             haversineMeters(anchor.latitude, anchor.longitude, sample.latitude, sample.longitude) >= MOVEMENT_METERS
@@ -235,10 +249,15 @@ class RunTracker internal constructor(
     /** 자동으로 멈춘 자리에서 [RESUME_DISTANCE_METERS] 이상 벗어났는가. */
     private fun movedAwayFromPause(sample: LocationSample): Boolean {
         val anchor = pauseAnchor ?: return false
-        val accuracy = sample.accuracyMeters ?: return false
-        if (accuracy > MOVEMENT_MAX_ACCURACY_METERS) return false
+        if (!sample.isReliableForMovement()) return false
         return haversineMeters(anchor.latitude, anchor.longitude, sample.latitude, sample.longitude) >=
             RESUME_DISTANCE_METERS
+    }
+
+    /** 움직임 판단에 쓸 만큼 정확한 위치인가. 정확도를 모르는 위치는 믿지 않는다. */
+    private fun LocationSample.isReliableForMovement(): Boolean {
+        val accuracy = accuracyMeters ?: return false
+        return accuracy <= MOVEMENT_MAX_ACCURACY_METERS
     }
 
     /** 러닝을 끝낸다. 결과 화면에서 저장/삭제를 선택할 때까지 상태는 유지된다. */
@@ -324,7 +343,13 @@ class RunTracker internal constructor(
                 steps = accumulator.steps,
                 cadenceStepsPerMinute = accumulator.cadenceStepsPerMinute,
                 laps = accumulator.laps.toList(),
-                route = accumulator.routePoints.toList(),
+                // 경로는 위치가 더해질 때만 바뀐다(뒤에만 붙는다). 매초 통째로 복사하면 달릴수록
+                // 느려지고, 지도도 경로가 바뀐 줄 알고 매번 다시 그린다.
+                route = if (current.route.size == accumulator.routePoints.size) {
+                    current.route
+                } else {
+                    accumulator.routePoints.toList()
+                },
                 lastAccuracyMeters = lastAccuracy,
             )
         }

@@ -9,6 +9,7 @@ import com.windowhyun.health.data.local.dao.PersonalRecordDao
 import com.windowhyun.health.data.local.dao.RoutineDao
 import com.windowhyun.health.data.local.dao.RunDao
 import com.windowhyun.health.data.local.dao.WorkoutDao
+import com.windowhyun.health.data.seed.BuiltInExerciseSeeder
 import com.windowhyun.health.data.seed.ExerciseSeedCallback
 import dagger.Module
 import dagger.Provides
@@ -28,6 +29,11 @@ object DatabaseModule {
             .addCallback(ExerciseSeedCallback)
             .addMigrations(*HealthDatabase.MIGRATIONS)
             .build()
+
+    /** 백업을 복원한 직후에도 DB 를 열 때와 같은 기본 종목 채우기를 쓴다. */
+    @Provides
+    fun provideBuiltInExerciseSeeder(): BuiltInExerciseSeeder =
+        BuiltInExerciseSeeder(ExerciseSeedCallback::insertMissing)
 
     @Provides
     fun provideExerciseDao(db: HealthDatabase): ExerciseDao = db.exerciseDao()

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatDuration
 import com.windowhyun.health.core.util.formatVolume
@@ -205,7 +206,11 @@ fun WorkoutSessionScreen(
     if (showFinishDialog) {
         ConfirmDialog(
             title = "운동을 종료할까요?",
-            message = "완료하지 않은 세트는 저장되지 않습니다.",
+            message = if (workout?.hasCompletedSets == false) {
+                "완료한 세트가 없어 이번 운동은 기록에 남지 않습니다."
+            } else {
+                "완료하지 않은 세트는 저장되지 않습니다."
+            },
             confirmLabel = "종료",
             onConfirm = {
                 showFinishDialog = false
@@ -325,7 +330,11 @@ private fun ExerciseBlock(
             TextButton(onClick = onUnlinkSuperset) { Text("슈퍼셋에서 빼기") }
         }
 
-        LastPerformanceBlock(lastSets = lastSets, weightUnit = weightUnit)
+        LastPerformanceBlock(
+            lastSets = lastSets,
+            trackingType = record.exercise.trackingType,
+            weightUnit = weightUnit,
+        )
 
         Spacer(Modifier.height(12.dp))
 
@@ -360,16 +369,36 @@ private fun ExerciseBlock(
 }
 
 @Composable
-private fun LastPerformanceBlock(lastSets: List<WorkoutSet>, weightUnit: WeightUnit) {
-    val text = if (lastSets.isEmpty()) {
-        "지난 기록 없음 — 첫 기록을 만들어 보세요."
-    } else {
-        "지난 운동  " + lastSets.joinToString(" · ") { "${formatWeight(it.weightKg, weightUnit)}×${it.reps}" }
-    }
+private fun LastPerformanceBlock(
+    lastSets: List<WorkoutSet>,
+    trackingType: ExerciseTrackingType,
+    weightUnit: WeightUnit,
+) {
     Text(
-        text = text,
+        text = lastPerformanceText(lastSets, trackingType, weightUnit),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 6.dp),
     )
+}
+
+/**
+ * "지난 운동" 한 줄. 종목의 기록 방식대로 적는다.
+ *
+ * 시간이나 횟수만 재는 종목은 중량·횟수가 0 으로 저장된다. 전부 "중량×횟수"로 쓰면
+ * 플랭크가 "0kg×0", 풀업이 "0kg×12" 로 나온다.
+ */
+internal fun lastPerformanceText(
+    lastSets: List<WorkoutSet>,
+    trackingType: ExerciseTrackingType,
+    weightUnit: WeightUnit,
+): String {
+    if (lastSets.isEmpty()) return "지난 기록 없음 — 첫 기록을 만들어 보세요."
+    return "지난 운동  " + lastSets.joinToString(" · ") { set ->
+        when (trackingType) {
+            ExerciseTrackingType.WEIGHT_REPS -> "${formatWeight(set.weightKg, weightUnit)}×${set.reps}"
+            ExerciseTrackingType.REPS_ONLY -> "${set.reps}회"
+            ExerciseTrackingType.TIME -> formatDuration(set.durationSeconds.toLong())
+        }
+    }
 }

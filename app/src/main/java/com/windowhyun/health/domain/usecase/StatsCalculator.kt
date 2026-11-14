@@ -1,13 +1,12 @@
 package com.windowhyun.health.domain.usecase
 
 import com.windowhyun.health.core.model.BodyPart
+import com.windowhyun.health.core.util.startOfWeek
 import com.windowhyun.health.domain.model.Run
 import com.windowhyun.health.domain.model.Workout
-import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.temporal.TemporalAdjusters
 
-/** 한 주(월~일)의 요약. 기록이 없는 주도 0 으로 채워 그래프가 끊기지 않게 한다. */
+/** 한 주(일~토)의 요약. 기록이 없는 주도 0 으로 채워 그래프가 끊기지 않게 한다. */
 data class WeekStat(
     val weekStart: LocalDate,
     val workoutCount: Int,
@@ -49,10 +48,13 @@ data class TrainingStats(
  */
 object StatsCalculator {
 
-    fun weekStartOf(date: LocalDate): LocalDate =
-        date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    /**
+     * 주의 첫날. 홈의 "이번 주"와 캘린더가 쓰는 것과 같은 기준(일요일)이어야 한다.
+     * 따로 월요일로 세면 일요일에 한 운동이 홈에서는 이번 주, 통계에서는 지난주가 되어 숫자가 어긋난다.
+     */
+    fun weekStartOf(date: LocalDate): LocalDate = date.startOfWeek()
 
-    /** [weekCount] 주 범위의 첫날(월요일). */
+    /** [weekCount] 주 범위의 첫날(일요일). */
     fun rangeStart(today: LocalDate, weekCount: Int): LocalDate =
         weekStartOf(today).minusWeeks((weekCount - 1).toLong())
 

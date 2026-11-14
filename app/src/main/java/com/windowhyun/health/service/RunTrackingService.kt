@@ -177,7 +177,10 @@ class RunTrackingService : LifecycleService() {
     }
 
     private fun startForegroundWithNotification(notification: Notification) {
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        // 서비스 타입은 Android 10(Q) 부터 있다. 그 아래에서는 값이 무시된다.
+        // 10~13 에서 0(NONE)을 넘기면 위치 타입 없이 시작되어, 화면이 꺼지거나 앱이
+        // 뒤로 가는 순간 위치가 끊긴다(시간만 흐르고 거리·경로가 멈춘다).
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         } else {
             0

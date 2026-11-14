@@ -1,10 +1,12 @@
 package com.windowhyun.health.ui.running
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Point
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -36,6 +38,8 @@ import org.osmdroid.views.overlay.Polyline
  * 타일을 못 받는 상황(오프라인 등)에서도 **경로 선과 시작/끝 표시는 그대로 보인다.**
  * 배경만 비어 있을 뿐 어디를 어떻게 달렸는지는 확인할 수 있다.
  */
+// 터치는 "방금 손으로 지도를 옮겼다"는 것만 적고 지도에 그대로 넘긴다. 눌러서 하는 동작이 없다.
+@SuppressLint("ClickableViewAccessibility")
 @Composable
 fun RunRouteMap(
     route: List<RunPoint>,
@@ -53,6 +57,8 @@ fun RunRouteMap(
     // "고장난 화면"처럼 보이므로 앱 배경색으로 바꾼다.
     val emptyTileColor = MaterialTheme.colorScheme.surfaceVariant.toArgb()
 
+    val renderState = remember { RouteRenderState() }
+
     val mapView = remember {
         initOsmdroid(context)
         MapView(context).apply {
@@ -63,6 +69,10 @@ fun RunRouteMap(
             isTilesScaledToDpi = true
             overlayManager.tilesOverlay.setLoadingBackgroundColor(emptyTileColor)
             overlayManager.tilesOverlay.setLoadingLineColor(emptyTileColor)
+            setOnTouchListener { _, _ ->
+                renderState.lastTouchAt = SystemClock.elapsedRealtime()
+                false
+            }
         }
     }
 
@@ -77,7 +87,14 @@ fun RunRouteMap(
     AndroidView(
         factory = { mapView },
         modifier = modifier,
-        update = { view ->
+        update = update@{ view ->
+            // update 는 이 화면이 다시 그려질 때마다 불린다(기록 중에는 1초마다).
+            // 경로가 그대로면 선을 다시 만들 것도, 지도를 다시 맞출 것도 없다. 매번 하면 점이 늘수록
+            // 무거워지고, 손으로 옮기거나 확대한 지도가 1초 만에 되돌아간다.
+            val key = RouteRenderKey(route.size, route.lastOrNull(), followLatest, lineColor, startColor, endColor)
+            if (key == renderState.key) return@update
+            renderState.key = key
+
             view.overlays.clear()
 
             val displayed = route.downsample()
@@ -106,9 +123,16 @@ fun RunRouteMap(
                 route.isEmpty() -> Unit
 
                 followLatest -> {
-                    val last = route.last()
-                    view.controller.setZoom(RUNNING_ZOOM)
-                    view.controller.setCenter(GeoPoint(last.latitude, last.longitude))
+                    // 배율은 처음 한 번만 맞춘다. 그 뒤로는 손으로 바꾼 배율을 그대로 둔다.
+                    if (!renderState.zoomApplied) {
+                        view.controller.setZoom(RUNNING_ZOOM)
+                        renderState.zoomApplied = true
+                    }
+                    // 방금 지도를 만졌으면 그 자리를 보게 둔다. 손을 뗀 지 조금 지나면 다시 따라간다.
+                    if (!renderState.touchedRecently()) {
+                        val last = route.last()
+                        view.controller.setCenter(GeoPoint(last.latitude, last.longitude))
+                    }
                 }
 
                 route.size == 1 -> {
@@ -121,6 +145,29 @@ fun RunRouteMap(
             view.invalidate()
         },
     )
+}
+
+/** 지금 지도에 그려 둔 내용. 같으면 다시 그리지 않는다. 경로는 뒤에만 붙으므로 개수와 끝 점으로 가린다. */
+private data class RouteRenderKey(
+    val size: Int,
+    val last: RunPoint?,
+    val followLatest: Boolean,
+    val lineColor: Int,
+    val startColor: Int,
+    val endColor: Int,
+)
+
+private class RouteRenderState {
+    var key: RouteRenderKey? = null
+    var zoomApplied = false
+
+    /** 마지막으로 지도를 만진 시각(기기가 켜진 뒤 흐른 밀리초). 만진 적이 없으면 null. */
+    var lastTouchAt: Long? = null
+
+    fun touchedRecently(): Boolean {
+        val touchedAt = lastTouchAt ?: return false
+        return SystemClock.elapsedRealtime() - touchedAt < FOLLOW_RESUME_MILLIS
+    }
 }
 
 /**
@@ -241,6 +288,9 @@ private fun initOsmdroid(context: Context) {
 
 private const val OSMDROID_PREFS = "osmdroid"
 private const val RUNNING_ZOOM = 17.0
+
+/** 지도를 만진 뒤 이만큼 지나면 다시 현재 위치를 따라간다. */
+private const val FOLLOW_RESUME_MILLIS = 10_000L
 
 /** OSM 타일이 존재하는 최대 배율은 19 이지만, 18 이 주변 파악에 더 낫다. */
 private const val MAX_ZOOM = 18.0

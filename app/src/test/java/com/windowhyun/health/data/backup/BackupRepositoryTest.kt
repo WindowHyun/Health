@@ -17,6 +17,9 @@ import com.windowhyun.health.data.local.HealthDatabase
 import com.windowhyun.health.data.repository.ExerciseRepositoryImpl
 import com.windowhyun.health.data.repository.RunRepositoryImpl
 import com.windowhyun.health.data.repository.WorkoutRepositoryImpl
+import com.windowhyun.health.data.seed.BuiltInExerciseSeeder
+import com.windowhyun.health.data.seed.DefaultExercises
+import com.windowhyun.health.data.seed.ExerciseSeedCallback
 import com.windowhyun.health.domain.model.Exercise
 import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.RunLap
@@ -480,5 +483,76 @@ class BackupRepositoryTest {
         backup.restoreBackup(ByteArrayInputStream(old.toString().toByteArray()))
 
         assertThat(db.backupDao().allWorkouts()).hasSize(1)
+    }
+
+    // ----- 코드 리뷰에서 나온 문제 -----
+
+    /** 옛 버전의 백업에는 그 뒤에 추가된 기본 종목이 없다. 앱을 다시 켜지 않아도 복원 직후 채워져 있어야 한다. */
+    @Test
+    fun `fills in missing built in exercises right after a restore`() = runTest(dispatcher) {
+        val seeding = BackupRepositoryImpl(
+            db, db.backupDao(), settings, dispatcher,
+            BuiltInExerciseSeeder(ExerciseSeedCallback::insertMissing),
+        )
+        val file = BackupFile(
+            createdAt = 1,
+            exercises = listOf(
+                BackupExercise(id = 1, name = "백업에만 있는 운동", category = "BARBELL", bodyPart = "LEG"),
+            ),
+        )
+        val bytes = Json.encodeToString(BackupFile.serializer(), file).toByteArray()
+
+        seeding.restoreBackup(ByteArrayInputStream(bytes))
+
+        val names = db.backupDao().allExercises().map { it.name }
+        assertThat(names).contains("백업에만 있는 운동")
+        assertThat(names).containsAtLeastElementsIn(DefaultExercises.all.map { it.name })
+    }
+
+    /** 러닝 도중 만든 백업의 끝나지 않은 러닝은 이어 갈 수 없다. 마감해서 넣는다. */
+    @Test
+    fun `closes runs that were still being recorded when the backup was made`() {
+        val file = BackupFile(
+            createdAt = 1,
+            runs = listOf(
+                BackupRun(id = 1, startTime = 1_000, endTime = 9_000, durationSeconds = 8, distanceMeters = 20.0),
+                // 운동 시간이 저장되어 있으면 그만큼 지난 시각에 끝난 것으로 본다.
+                BackupRun(id = 2, startTime = 10_000, durationSeconds = 60, distanceMeters = 150.0),
+                // 아무것도 기록되지 않은 러닝은 남기지 않는다.
+                BackupRun(id = 3, startTime = 20_000),
+                // 위치만 남았으면 마지막 위치 시각에 끝난 것으로 본다.
+                BackupRun(id = 4, startTime = 30_000),
+            ),
+            runLaps = listOf(BackupRunLap(id = 1, runId = 2, lapNumber = 1)),
+            runLocations = listOf(BackupRunLocation(id = 1, runId = 4, timestamp = 42_000)),
+        )
+
+        val closed = file.closeUnfinishedRuns()
+
+        assertThat(closed.runs.map { it.id }).containsExactly(1L, 2L, 4L).inOrder()
+        assertThat(closed.runs.map { it.endTime }).containsExactly(9_000L, 70_000L, 42_000L).inOrder()
+        // 이미 끝난 러닝은 그대로다.
+        assertThat(closed.runs.first()).isEqualTo(file.runs.first())
+        assertThat(closed.runLaps).hasSize(1)
+    }
+
+    /** 끝나지 않은 러닝이 든 백업을 복원해도 "진행 중"이 남지 않아 다음 복원을 막지 않는다. */
+    @Test
+    fun `a backup taken during a run does not leave a run in progress`() = runTest(dispatcher) {
+        seedRecords()
+        val unfinished = runs.startRun(RunGoalType.FREE, 0.0)
+        runs.appendRoutePoints(unfinished, listOf(RunPoint(latitude = 37.5, longitude = 127.0, timestamp = 5_000)))
+        val bytes = exportBytes()
+        db.backupDao().deleteAllRunLocations()
+        db.backupDao().deleteAllRunLaps()
+        db.backupDao().deleteAllRuns()
+
+        backup.restoreBackup(ByteArrayInputStream(bytes))
+
+        assertThat(db.backupDao().allRuns()).hasSize(2)
+        assertThat(db.backupDao().countInProgress()).isEqualTo(0)
+        // 한 번 더 복원할 수 있다.
+        backup.restoreBackup(ByteArrayInputStream(bytes))
+        assertThat(db.backupDao().allRuns()).hasSize(2)
     }
 }

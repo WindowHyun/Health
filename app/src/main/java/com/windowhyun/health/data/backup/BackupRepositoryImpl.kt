@@ -20,6 +20,8 @@ import com.windowhyun.health.data.local.entity.RunLocationEntity
 import com.windowhyun.health.data.local.entity.WorkoutEntity
 import com.windowhyun.health.data.local.entity.WorkoutExerciseEntity
 import com.windowhyun.health.data.local.entity.WorkoutSetEntity
+import com.windowhyun.health.data.repository.RECOVERED_MEMO
+import com.windowhyun.health.data.seed.BuiltInExerciseSeeder
 import com.windowhyun.health.di.IoDispatcher
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.ThemeMode
@@ -57,6 +59,8 @@ class BackupRepositoryImpl @Inject constructor(
     private val backupDao: BackupDao,
     private val settingsRepository: SettingsRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    /** 복원 뒤 빠진 기본 종목을 채운다. 기본값은 "채우지 않음"이라 테스트는 넣은 종목만 본다. */
+    private val builtInExerciseSeeder: BuiltInExerciseSeeder = BuiltInExerciseSeeder.None,
 ) : BackupRepository {
 
     private val json = Json {
@@ -69,21 +73,26 @@ class BackupRepositoryImpl @Inject constructor(
     override suspend fun exportBackup(output: OutputStream): BackupSummary =
         withContext(ioDispatcher) {
             val settings = settingsRepository.settings.first()
-            val file = BackupFile(
-                createdAt = System.currentTimeMillis(),
-                appVersion = BuildConfig.VERSION_NAME,
-                settings = settings.toBackup(),
-                exercises = backupDao.allExercises().map { it.toBackup() },
-                routines = backupDao.allRoutines().map { it.toBackup() },
-                routineExercises = backupDao.allRoutineExercises().map { it.toBackup() },
-                workouts = backupDao.allWorkouts().map { it.toBackup() },
-                workoutExercises = backupDao.allWorkoutExercises().map { it.toBackup() },
-                workoutSets = backupDao.allWorkoutSets().map { it.toBackup() },
-                personalRecords = backupDao.allPersonalRecords().map { it.toBackup() },
-                runs = backupDao.allRuns().map { it.toBackup() },
-                runLaps = backupDao.allRunLaps().map { it.toBackup() },
-                runLocations = backupDao.allRunLocations().map { it.toBackup() },
-            )
+            // 표를 하나씩 따로 읽으면 그 사이에 쓰인 기록이 반쪽만 담긴다(운동 중 세트 추가,
+            // 러닝 중 5초마다 저장되는 위치). 부모 없이 담긴 행은 복원할 때 버려지므로
+            // 한 트랜잭션에서 읽어 같은 순간의 모습을 담는다.
+            val file = database.withTransaction {
+                BackupFile(
+                    createdAt = System.currentTimeMillis(),
+                    appVersion = BuildConfig.VERSION_NAME,
+                    settings = settings.toBackup(),
+                    exercises = backupDao.allExercises().map { it.toBackup() },
+                    routines = backupDao.allRoutines().map { it.toBackup() },
+                    routineExercises = backupDao.allRoutineExercises().map { it.toBackup() },
+                    workouts = backupDao.allWorkouts().map { it.toBackup() },
+                    workoutExercises = backupDao.allWorkoutExercises().map { it.toBackup() },
+                    workoutSets = backupDao.allWorkoutSets().map { it.toBackup() },
+                    personalRecords = backupDao.allPersonalRecords().map { it.toBackup() },
+                    runs = backupDao.allRuns().map { it.toBackup() },
+                    runLaps = backupDao.allRunLaps().map { it.toBackup() },
+                    runLocations = backupDao.allRunLocations().map { it.toBackup() },
+                )
+            }
             output.use { json.encodeToStream(file, it) }
             file.summarize()
         }
@@ -112,6 +121,7 @@ class BackupRepositoryImpl @Inject constructor(
             }
 
             val clean = file.dropOrphans()
+            val restored = clean.closeUnfinishedRuns()
 
             database.withTransaction {
                 // 진행 중인 러닝은 몇 초마다 위치를 저장한다. 그 사이 기록을 갈아 끼우면 없는 러닝에
@@ -136,16 +146,20 @@ class BackupRepositoryImpl @Inject constructor(
                 backupDao.deleteAllExercises()
 
                 // 넣을 때는 부모부터.
-                backupDao.insertExercises(clean.exercises.map { it.toEntity() })
-                backupDao.insertRoutines(clean.routines.map { it.toEntity() })
-                backupDao.insertRoutineExercises(clean.routineExercises.map { it.toEntity() })
-                backupDao.insertWorkouts(clean.workouts.map { it.toEntity() })
-                backupDao.insertWorkoutExercises(clean.workoutExercises.map { it.toEntity() })
-                backupDao.insertWorkoutSets(clean.workoutSets.map { it.toEntity() })
-                backupDao.insertPersonalRecords(clean.personalRecords.map { it.toEntity() })
-                backupDao.insertRuns(clean.runs.map { it.toEntity() })
-                backupDao.insertRunLaps(clean.runLaps.map { it.toEntity() })
-                backupDao.insertRunLocations(clean.runLocations.map { it.toEntity() })
+                backupDao.insertExercises(restored.exercises.map { it.toEntity() })
+                backupDao.insertRoutines(restored.routines.map { it.toEntity() })
+                backupDao.insertRoutineExercises(restored.routineExercises.map { it.toEntity() })
+                backupDao.insertWorkouts(restored.workouts.map { it.toEntity() })
+                backupDao.insertWorkoutExercises(restored.workoutExercises.map { it.toEntity() })
+                backupDao.insertWorkoutSets(restored.workoutSets.map { it.toEntity() })
+                backupDao.insertPersonalRecords(restored.personalRecords.map { it.toEntity() })
+                backupDao.insertRuns(restored.runs.map { it.toEntity() })
+                backupDao.insertRunLaps(restored.runLaps.map { it.toEntity() })
+                backupDao.insertRunLocations(restored.runLocations.map { it.toEntity() })
+
+                // 옛 버전의 백업에는 그 뒤에 추가된 기본 종목이 없다. 같은 트랜잭션에서 채워야
+                // 복원 직후에도 종목 목록과 루틴 템플릿이 온전하다.
+                builtInExerciseSeeder.seed(database.openHelper.writableDatabase)
             }
 
             settingsRepository.update { file.settings.toSettings(it) }
@@ -446,6 +460,38 @@ internal fun BackupFile.dropOrphans(): BackupFile {
         runLaps = runLaps.distinctBy { it.id }.filter { it.runId in runIds },
         runLocations = runLocations.distinctBy { it.id }.filter { it.runId in runIds },
     )
+}
+
+/**
+ * 끝나지 않은 러닝을 마감한다.
+ *
+ * 러닝 도중 만든 백업에는 끝나지 않은 러닝이 들어 있다. 복원은 진행 중인 기록이 없을 때만 하므로
+ * 이 러닝을 이어 갈 방법이 없고, 그대로 넣으면 "진행 중"으로 남아 앱을 다시 켤 때까지 다음 복원을 막는다.
+ * 앱이 강제로 종료된 러닝을 마감할 때(RunRepositoryImpl.closeUnfinishedRuns)와 같은 규칙으로 닫는다.
+ *
+ * 끝나지 않은 운동(헬스)은 건드리지 않는다. 홈에서 이어서 하거나 끝낼 수 있다.
+ */
+internal fun BackupFile.closeUnfinishedRuns(): BackupFile {
+    if (runs.none { it.endTime == null }) return this
+    val lastPointByRun = runLocations.groupBy { it.runId }
+        .mapValues { (_, points) -> points.maxOf { it.timestamp } }
+    val emptyRunIds = mutableSetOf<Long>()
+    val closed = runs.mapNotNull { run ->
+        if (run.endTime != null) return@mapNotNull run
+        val lastPoint = lastPointByRun[run.id]
+        // 아무것도 기록되지 않은 러닝은 남길 이유가 없다.
+        if (run.distanceMeters <= 0.0 && run.durationSeconds <= 0L && lastPoint == null) {
+            emptyRunIds += run.id
+            return@mapNotNull null
+        }
+        val end = if (run.durationSeconds > 0) {
+            run.startTime + run.durationSeconds * 1_000
+        } else {
+            lastPoint ?: run.startTime
+        }
+        run.copy(endTime = maxOf(end, run.startTime), memo = run.memo ?: RECOVERED_MEMO)
+    }
+    return copy(runs = closed, runLaps = runLaps.filter { it.runId !in emptyRunIds })
 }
 
 internal fun BackupFile.rowCount(): Int =
