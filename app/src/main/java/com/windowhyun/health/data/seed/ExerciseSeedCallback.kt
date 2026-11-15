@@ -16,6 +16,35 @@ object ExerciseSeedCallback : RoomDatabase.Callback() {
 
     override fun onOpen(db: SupportSQLiteDatabase) {
         insertMissing(db)
+        backfillDefaultRest(db)
+    }
+
+    /**
+     * 기본 종목의 **비어 있는** 기본 휴식 시간을 채운다.
+     *
+     * 휴식 시간(벤치프레스 150초 등)은 나중 버전에서 종목 파일에 더해졌는데, [insertMissing] 은 없는 종목만 넣으므로
+     * 그 전부터 쓰던 기기의 종목에는 값이 영영 들어가지 않았다(새로 설치한 기기만 받았다). 비어 있는 것만 채우므로 여러 번 해도 같고,
+     * 사용자가 만든 종목과 이미 값이 있는 종목은 건드리지 않는다. 옛 백업을 복원한 뒤에도 부른다.
+     */
+    internal fun backfillDefaultRest(db: SupportSQLiteDatabase) {
+        val empty = db.query("SELECT name FROM exercise WHERE isBuiltIn = 1 AND defaultRestSeconds IS NULL").use { cursor ->
+            buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) }
+        }
+        if (empty.isEmpty()) return
+        val targets = DefaultExercises.all.filter { it.defaultRestSeconds != null && it.name in empty }
+        if (targets.isEmpty()) return
+        db.beginTransaction()
+        try {
+            targets.forEach { exercise ->
+                db.execSQL(
+                    "UPDATE exercise SET defaultRestSeconds = ? WHERE name = ? AND isBuiltIn = 1 AND defaultRestSeconds IS NULL",
+                    arrayOf<Any?>(exercise.defaultRestSeconds, exercise.name),
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     internal fun insertMissing(db: SupportSQLiteDatabase) {

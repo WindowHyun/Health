@@ -246,4 +246,21 @@ class RoutineTemplateTest {
 
         assertThat(routines.observeRoutines().first()).hasSize(4)
     }
+
+    // ----- 코드 리뷰(v0.17.6): 휴식 문구 -----
+
+    @Test
+    fun `rest labels read naturally`() {
+        assertThat(restLabel(null)).isEqualTo("기본 휴식")
+        assertThat(restLabel(45)).isEqualTo("휴식 45초") // "휴식 0분 45초" 가 아니다
+        assertThat(restLabel(60)).isEqualTo("휴식 1분")
+        assertThat(restLabel(150)).isEqualTo("휴식 2분 30초")
+    }
+
+    /** 휴식을 비워 둔 루틴 항목은 종목의 기본 휴식이 먼저 쓰인다. 화면도 그 값을 보여 준다. */
+    @Test
+    fun `an empty routine rest shows the value that is really used`() {
+        assertThat(restFallbackLabel(exerciseDefaultSeconds = 150, appDefaultSeconds = 60)).isEqualTo("종목 기본값 사용 (150초)")
+        assertThat(restFallbackLabel(exerciseDefaultSeconds = null, appDefaultSeconds = 60)).isEqualTo("앱 기본값 사용 (60초)")
+    }
 }

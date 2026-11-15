@@ -1,10 +1,12 @@
 package com.windowhyun.health.data.repository
 
+import com.windowhyun.health.data.local.dao.CourseDao
 import com.windowhyun.health.data.local.dao.RunDao
 import com.windowhyun.health.data.local.entity.RunEntity
 import com.windowhyun.health.data.local.entity.RunLapEntity
 import com.windowhyun.health.data.local.entity.RunLocationEntity
 import com.windowhyun.health.data.mapper.toDomain
+import com.windowhyun.health.domain.course.CourseGeometry
 import com.windowhyun.health.domain.model.Run
 import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.RunLap
@@ -24,9 +26,20 @@ import javax.inject.Singleton
  * 덕분에 기록 도중 앱이 죽어도 이미 달린 구간은 남는다.
  */
 @Singleton
-class RunRepositoryImpl @Inject constructor(
+class RunRepositoryImpl internal constructor(
     private val runDao: RunDao,
+    /** 코스 이름으로 그 코스의 길이(m)를 찾는다. 코스를 지웠거나 이름을 바꿨으면 null. */
+    private val courseLengthMeters: suspend (String) -> Double?,
 ) : RunRepository {
+
+    @Inject
+    constructor(runDao: RunDao, courseDao: CourseDao) : this(
+        runDao,
+        { name -> courseDao.getByName(name)?.let { CourseRepositoryImpl.decode(it.points) }?.let(CourseGeometry::length) },
+    )
+
+    /** 코스 표 없이 쓰는 경우(테스트 등). 코스 길이는 같은 코스 러닝들의 거리로 어림한다. */
+    constructor(runDao: RunDao) : this(runDao, { null })
 
     override fun observeRecentRuns(limit: Int): Flow<List<Run>> =
         runDao.observeRecentRuns(limit).map { list -> list.map { it.toDomain() } }
@@ -161,9 +174,24 @@ class RunRepositoryImpl @Inject constructor(
 
     override suspend fun courseStats(run: Run): com.windowhyun.health.domain.model.CourseRunStats? {
         val name = run.courseName ?: return null
-        val count = runDao.countCourseRunsUpTo(name, run.startTime)
-        val best = runDao.bestCourseDuration(name) ?: return null
-        return com.windowhyun.health.domain.model.CourseRunStats(count = count, bestDurationSeconds = best)
+        val all = runDao.courseRuns(name)
+        if (all.isEmpty()) return null
+        // 코스를 끝까지 달린 러닝끼리만 견준다. 1분 뛰고 그만둔 러닝이 "최고 기록 1:00" 이 되면 그 뒤 모든 완주가 최고 기록이 될 수 없다.
+        // 기준은 코스 길이이고, 코스를 지웠거나 이름을 바꿔 길이를 모르면 같은 코스 러닝들의 거리 중앙값으로 어림한다.
+        val reference = courseLengthMeters(name) ?: median(all.map { it.distanceMeters })
+        val full = all.filter { it.distanceMeters >= reference * COURSE_COMPLETE_FRACTION }
+        // 이 러닝이 완주가 아니면 순위도 비교도 붙이지 않는다(코스 이름만 보인다).
+        if (full.none { it.id == run.id }) return null
+        return com.windowhyun.health.domain.model.CourseRunStats(
+            count = full.count { it.startTime <= run.startTime },
+            bestDurationSeconds = full.minOf { it.durationSeconds },
+        )
+    }
+
+    private fun median(values: List<Double>): Double {
+        val sorted = values.sorted()
+        val mid = sorted.size / 2
+        return if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2
     }
 
     override suspend fun getActiveRun(): Run? {
@@ -259,6 +287,9 @@ class RunRepositoryImpl @Inject constructor(
 
     private companion object {
         const val MIN_PACE_RECORD_METERS = 1_000.0
+
+        /** 코스 길이의 이만큼은 달려야 "코스를 끝까지 달린 러닝" 으로 본다(GPS 거리는 코스 길이와 조금 다르다). */
+        const val COURSE_COMPLETE_FRACTION = 0.9
     }
 }
 

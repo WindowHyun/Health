@@ -107,4 +107,17 @@ class MapGeoTest {
         assertThat(com.windowhyun.health.domain.model.AppSettings().mapStyle).isEqualTo(MapStyleMode.CLASSIC)
         assertThat(MapStyleMode.entries.map { it.label }).containsExactly("기본", "새 지도").inOrder()
     }
+
+    /** 지점이 한쪽에 몰린 코스도 전체가 들어온다(가운데는 평균이 아니라 범위의 한가운데). 예전 지도의 "코스 전체 보기" 도 이 함수를 쓴다. */
+    @Test
+    fun `bounds contain every point even when points bunch up at one end`() {
+        val latitudes = List(10) { 37.5000 + it * 0.00001 } + 37.5200 // 남쪽에 10개, 북쪽 끝에 1개
+        val longitudes = List(11) { 127.0 }
+
+        val b = MapGeo.bounds(latitudes, longitudes)
+
+        assertThat(b.south).isAtMost(latitudes.min())
+        assertThat(b.north).isAtLeast(latitudes.max())
+        assertThat((b.south + b.north) / 2).isWithin(1e-9).of((latitudes.min() + latitudes.max()) / 2)
+    }
 }

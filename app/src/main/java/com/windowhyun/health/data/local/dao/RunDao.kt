@@ -132,10 +132,13 @@ interface RunDao {
     @Query("SELECT COUNT(*) FROM run WHERE endTime IS NOT NULL AND date < :beforeEpochDay")
     fun observeRunCountBefore(beforeEpochDay: Long): Flow<Int>
 
-    /** 이 코스를 끝까지 기록한 러닝 중 [startTime] 까지(이 러닝 포함)의 수. */
-    @Query("SELECT COUNT(*) FROM run WHERE courseName = :name AND endTime IS NOT NULL AND startTime <= :startTime")
-    suspend fun countCourseRunsUpTo(name: String, startTime: Long): Int
-
-    @Query("SELECT MIN(durationSeconds) FROM run WHERE courseName = :name AND endTime IS NOT NULL AND durationSeconds > 0")
-    suspend fun bestCourseDuration(name: String): Long?
+    /** 이 이름의 코스를 따라 달리고 끝낸 러닝들(비교에 필요한 값만). 중간에 그만둔 것도 들어 있다. */
+    @Query(
+        "SELECT id, startTime, durationSeconds, distanceMeters FROM run " +
+            "WHERE courseName = :name AND endTime IS NOT NULL AND durationSeconds > 0",
+    )
+    suspend fun courseRuns(name: String): List<CourseRunRow>
 }
+
+/** [RunDao.courseRuns] 의 한 줄. */
+data class CourseRunRow(val id: Long, val startTime: Long, val durationSeconds: Long, val distanceMeters: Double)

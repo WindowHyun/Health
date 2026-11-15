@@ -48,6 +48,7 @@ class RunStopConfirmTest {
     private lateinit var fixture: ScreenshotFixture
     private lateinit var context: Context
     private lateinit var tracker: RunTracker
+    private lateinit var viewModel: RunActiveViewModel
     private var now = 0L
 
     private val steps = object : StepCounter {
@@ -70,7 +71,7 @@ class RunStopConfirmTest {
             }
             tracker.pause()
         }
-        val viewModel = RunActiveViewModel(tracker, fixture.settings, RunServiceController(context))
+        viewModel = RunActiveViewModel(tracker, fixture.settings, RunServiceController(context))
         compose.setContent {
             HealthTheme(themeMode = ThemeMode.LIGHT) {
                 Surface(color = MaterialTheme.colorScheme.background) { RunActiveScreen(onFinished = {}, viewModel = viewModel) }
@@ -127,6 +128,28 @@ class RunStopConfirmTest {
         compose.waitForIdle()
 
         assertThat(stopRequested()).isTrue()
+    }
+
+    /**
+     * 일시정지 중에 종료를 눌러 질문이 떠 있다가, 다시 달리기 시작했다(자동 재개면 손을 대지 않아도 그렇게 된다).
+     * 다음 일시정지 때 누르지도 않은 "종료할까요?" 가 저절로 다시 뜨면 안 된다 — 주머니 속 터치 한 번에 러닝이 끝난다.
+     */
+    @Test
+    fun `a question left open does not come back at the next pause`() {
+        compose.onNodeWithText("종료").performClick()
+        compose.onNodeWithText("러닝을 종료할까요?").assertIsDisplayed()
+
+        runBlocking { tracker.resume() }
+        waitFor { viewModel.uiState.value.tracking.status == RunStatus.TRACKING }
+        compose.waitForIdle()
+        assertThat(compose.onAllDialogs()).isEmpty()
+
+        runBlocking { tracker.pause() }
+        waitFor { viewModel.uiState.value.tracking.status == RunStatus.PAUSED }
+        compose.waitForIdle()
+
+        assertThat(compose.onAllDialogs()).isEmpty()
+        assertThat(stopRequested()).isFalse()
     }
 
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onAllDialogs() =

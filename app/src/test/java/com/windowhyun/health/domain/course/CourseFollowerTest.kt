@@ -96,4 +96,85 @@ class CourseFollowerTest {
         assertThat(g.approaching).isFalse()
         assertThat(g.progressMeters).isWithin(8.0).of(500.0)
     }
+
+    // ----- 순환 코스(출발점 = 도착점) -----
+
+    /** 한 변 300m 정사각형을 돌아 출발점으로 돌아오는 코스(1.2km). */
+    private val square = listOf(
+        CoursePoint(37.0, 127.0),
+        CoursePoint(37.0, lon(300.0)),
+        CoursePoint(latOff(300.0), lon(300.0)),
+        CoursePoint(latOff(300.0), 127.0),
+        CoursePoint(37.0, 127.0),
+    )
+
+    /** 코스 위에서 출발점부터 [meters] 만큼 간 곳. */
+    private fun pointAt(course: List<CoursePoint>, meters: Double): CoursePoint {
+        var left = meters
+        for (i in 0 until course.size - 1) {
+            val length = CourseGeometry.distance(course[i], course[i + 1])
+            if (left <= length || i == course.size - 2) {
+                val t = (left / length).coerceIn(0.0, 1.0)
+                return CoursePoint(
+                    course[i].latitude + (course[i + 1].latitude - course[i].latitude) * t,
+                    course[i].longitude + (course[i + 1].longitude - course[i].longitude) * t,
+                )
+            }
+            left -= length
+        }
+        return course.last()
+    }
+
+    /** 실제 러닝처럼 [step] m 마다 위치를 넣으며 코스를 따라 달린다. 마지막 안내를 돌려준다. */
+    private fun CourseFollower.runAlong(course: List<CoursePoint>, from: Double, to: Double, step: Double = 10.0) =
+        generateSequence(from) { it + step }.takeWhile { it <= to }
+            .map { pointAt(course, it).let { p -> update(p.latitude, p.longitude) } }
+            .last()
+
+    /** 출발선 조금 앞(= 마지막 구간 위)에서 시작하면 GPS 가 마지막 구간에 붙는다. 그래도 도착이 아니라 출발이다. */
+    @Test fun `a first fix just behind the start line of a loop is the start not the finish`() {
+        val f = CourseFollower(square)
+        val g = f.update(latOff(12.0), 127.0) // 마지막 구간 위, 출발점 12m 앞
+
+        assertThat(g.finished).isFalse()
+        assertThat(g.progressMeters).isLessThan(30.0)
+        assertThat(g.remainingMeters).isWithin(30.0).of(f.totalMeters)
+    }
+
+    @Test fun `a loop finishes only after it was actually run`() {
+        val f = CourseFollower(square)
+        f.update(latOff(12.0), 127.0)
+
+        val half = f.runAlong(square, 0.0, 600.0)
+        assertThat(half.finished).isFalse()
+        assertThat(half.progressMeters).isWithin(15.0).of(600.0)
+
+        val end = f.runAlong(square, 610.0, f.totalMeters)
+        assertThat(end.finished).isTrue()
+    }
+
+    /** 집이 마지막 구간 쪽에 있어, 마지막 구간을 따라 출발점까지 걸어온 경우. 출발선에 선 것이지 완주한 것이 아니다. */
+    @Test fun `walking up to the start along the last leg does not finish the loop`() {
+        val f = CourseFollower(square)
+        val atStart = f.runAlong(square, f.totalMeters - 200.0, f.totalMeters)
+        assertThat(atStart.finished).isFalse()
+
+        val onFirstLeg = f.runAlong(square, 0.0, 100.0)
+        assertThat(onFirstLeg.finished).isFalse()
+        assertThat(onFirstLeg.offCourse).isFalse()
+        assertThat(onFirstLeg.progressMeters).isWithin(15.0).of(100.0)
+    }
+
+    /** 첫 신호가 늦게 잡혀 코스 중간(앞 절반 안)에서 합류해도, 절반 넘게 달렸으면 도착으로 본다. */
+    @Test fun `a loop joined in its first half still finishes`() {
+        val f = CourseFollower(square)
+        val end = f.runAlong(square, 300.0, f.totalMeters)
+        assertThat(end.finished).isTrue()
+    }
+
+    /** 순환 코스가 아니면 예전과 같다: 끝 근처에 닿으면 얼마를 달렸든 도착이다. */
+    @Test fun `a one way course still finishes when joined near its end`() {
+        val f = CourseFollower(east)
+        assertThat(f.update(37.0, lon(f.totalMeters - 10.0)).finished).isTrue()
+    }
 }

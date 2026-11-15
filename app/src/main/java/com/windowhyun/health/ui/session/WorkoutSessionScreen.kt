@@ -258,7 +258,7 @@ fun WorkoutSessionScreen(
     if (showFinishDialog) {
         val exercises = workout?.exercises.orEmpty()
         val completed = exercises.sumOf { it.completedSets.size }
-        val unchecked = exercises.flatMap { it.sets }.count { !it.completed && it.hasValues }
+        val unchecked = exercises.sumOf { it.uncheckedCompletableSets.size }
         val prompt = finishPrompt(completed, incompleteSets = exercises.sumOf { it.sets.size } - completed, uncheckedWithValues = unchecked)
         AlertDialog(
             onDismissRequest = { showFinishDialog = false },

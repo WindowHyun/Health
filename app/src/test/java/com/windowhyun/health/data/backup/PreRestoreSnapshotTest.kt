@@ -10,6 +10,7 @@ import com.windowhyun.health.core.model.ExerciseCategory
 import com.windowhyun.health.data.catalog.InMemoryUserTemplateRepository
 import com.windowhyun.health.data.datastore.SettingsRepositoryImpl
 import com.windowhyun.health.data.local.HealthDatabase
+import com.windowhyun.health.domain.repository.BackupFormatException
 import com.windowhyun.health.data.repository.ExerciseRepositoryImpl
 import com.windowhyun.health.data.repository.WorkoutRepositoryImpl
 import com.windowhyun.health.domain.model.Exercise
@@ -107,6 +108,62 @@ class PreRestoreSnapshotTest {
     fun `restoring without a snapshot fails clearly`() = runTest(dispatcher) {
         val e = runCatching { snapshot.restore(backup) }.exceptionOrNull()
         assertThat(e).isInstanceOf(IllegalStateException::class.java)
+    }
+
+    // ----- 코드 리뷰(v0.17.6): 거절된 파일이 보관본을 덮지 않는다 -----
+
+    /**
+     * 오래된 파일로 잘못 복원한 뒤(보관본 = 진짜 기록), 다른 파일을 골랐는데 백업 파일이 아니었다.
+     * 예전에는 파일을 확인하기 전에 보관본부터 바꿔 넣어, 이 순간 진짜 기록이 지금의 잘못된 기록으로 덮였다.
+     */
+    @Test
+    fun `a rejected file does not replace the snapshot`() = runTest(dispatcher) {
+        addWorkout("A 종목", 50.0)
+        val oldFile = export()
+        addWorkout("B 종목", 100.0) // 진짜 기록: 운동 2회
+
+        assertThat(snapshot.prepare(backup)).isTrue()
+        backup.restoreBackup(ByteArrayInputStream(oldFile)) // 잘못 고른 오래된 파일
+        snapshot.commit()
+        val real = File(dir, "before-restore.json").readBytes()
+        now = 2_000L
+
+        assertThat(snapshot.prepare(backup)).isTrue() // 지금 기록(운동 1회)을 써 둔다
+        val rejected = runCatching { backup.restoreBackup(ByteArrayInputStream("백업이 아닌 글".toByteArray())) }.exceptionOrNull()
+        assertThat(rejected).isInstanceOf(BackupFormatException::class.java)
+        snapshot.discard()
+
+        assertThat(File(dir, "before-restore.json").readBytes()).isEqualTo(real)
+        assertThat(snapshot.savedAt()).isEqualTo(1_000L)
+        assertThat(dir.list()!!.toList()).containsExactly("before-restore.json")
+        snapshot.restore(backup)
+        assertThat(db.backupDao().allWorkouts()).hasSize(2) // 진짜 기록으로 되돌아왔다
+    }
+
+    /** 써 두기만 하고 바꿔 넣지 않으면 보관본은 아직 없다. */
+    @Test
+    fun `preparing alone does not create a snapshot`() = runTest(dispatcher) {
+        addWorkout("A 종목", 50.0)
+        assertThat(snapshot.prepare(backup)).isTrue()
+        assertThat(snapshot.savedAt()).isNull()
+
+        snapshot.commit()
+        assertThat(snapshot.savedAt()).isEqualTo(1_000L)
+        snapshot.commit() // 써 둔 것이 없으면 아무 일도 없다
+        assertThat(dir.list()!!.toList()).containsExactly("before-restore.json")
+    }
+
+    /** 진행 중인 운동 때문에 복원이 거절돼도 기록은 그대로이고, 그렇게 알린다. */
+    @Test
+    fun `a restore refused inside the transaction reports that nothing changed`() = runTest(dispatcher) {
+        addWorkout("A 종목", 50.0)
+        val file = export()
+        workouts.startWorkout(null) // 진행 중인 운동
+
+        val e = runCatching { backup.restoreBackup(ByteArrayInputStream(file)) }.exceptionOrNull()
+
+        assertThat(e).isInstanceOf(BackupFormatException::class.java)
+        assertThat(db.backupDao().allWorkouts()).hasSize(2)
     }
 
     // ----- CSV 수식 주입 -----

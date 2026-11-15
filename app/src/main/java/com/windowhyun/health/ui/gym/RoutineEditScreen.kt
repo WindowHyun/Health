@@ -282,16 +282,18 @@ private fun RoutineItemCard(
                 Column {
                     Text("휴식시간", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        text = item.restSeconds?.let { "${it}초" } ?: "앱 기본값 사용 (${defaultRestSeconds}초)",
+                        text = item.restSeconds?.let { "${it}초" } ?: restFallbackLabel(item.exercise.defaultRestSeconds, defaultRestSeconds),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { onRestChange(((item.restSeconds ?: defaultRestSeconds) - 15).coerceAtLeast(REST_MIN)) }) {
+                    // 비워 두면 실제로 쓰이는 값(종목의 기본 휴식, 없으면 앱 기본값)에서 ± 가 출발한다.
+                    val effectiveRest = item.restSeconds ?: item.exercise.defaultRestSeconds ?: defaultRestSeconds
+                    IconButton(onClick = { onRestChange((effectiveRest - 15).coerceAtLeast(REST_MIN)) }) {
                         Icon(Icons.Filled.Remove, contentDescription = "휴식 줄이기")
                     }
-                    IconButton(onClick = { onRestChange(((item.restSeconds ?: defaultRestSeconds) + 15).coerceAtMost(REST_MAX)) }) {
+                    IconButton(onClick = { onRestChange((effectiveRest + 15).coerceAtMost(REST_MAX)) }) {
                         Icon(Icons.Filled.Add, contentDescription = "휴식 늘리기")
                     }
                     if (item.restSeconds != null) {
@@ -308,3 +310,10 @@ private fun RoutineItemCard(
 /** 루틴 휴식은 0~600초(0 은 쉬지 않음). */
 private const val REST_MIN = 0
 private const val REST_MAX = 600
+
+/**
+ * 휴식 시간을 비워 둔 항목이 실제로 쓰는 값. 운동을 시작하면 종목의 기본 휴식이 먼저 쓰이고, 그것도 없을 때만 앱 기본값이 쓰인다.
+ * 예전에는 항상 "앱 기본값 (60초)" 로 적어서, 벤치프레스처럼 종목 기본이 150초인 경우 화면과 실제가 달랐다.
+ */
+internal fun restFallbackLabel(exerciseDefaultSeconds: Int?, appDefaultSeconds: Int): String =
+    if (exerciseDefaultSeconds != null) "종목 기본값 사용 (${exerciseDefaultSeconds}초)" else "앱 기본값 사용 (${appDefaultSeconds}초)"

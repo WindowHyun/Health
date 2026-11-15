@@ -226,6 +226,91 @@ class SessionUsabilityFixesTest {
         vm.viewModelScope.cancel()
     }
 
+    // ----- 코드 리뷰(v0.17.6) -----
+
+    /** 무게만 따라 채워진 세트(횟수 0)는 한 적 없는 세트다. "체크 안 한 세트도 저장"이 60kg x 0회를 완료로 남기지 않는다. */
+    @Test
+    fun `saving unchecked sets skips sets that only have a weight`() = runVmTest {
+        val (workoutId, ids) = workoutWithSets()
+        workouts.setCompleted(ids[0], 60.0, 8, true)
+        workouts.setCompleted(ids[1], 60.0, 0, false) // 앞 세트의 무게만 따라 채워졌다
+        workouts.setCompleted(ids[2], 60.0, 5, false) // 하고 나서 체크만 깜빡했다
+        val vm = viewModel(handleFor(workoutId))
+        settle()
+
+        vm.finishWorkout(completeUnchecked = true)
+        settle()
+
+        val sets = workouts.getWorkout(workoutId)!!.exercises.single().sets
+        assertThat(sets.map { it.weightKg to it.reps }).containsExactly(60.0 to 8, 60.0 to 5).inOrder()
+        vm.viewModelScope.cancel()
+    }
+
+    /** 종료 창이 세는 수와 실제로 저장하는 세트가 같은 규칙을 쓴다. */
+    @Test
+    fun `the unchecked count uses the same rule as the complete button`() = runVmTest {
+        val (workoutId, ids) = workoutWithSets()
+        workouts.setCompleted(ids[0], 60.0, 0, false)
+        workouts.setCompleted(ids[1], 0.0, 12, false)
+        workouts.setCompleted(ids[2], 0.0, 0, false)
+
+        val record = workouts.getWorkout(workoutId)!!.exercises.single()
+
+        assertThat(record.uncheckedCompletableSets.map { it.id }).containsExactly(ids[1])
+    }
+
+    /** 세트를 지우고 그 종목을 통째로 뺀 뒤 "실행 취소"를 눌러도 앱이 죽지 않는다(없는 종목에 세트를 넣으면 DB 가 거절한다). */
+    @Test
+    fun `undoing a removed set after its exercise was removed does nothing`() = runVmTest {
+        val (workoutId, ids) = workoutWithSets()
+        val vm = viewModel(handleFor(workoutId))
+        settle()
+        val workoutExerciseId = workouts.getWorkout(workoutId)!!.exercises.single().id
+
+        vm.removeSet(ids[0])
+        settle()
+        vm.removeExercise(workoutExerciseId)
+        settle()
+        vm.undoRemoveSet()
+        settle()
+
+        assertThat(workouts.getWorkout(workoutId)!!.exercises).isEmpty()
+        assertThat(db.backupDao().allWorkoutSets()).isEmpty()
+        vm.viewModelScope.cancel()
+    }
+
+    /** 저장소도 스스로 막는다: 없는 종목에 세트를 되살리라는 요청은 던지지 않고 무시한다. */
+    @Test
+    fun `restoring a set into a missing exercise is ignored`() = runVmTest {
+        val (workoutId, _) = workoutWithSets()
+        val record = workouts.getWorkout(workoutId)!!.exercises.single()
+        workouts.removeWorkoutExercise(record.id)
+
+        workouts.restoreSet(record.id, record.sets.first())
+
+        assertThat(db.backupDao().allWorkoutSets()).isEmpty()
+    }
+
+    /** 다른 종목은 그대로라면 실행 취소가 여전히 된다(막는 것은 없어진 종목뿐). */
+    @Test
+    fun `undo still works when a different exercise was removed`() = runVmTest {
+        val (workoutId, ids) = workoutWithSets()
+        val row = exercises.addExercise(Exercise(id = 0, name = "바벨 로우", category = ExerciseCategory.BARBELL, bodyPart = BodyPart.BACK))
+        val otherId = workouts.addExerciseToWorkout(workoutId, row)
+        val vm = viewModel(handleFor(workoutId))
+        settle()
+
+        vm.removeSet(ids[0])
+        settle()
+        vm.removeExercise(otherId)
+        settle()
+        vm.undoRemoveSet()
+        settle()
+
+        assertThat(workouts.getWorkout(workoutId)!!.exercises.single().sets).hasSize(3)
+        vm.viewModelScope.cancel()
+    }
+
     @Test
     fun `the notification prompt is remembered`() = runVmTest {
         val vm = viewModel(handleFor(1))

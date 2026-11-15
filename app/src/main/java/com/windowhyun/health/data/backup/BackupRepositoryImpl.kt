@@ -1,6 +1,7 @@
 package com.windowhyun.health.data.backup
 
 import androidx.room.withTransaction
+import com.windowhyun.health.data.seed.ExerciseSeedCallback
 import com.windowhyun.health.data.catalog.CatalogReader
 import com.windowhyun.health.data.catalog.CatalogWriter
 import com.windowhyun.health.data.catalog.ImportContext
@@ -125,41 +126,55 @@ class BackupRepositoryImpl @Inject constructor(
 
             val clean = file.dropOrphans()
 
-            database.withTransaction {
-                // 진행 중인 러닝은 몇 초마다 위치를 저장한다. 그 사이 기록을 갈아 끼우면 없는 러닝에
-                // 위치를 붙이려다 앱이 죽거나, 같은 번호의 옛 러닝을 지금 러닝 값으로 덮어쓴다.
-                // 확인과 교체를 한 트랜잭션에서 해야 그 사이에 시작한 기록도 막는다.
-                if (backupDao.countInProgress() > 0) {
-                    throw BackupFormatException(
-                        "진행 중인 운동이나 러닝이 있어 복원할 수 없습니다. 끝낸 뒤 다시 시도해 주세요.",
-                    )
+            // 트랜잭션 안에서 실패하면 통째로 되돌아가 기록은 그대로다. 호출한 쪽이 "기록이 바뀌었는지" 를 알 수 있게
+            // 이 구간의 실패는 모두 [BackupFormatException](= 기록은 그대로)으로 알린다.
+            try {
+                database.withTransaction {
+                    // 진행 중인 러닝은 몇 초마다 위치를 저장한다. 그 사이 기록을 갈아 끼우면 없는 러닝에
+                    // 위치를 붙이려다 앱이 죽거나, 같은 번호의 옛 러닝을 지금 러닝 값으로 덮어쓴다.
+                    // 확인과 교체를 한 트랜잭션에서 해야 그 사이에 시작한 기록도 막는다.
+                    if (backupDao.countInProgress() > 0) {
+                        throw BackupFormatException(
+                            "진행 중인 운동이나 러닝이 있어 복원할 수 없습니다. 끝낸 뒤 다시 시도해 주세요.",
+                        )
+                    }
+
+                    // 자식부터 지운다. 중간에 실패하면 트랜잭션이 통째로 되돌아간다.
+                    if (clean.hasCourses) backupDao.deleteAllCourses()
+                    backupDao.deleteAllRunLocations()
+                    backupDao.deleteAllRunLaps()
+                    backupDao.deleteAllRuns()
+                    backupDao.deleteAllPersonalRecords()
+                    backupDao.deleteAllWorkoutSets()
+                    backupDao.deleteAllWorkoutExercises()
+                    backupDao.deleteAllWorkouts()
+                    backupDao.deleteAllRoutineExercises()
+                    backupDao.deleteAllRoutines()
+                    backupDao.deleteAllExercises()
+
+                    // 넣을 때는 부모부터.
+                    backupDao.insertExercises(clean.exercises.map { it.toEntity() })
+                    // 옛 버전에서 만든 백업의 기본 종목에는 기본 휴식 시간이 없다. 비어 있는 것만 채워 둔다.
+                    ExerciseSeedCallback.backfillDefaultRest(database.openHelper.writableDatabase)
+                    backupDao.insertRoutines(clean.routines.map { it.toEntity() })
+                    backupDao.insertRoutineExercises(clean.routineExercises.map { it.toEntity() })
+                    backupDao.insertWorkouts(clean.workouts.map { it.toEntity() })
+                    backupDao.insertWorkoutExercises(clean.workoutExercises.map { it.toEntity() })
+                    backupDao.insertWorkoutSets(clean.workoutSets.map { it.toEntity() })
+                    backupDao.insertPersonalRecords(clean.personalRecords.map { it.toEntity() })
+                    backupDao.insertRuns(clean.runs.map { it.toEntity() })
+                    backupDao.insertRunLaps(clean.runLaps.map { it.toEntity() })
+                    backupDao.insertRunLocations(clean.runLocations.map { it.toEntity() })
+                    if (clean.hasCourses) backupDao.insertCourses(clean.courses.map { it.toEntity() })
                 }
-
-                // 자식부터 지운다. 중간에 실패하면 트랜잭션이 통째로 되돌아간다.
-                if (clean.hasCourses) backupDao.deleteAllCourses()
-                backupDao.deleteAllRunLocations()
-                backupDao.deleteAllRunLaps()
-                backupDao.deleteAllRuns()
-                backupDao.deleteAllPersonalRecords()
-                backupDao.deleteAllWorkoutSets()
-                backupDao.deleteAllWorkoutExercises()
-                backupDao.deleteAllWorkouts()
-                backupDao.deleteAllRoutineExercises()
-                backupDao.deleteAllRoutines()
-                backupDao.deleteAllExercises()
-
-                // 넣을 때는 부모부터.
-                backupDao.insertExercises(clean.exercises.map { it.toEntity() })
-                backupDao.insertRoutines(clean.routines.map { it.toEntity() })
-                backupDao.insertRoutineExercises(clean.routineExercises.map { it.toEntity() })
-                backupDao.insertWorkouts(clean.workouts.map { it.toEntity() })
-                backupDao.insertWorkoutExercises(clean.workoutExercises.map { it.toEntity() })
-                backupDao.insertWorkoutSets(clean.workoutSets.map { it.toEntity() })
-                backupDao.insertPersonalRecords(clean.personalRecords.map { it.toEntity() })
-                backupDao.insertRuns(clean.runs.map { it.toEntity() })
-                backupDao.insertRunLaps(clean.runLaps.map { it.toEntity() })
-                backupDao.insertRunLocations(clean.runLocations.map { it.toEntity() })
-                if (clean.hasCourses) backupDao.insertCourses(clean.courses.map { it.toEntity() })
+            } catch (e: BackupFormatException) {
+                throw e
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                throw BackupFormatException(
+                    "백업을 넣는 중에 실패해 복원하지 않았습니다(${e.message ?: e::class.simpleName}). 기록은 그대로입니다.",
+                )
             }
 
             settingsRepository.update { file.settings.toSettings(it) }

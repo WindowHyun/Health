@@ -12,6 +12,10 @@ interface CourseDao {
     @Query("SELECT * FROM course ORDER BY createdAt DESC, id DESC")
     fun observeAll(): Flow<List<CourseEntity>>
 
+    /** 이름으로 찾는다(러닝 기록은 코스를 이름으로만 기억한다). 같은 이름이 여럿이면 가장 최근 것. */
+    @Query("SELECT * FROM course WHERE name = :name ORDER BY createdAt DESC, id DESC LIMIT 1")
+    suspend fun getByName(name: String): CourseEntity?
+
     @Query("SELECT * FROM course WHERE id = :id")
     suspend fun get(id: Long): CourseEntity?
 

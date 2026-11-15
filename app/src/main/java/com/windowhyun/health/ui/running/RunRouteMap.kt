@@ -439,10 +439,13 @@ internal class CourseOverlay(
 
 /** 코스 전체가 보이도록 맞춘다. */
 internal fun MapView.zoomToCourse(points: List<com.windowhyun.health.domain.model.CoursePoint>) {
-    val lats = points.map { it.latitude }
-    val lons = points.map { it.longitude }
-    val halfLat = maxOf((lats.max() - lats.min()) / 2, MIN_HALF_SPAN_DEGREES)
-    val halfLon = maxOf((lons.max() - lons.min()) / 2, MIN_HALF_SPAN_DEGREES)
-    val box = BoundingBox(lats.average() + halfLat, lons.average() + halfLon, lats.average() - halfLat, lons.average() - halfLon)
+    // 범위는 새 지도와 같은 함수로 구한다. 가운데는 지점들의 평균이 아니라 범위의 한가운데여야 한다:
+    // 평균을 쓰면 지점이 한쪽에 몰린 코스는 반대쪽 끝이 화면 밖으로 잘린다.
+    val bounds = com.windowhyun.health.ui.running.maplibre.MapGeo.bounds(
+        points.map { it.latitude },
+        points.map { it.longitude },
+        MIN_HALF_SPAN_DEGREES,
+    )
+    val box = BoundingBox(bounds.north, bounds.east, bounds.south, bounds.west)
     post { zoomToBoundingBox(box.increaseByScale(1.3f), false, 0, MAX_ZOOM, null) }
 }

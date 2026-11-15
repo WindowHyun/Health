@@ -176,11 +176,7 @@ class WorkoutSessionViewModel internal constructor(
         val current = CurrentSetFinder.find(workout.exercises) ?: return
         val set = current.set
         if (set.id != setId) return
-        val hasValue = when (current.record.exercise.trackingType) {
-            ExerciseTrackingType.TIME -> set.durationSeconds > 0
-            else -> set.reps > 0
-        }
-        if (!hasValue) return
+        if (!set.canComplete(current.record.exercise.trackingType)) return
         toggleSetCompleted(set, set.weightKg, set.reps, set.durationSeconds, current.record.restSeconds)
     }
 
@@ -356,6 +352,8 @@ class WorkoutSessionViewModel internal constructor(
     }
 
     fun removeExercise(workoutExerciseId: Long) {
+        // 방금 지운 세트가 이 종목의 것이면 되살릴 곳이 없어진다. 실행 취소를 받지 않는다.
+        if (lastRemovedSet?.first == workoutExerciseId) lastRemovedSet = null
         viewModelScope.launch { workoutRepository.removeWorkoutExercise(workoutExerciseId) }
     }
 
@@ -547,8 +545,9 @@ class WorkoutSessionViewModel internal constructor(
     }
 
     /**
-     * 운동을 마친다. [completeUnchecked] 가 true 면, 값(무게·횟수·시간)이 들어 있는데 체크하지 않은 세트를 먼저 완료로 바꾼다
-     * (마지막 세트를 치고 체크를 깜빡한 채 종료해도 기록이 사라지지 않게). 값이 비어 있는 세트는 그대로 버린다.
+     * 운동을 마친다. [completeUnchecked] 가 true 면, 완료할 수 있는 값(횟수, 시간 종목은 시간)이 들어 있는데 체크하지 않은 세트를
+     * 먼저 완료로 바꾼다(마지막 세트를 치고 체크를 깜빡한 채 종료해도 기록이 사라지지 않게). 횟수가 없는 세트는 그대로 버린다
+     * (무게만 따라 채워진 세트를 60kg x 0회로 저장하지 않는다).
      */
     fun finishWorkout(completeUnchecked: Boolean = false) {
         if (finishing) return
@@ -558,8 +557,7 @@ class WorkoutSessionViewModel internal constructor(
             lastRemovedSet = null
             if (completeUnchecked) {
                 workoutRepository.getWorkout(workoutId)?.exercises.orEmpty()
-                    .flatMap { it.sets }
-                    .filter { !it.completed && it.hasValues }
+                    .flatMap { it.uncheckedCompletableSets }
                     .forEach { workoutRepository.setCompleted(it.id, it.weightKg, it.reps, true, it.durationSeconds) }
             }
             // 한 세트도 완료하지 않았다면 남길 기록이 없다. 빈 기록이 저장되어 주간 횟수에 들어가지 않게 버린다.

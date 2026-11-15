@@ -182,9 +182,16 @@ class RunTracker internal constructor(
     }
 
     /** 위치를 못 받는 원인을 알려 온다(null 이면 지운다). 위치가 들어오면 저절로 지워진다. */
-    fun reportLocationProblem(message: String?) {
+    fun reportLocationProblem(message: String?, blocking: Boolean = true) {
+        problemBlocksSignal = blocking
         _state.update { it.copy(locationProblem = message) }
     }
+
+    /**
+     * 알려 온 문제가 "위치를 받을 수 없다"는 뜻인가. 요청이 거절된 경우는 그렇고(기다릴 이유가 없어 바로 경고한다),
+     * "기기 GPS 로 이어 받는 중" 같은 안내는 아니다 — 받을 길을 바꿨다는 소식일 뿐이라 첫 신호를 기다리는 시간은 그대로 준다.
+     */
+    private var problemBlocksSignal = true
 
     /** 1초마다 호출된다. */
     suspend fun tick() {
@@ -197,7 +204,8 @@ class RunTracker internal constructor(
             // 그때까지 빨간 "위치를 받지 못하고 있어요" 를 띄우면 시작할 때마다 고장난 것처럼 보인다.
             // 위치 서비스가 요청을 거절했다고 알려 오면(원인이 분명하면) 기다리지 않고 바로 알린다.
             val patience = if (_state.value.lastAccuracyMeters == null) FIRST_FIX_PATIENCE_MILLIS else SIGNAL_LOST_MILLIS
-            val signalLost = _state.value.locationProblem != null || clock() - lastLocationAt > patience
+            val blocked = _state.value.locationProblem != null && problemBlocksSignal
+            val signalLost = blocked || clock() - lastLocationAt > patience
             _state.update { it.copy(signalLost = signalLost) }
             publish(accumulator, lastAccuracy = _state.value.lastAccuracyMeters)
 

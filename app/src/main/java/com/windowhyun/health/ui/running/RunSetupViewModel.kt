@@ -126,27 +126,13 @@ class RunSetupViewModel @Inject constructor(
     }
 
     /**
-     * 코스를 고른다. 자유 러닝이면 "목표 거리" 를 코스 길이(0.5km 단위로 반올림)로 맞춰, 코스를 끝까지 달리면 목표도 채워지게 한다.
-     * 이미 목표를 정해 두었으면 건드리지 않는다.
+     * 코스를 고른다(null 이면 코스 없이 달린다). 목표는 건드리지 않는다.
+     *
+     * 예전에는 자유 러닝이면 목표 거리를 코스 길이로 바꿨는데, 목표 거리에 닿으면 러닝이 자동으로 끝나는 규칙과 부딪혔다:
+     * 5.2km 코스가 5.0km 목표가 되어 코스 끝 200m 전에 러닝이 끝났고(출발점까지 가는 거리도 목표에 들어간다),
+     * 코스를 바꾸거나 해제해도 처음 코스의 목표가 남았다. 코스의 남은 거리 · 진행률 · 도착은 코스 안내가 따로 알려 준다.
      */
-    fun selectCourse(id: Long?) {
-        // 고른 칩은 바로 표시한다. 코스 길이는 저장소에서 읽어 목표에 반영한다.
-        selection.update { it.copy(selectedCourseId = id) }
-        if (id == null) return
-        viewModelScope.launch {
-            val course = courseRepository.get(id) ?: return@launch
-            selection.update {
-                if (it.selectedCourseId == id && it.goalType == RunGoalType.FREE) {
-                    it.copy(
-                        goalType = RunGoalType.DISTANCE,
-                        goalDistanceKm = (Math.round(course.distanceMeters / 500.0) * 0.5).coerceIn(1.0, 100.0),
-                    )
-                } else {
-                    it
-                }
-            }
-        }
-    }
+    fun selectCourse(id: Long?) = selection.update { it.copy(selectedCourseId = id) }
 
     fun deleteCourse(id: Long) {
         viewModelScope.launch { courseRepository.delete(id) }

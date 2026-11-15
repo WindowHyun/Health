@@ -46,6 +46,7 @@ import com.windowhyun.health.ui.session.SetRow
 import com.windowhyun.health.ui.share.ShareCardDialog
 import com.windowhyun.health.ui.share.WorkoutCardData
 import com.windowhyun.health.ui.share.WorkoutShareCard
+import kotlinx.coroutines.flow.collectLatest
 
 /** 과거 헬스 기록 상세. 세트 값과 메모를 수정할 수 있다. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,8 +67,9 @@ fun WorkoutDetailScreen(
 
     val snackbarHost = remember { androidx.compose.material3.SnackbarHostState() }
     LaunchedEffect(Unit) {
-        viewModel.setRemoved.collect {
-            snackbarHost.currentSnackbarData?.dismiss()
+        // collectLatest: 안내가 떠 있는 동안 또 지우면 앞의 안내를 바로 치우고 새 안내를 띄운다.
+        // (collect 로 받으면 앞의 안내가 끝날 때까지 기다렸다가, 한참 뒤에 엉뚱한 "실행 취소" 가 뜬다.)
+        viewModel.setRemoved.collectLatest {
             val result = snackbarHost.showSnackbar(
                 message = "세트를 삭제했어요",
                 actionLabel = "실행 취소",

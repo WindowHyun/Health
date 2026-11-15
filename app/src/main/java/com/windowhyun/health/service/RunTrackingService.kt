@@ -20,6 +20,7 @@ import com.windowhyun.health.MainActivity
 import com.windowhyun.health.R
 import com.windowhyun.health.core.util.formatDistance
 import com.windowhyun.health.core.util.formatDuration
+import com.windowhyun.health.data.location.FALLBACK_NOTICE
 import com.windowhyun.health.data.location.describeLocationError
 import com.windowhyun.health.data.tracking.RunTracker
 import com.windowhyun.health.domain.model.RunGoal
@@ -149,7 +150,10 @@ class RunTrackingService : LifecycleService() {
 
         // 위치 서비스가 요청을 거절했거나 조용할 때의 이유를 화면에 알린다.
         problemJob = lifecycleScope.launch(taskFailureHandler) {
-            locationTracker.problem.collect { message -> if (message != null) runTracker.reportLocationProblem(message) }
+            locationTracker.problem.collect { message ->
+                // "기기 GPS 로 이어 받는 중" 은 고장이 아니라 안내다. 빨간 경고로 바꾸지 않고 이유 줄에만 보여 준다.
+                if (message != null) runTracker.reportLocationProblem(message, blocking = message != FALLBACK_NOTICE)
+            }
         }
 
         // 걸음 센서가 없거나 권한이 없으면 스트림이 비어 있어 아무 일도 하지 않는다.

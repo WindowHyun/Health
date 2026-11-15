@@ -70,21 +70,36 @@ class BackupViewModel @Inject constructor(
     }
 
     fun restoreBackup(uri: Uri) = run("복원") {
-        // 지금 기록을 먼저 앱 안에 보관한다. 보관하지 못하면 되돌릴 길이 없으므로 복원하지 않는다.
-        val kept = try {
-            snapshot.save(backupRepository)
-        } catch (e: Exception) {
-            throw BackupFormatException("복원 전에 지금 기록을 따로 보관하지 못해 복원하지 않았습니다(${e.message ?: e::class.simpleName}). 기록은 그대로입니다.")
+        // 파일부터 연다. 열지도 못할 파일 때문에 보관본을 새로 만들 이유가 없다.
+        val input = context.contentResolver.openInputStream(uri) ?: error("파일을 열 수 없습니다.")
+        var kept = false
+        val restored = input.use { stream ->
+            // 지금 기록을 먼저 앱 안에 써 둔다. 써 두지 못하면 되돌릴 길이 없으므로 복원하지 않는다.
+            kept = try {
+                snapshot.prepare(backupRepository)
+            } catch (e: Exception) {
+                throw BackupFormatException("복원 전에 지금 기록을 따로 보관하지 못해 복원하지 않았습니다(${e.message ?: e::class.simpleName}). 기록은 그대로입니다.")
+            }
+            try {
+                backupRepository.restoreBackup(stream)
+            } catch (e: BackupFormatException) {
+                // 파일이 거절됐다(기록은 그대로다). 방금 써 둔 것은 버리고 이전 보관본을 남긴다.
+                snapshot.discard()
+                throw e
+            } catch (e: Exception) {
+                // 기록이 이미 바뀐 뒤일 수 있다. 복원 직전 기록을 보관본으로 남긴다.
+                snapshot.commit()
+                throw e
+            }
         }
-        val summary = context.contentResolver.openInputStream(uri)?.use {
-            backupRepository.restoreBackup(it)
-        } ?: error("파일을 열 수 없습니다.")
+        // 복원이 기록을 바꿨다. 이제 써 둔 것을 보관본으로 바꿔 넣는다(써 둔 것이 없으면 아무 일도 없다).
+        snapshot.commit()
         _uiState.update { it.copy(snapshotAt = snapshot.savedAt()) }
         buildString {
-            append("복원 완료 · ${summary.describe()}")
+            append("복원 완료 · ${restored.describe()}")
             if (kept) append("\n복원 전 기록은 앱 안에 보관해 두었어요. 잘못 복원했다면 '복원 전으로 되돌리기'를 쓰세요.")
-            if (summary.droppedRows > 0) {
-                append("\n연결이 끊어진 ${summary.droppedRows}개 항목은 건너뛰었습니다.")
+            if (restored.droppedRows > 0) {
+                append("\n연결이 끊어진 ${restored.droppedRows}개 항목은 건너뛰었습니다.")
             }
         }
     }

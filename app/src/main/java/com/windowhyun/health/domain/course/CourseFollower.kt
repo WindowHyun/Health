@@ -28,6 +28,13 @@ class CourseFollower(private val points: List<CoursePoint>) {
     /** 코스에 한 번이라도 들어섰는가. 그 전에는 출발점으로 가는 중이라 "벗어남" 이 아니다. */
     private var entered = false
 
+    /** 출발점과 도착점이 같은(가까운) 코스인가. 이런 코스는 출발선 근처가 마지막 구간과도 가깝다. */
+    private val isLoop = points.size >= 3 &&
+        CourseGeometry.distance(points.first(), points.last()) <= LOOP_CLOSE_METERS
+
+    /** 코스를 따라 **이어서** 달린 거리(m). 다른 곳에 붙으며 건너뛴 거리는 넣지 않는다. */
+    private var covered = 0.0
+
     fun update(latitude: Double, longitude: Double): CourseGuidance {
         if (points.size < 2) return CourseGuidance(totalMeters = totalMeters)
 
@@ -51,6 +58,8 @@ class CourseFollower(private val points: List<CoursePoint>) {
 
         // 코스를 벗어나 있는 동안에는 진행 위치를 바꾸지 않는다(엉뚱한 곳에 붙어 거리가 튀지 않게).
         if (best.off <= OFF_COURSE_METERS) {
+            val step = candidateProgress - progress
+            if (kotlin.math.abs(step) <= CONTINUOUS_STEP_METERS) covered = (covered + step).coerceAtLeast(0.0)
             segment = best.segment
             progress = candidateProgress
         }
@@ -59,7 +68,18 @@ class CourseFollower(private val points: List<CoursePoint>) {
         if (!offCourse && farStreak >= 2) offCourse = true
         if (offCourse && best.off <= BACK_ON_COURSE_METERS) offCourse = false
 
-        if (!finished && progress >= totalMeters - ARRIVE_METERS && best.off <= OFF_COURSE_METERS) finished = true
+        if (!finished && progress >= totalMeters - ARRIVE_METERS && best.off <= OFF_COURSE_METERS) {
+            if (!isLoop || covered >= totalMeters * LOOP_FINISH_MIN_COVERAGE) {
+                finished = true
+            } else {
+                // 순환 코스의 끝점은 출발점이기도 하다. 코스를 거의 달리지 않고 여기 있다면 도착한 것이 아니라 출발선에 선 것이다.
+                // (출발선 조금 앞 = 마지막 구간 위에서 시작하면 GPS 가 마지막 구간에 붙는다. 그대로 두면 시작하자마자 "도착" 이 되고,
+                //  한 번 도착하면 풀리지 않아 그 러닝 내내 코스 안내가 멈춘다.)
+                segment = 0
+                progress = 0.0
+                covered = 0.0
+            }
+        }
 
         return CourseGuidance(
             progressMeters = progress,
@@ -101,5 +121,14 @@ class CourseFollower(private val points: List<CoursePoint>) {
         private const val SEARCH_ACCEPT_METERS = 60.0
         private const val TIE_METERS = 10.0
         private const val BACKWARD_SLACK_METERS = 15.0
+
+        /** 위치 한 번에 진행 거리가 이만큼 넘게 바뀌면 "이어 달린 것" 이 아니라 다른 곳에 붙은 것으로 본다(위치는 1~2초마다 온다). */
+        private const val CONTINUOUS_STEP_METERS = 150.0
+
+        /** 출발점과 도착점이 이만큼 가까우면 순환 코스로 본다. */
+        private const val LOOP_CLOSE_METERS = 40.0
+
+        /** 순환 코스에서 "도착" 으로 인정하려면 코스의 이만큼은 이어서 달렸어야 한다. */
+        private const val LOOP_FINISH_MIN_COVERAGE = 0.5
     }
 }

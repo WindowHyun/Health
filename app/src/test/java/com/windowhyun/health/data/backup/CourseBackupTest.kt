@@ -115,6 +115,48 @@ class CourseBackupTest {
         assertThat(runs.courseStats(runs.getRun(runs.getRun(c)!!.id + 1)!!)).isNull()
     }
 
+    // ----- 코드 리뷰(v0.17.6): 중간에 그만둔 러닝은 비교에 넣지 않는다 -----
+
+    /** 약 2.2km 코스(위도 0.02도). */
+    private val hangang = Course(name = "한강", points = listOf(CoursePoint(37.5, 127.0), CoursePoint(37.52, 127.0)))
+
+    private suspend fun courseRun(repo: RunRepositoryImpl, start: Long, seconds: Long, meters: Double): Long {
+        val id = repo.startRun(RunGoalType.FREE, 0.0, "한강")
+        repo.saveRun(repo.getRun(id)!!.copy(startTime = start, endTime = start + seconds * 1000, durationSeconds = seconds, distanceMeters = meters))
+        return id
+    }
+
+    @Test
+    fun `a run that stopped early is not the best time and gets no rank`() = runTest(dispatcher) {
+        val withCourses = RunRepositoryImpl(db.runDao(), db.courseDao())
+        courses.save(hangang)
+        val stopped = courseRun(withCourses, 1_000, seconds = 60, meters = 200.0) // 1분 뛰고 그만둠
+        val first = courseRun(withCourses, 2_000, seconds = 780, meters = 2_300.0)
+        val second = courseRun(withCourses, 3_000, seconds = 800, meters = 2_250.0)
+
+        val stats = withCourses.courseStats(withCourses.getRun(second)!!)!!
+        assertThat(stats.count).isEqualTo(2) // 그만둔 러닝은 세지 않는다
+        assertThat(stats.bestDurationSeconds).isEqualTo(780) // 1분이 아니다
+
+        assertThat(withCourses.courseStats(withCourses.getRun(first)!!)!!.count).isEqualTo(1)
+        assertThat(withCourses.courseStats(withCourses.getRun(stopped)!!)).isNull() // 완주가 아니면 순위를 붙이지 않는다
+    }
+
+    /** 코스를 지워 길이를 모르게 돼도, 같은 코스 러닝들의 거리로 어림해 그만둔 러닝을 걸러 낸다. */
+    @Test
+    fun `stats still skip early stops after the course was deleted`() = runTest(dispatcher) {
+        val withCourses = RunRepositoryImpl(db.runDao(), db.courseDao())
+        val courseId = courses.save(hangang)
+        courseRun(withCourses, 1_000, seconds = 60, meters = 200.0)
+        courseRun(withCourses, 2_000, seconds = 780, meters = 2_300.0)
+        val last = courseRun(withCourses, 3_000, seconds = 800, meters = 2_250.0)
+        courses.delete(courseId)
+
+        val stats = withCourses.courseStats(withCourses.getRun(last)!!)!!
+        assertThat(stats.count).isEqualTo(2)
+        assertThat(stats.bestDurationSeconds).isEqualTo(780)
+    }
+
     private suspend fun runBlockingSave(id: Long, start: Long, seconds: Long) {
         val run = runs.getRun(id)!!
         runs.saveRun(run.copy(startTime = start, endTime = start + seconds * 1000, durationSeconds = seconds))

@@ -55,6 +55,15 @@ data class WorkoutSet(
     /** 무게 · 횟수 · 시간 중 하나라도 들어 있는가. 비어 있는 미완료 세트는 종료할 때 버려도 잃는 것이 없다. */
     val hasValues: Boolean get() = weightKg > 0 || reps > 0 || durationSeconds > 0
 
+    /**
+     * 완료로 저장할 수 있는 값이 들어 있는가. 화면의 완료 버튼과 같은 규칙이다: 시간 종목은 시간이, 그 밖에는 횟수가 있어야 한다.
+     * 무게만 있는 세트(앞 세트의 무게가 따라 채워진 것)는 한 적 없는 세트라 완료로 볼 수 없다.
+     */
+    fun canComplete(trackingType: ExerciseTrackingType): Boolean = when (trackingType) {
+        ExerciseTrackingType.TIME -> durationSeconds > 0
+        else -> reps > 0
+    }
+
     /** 집계에 넣는 세트인가. 워밍업은 뺀다. */
     val counts: Boolean get() = completed && setType.countsTowardVolume
 
@@ -74,6 +83,10 @@ data class WorkoutExerciseRecord(
     val sets: List<WorkoutSet> = emptyList(),
 ) {
     val completedSets: List<WorkoutSet> get() = sets.filter { it.completed }
+
+    /** 체크하지 않았지만 완료로 저장할 수 있는 세트(종료할 때 "함께 저장"을 권하는 대상). */
+    val uncheckedCompletableSets: List<WorkoutSet>
+        get() = sets.filter { !it.completed && it.canComplete(exercise.trackingType) }
 
     /** 집계 대상 세트. 워밍업은 빠진다. */
     val countedSets: List<WorkoutSet> get() = sets.filter { it.counts }

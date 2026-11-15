@@ -134,7 +134,7 @@ class RunAssistTest {
     fun `receiving a location clears the problem and the warning`() = runTest {
         val tracker = tracker()
         tracker.begin()
-        tracker.reportLocationProblem("Google 위치 서비스에서 위치가 오지 않아 기기 GPS 로 직접 받는 중이에요.")
+        tracker.reportLocationProblem("Google Play 서비스에 연결하지 못했어요(코드 17).")
         now += 1_000
         tracker.tick()
         assertThat(tracker.state.value.signalLost).isTrue()
@@ -144,6 +144,46 @@ class RunAssistTest {
 
         assertThat(tracker.state.value.locationProblem).isNull()
         assertThat(tracker.state.value.signalLost).isFalse()
+        tracker.discard()
+    }
+
+    /**
+     * "기기 GPS 로 이어 받는 중" 은 고장이 아니라 안내다. 이것까지 경고로 치면 시작 20초 만에 빨간 경고가 떠서,
+     * 첫 신호를 60초까지 기다려 주는 규칙이 소용없어진다. 이유 줄에는 보이되 경고는 기다린 뒤에만 뜬다.
+     */
+    @Test
+    fun `the fallback notice is shown as a reason but does not raise the warning early`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+
+        now += 20_000
+        tracker.reportLocationProblem("Google 위치 서비스에서 위치가 오지 않아 기기 GPS 로 직접 받는 중이에요.", blocking = false)
+        tracker.tick()
+        assertThat(tracker.state.value.signalLost).isFalse()
+        assertThat(tracker.state.value.locationProblem).contains("기기 GPS")
+
+        now += 38_000 // 시작한 지 58초
+        tracker.tick()
+        assertThat(tracker.state.value.signalLost).isFalse()
+
+        now += 4_000 // 62초: 그래도 못 받았으면 그때 경고한다
+        tracker.tick()
+        assertThat(tracker.state.value.signalLost).isTrue()
+        tracker.discard()
+    }
+
+    /** 안내 뒤에 진짜 거절이 오면 바로 경고로 바뀐다(안내가 경고를 영영 막지 않는다). */
+    @Test
+    fun `a real problem after the notice raises the warning at once`() = runTest {
+        val tracker = tracker()
+        tracker.begin()
+        tracker.reportLocationProblem("Google 위치 서비스에서 위치가 오지 않아 기기 GPS 로 직접 받는 중이에요.", blocking = false)
+        tracker.reportLocationProblem("위치 권한을 쓸 수 없어요.")
+
+        now += 1_000
+        tracker.tick()
+
+        assertThat(tracker.state.value.signalLost).isTrue()
         tracker.discard()
     }
 

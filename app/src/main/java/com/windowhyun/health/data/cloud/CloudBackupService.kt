@@ -76,7 +76,9 @@ class CloudBackupService internal constructor(
         }
 
         // 복원하면 지금 기록이 사라지므로, 있다면 먼저 한 번 올려 둔다. 이게 실패하면 복원도 하지 않는다.
-        backupLocked(auto = false, allowEmpty = true)
+        // 올린 뒤의 정리에서 지금 복원하려는 백업은 지우지 않는다: 가장 오래된 백업을 골랐다면 바로 그것이 정리 대상이라,
+        // 복원이 거절되면(진행 중인 운동 등) 아무것도 못 되돌린 채 고른 백업만 클라우드에서 사라진다.
+        backupLocked(auto = false, allowEmpty = true, keepId = id)
 
         try {
             backupRepository.restoreBackup(CloudBackupCodec.decompressed(zipped))
@@ -102,10 +104,11 @@ class CloudBackupService internal constructor(
 
     /**
      * @param auto 자동 백업이면 실패를 설정에 남기고 예외 대신 null 을 돌려준다(앱을 켤 때 화면에 오류를 띄우지 않는다).
+     * @param keepId 올린 뒤 오래된 백업을 정리할 때 지우지 않을 백업(복원하려는 백업).
      * @param allowEmpty 기록이 없어도 올린다. 복원 직전 백업은 기록이 없으면 그냥 건너뛰므로 false 가 아니라 "건너뛰기" 로 쓴다.
      * 반환: 올렸으면 정보, 기록이 없어 건너뛰었으면 null(자동 백업 또는 [allowEmpty] 일 때).
      */
-    private suspend fun backupLocked(auto: Boolean, allowEmpty: Boolean = false): CloudBackupInfo? {
+    private suspend fun backupLocked(auto: Boolean, allowEmpty: Boolean = false, keepId: String? = null): CloudBackupInfo? {
         val user = requireUser()
         try {
             val (zipped, summary) = CloudBackupCodec.compress { out -> backupRepository.exportBackup(out) }
@@ -136,7 +139,7 @@ class CloudBackupService internal constructor(
             call("클라우드에 올리지 못했어요.") { store.put(user.uid, info, CloudBackupCodec.split(zipped)) }
 
             settingsRepository.update { it.copy(lastCloudBackupAt = now, lastCloudBackupError = null) }
-            prune(user.uid)
+            prune(user.uid, keepId)
             return info
         } catch (e: CancellationException) {
             throw e
@@ -149,9 +152,9 @@ class CloudBackupService internal constructor(
     }
 
     /** 새 백업이 올라간 뒤에만 오래된 것을 지운다. 지우기에 실패해도 백업 자체는 성공이다. */
-    private suspend fun prune(uid: String) {
+    private suspend fun prune(uid: String, keepId: String? = null) {
         try {
-            store.list(uid).drop(KEEP_COUNT).forEach { store.delete(uid, it.id) }
+            store.list(uid).drop(KEEP_COUNT).filter { it.id != keepId }.forEach { store.delete(uid, it.id) }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -185,4 +188,5 @@ class CloudBackupService internal constructor(
 
 /** 백업에 담긴 것이 하나도 없는가(새로 설치한 직후 등). */
 private val BackupSummary.isEmpty: Boolean
-    get() = workoutCount == 0 && runCount == 0 && routineCount == 0 && customExerciseCount == 0 && userTemplateCount == 0
+    get() = workoutCount == 0 && runCount == 0 && routineCount == 0 && customExerciseCount == 0 && userTemplateCount == 0 &&
+        courseCount == 0

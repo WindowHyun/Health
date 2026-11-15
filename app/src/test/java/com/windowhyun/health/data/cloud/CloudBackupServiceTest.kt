@@ -92,6 +92,41 @@ class CloudBackupServiceTest {
         assertThat(store.infos).hasSize(2)
     }
 
+    /**
+     * 가장 오래된 백업을 골라 복원한다. 복원 직전 백업이 올라가며 6개가 되는데, 정리가 바로 그 고른 백업을 지우면 안 된다:
+     * 복원이 거절되면(진행 중인 운동 등) 아무것도 못 되돌린 채 고른 백업만 사라진다.
+     */
+    @Test
+    fun `restoring the oldest backup does not let the pre-restore backup prune it`() = runTest {
+        val store = FakeStore(); val backup = FakeBackup(full, "가장 오래된 기록".toByteArray())
+        val s = service(store, backup)
+        val oldest = s.backupNow()
+        repeat(CloudBackupService.KEEP_COUNT - 1) { now += 1000; backup.payload = "기록 $it".toByteArray(); s.backupNow() }
+        assertThat(store.infos).hasSize(CloudBackupService.KEEP_COUNT)
+        backup.payload = "지금 기록".toByteArray()
+        now += 1000
+
+        s.restore(oldest.id)
+
+        assertThat(String(backup.restored!!)).isEqualTo("가장 오래된 기록")
+        assertThat(store.infos.keys).contains(oldest.id) // 고른 백업이 클라우드에 그대로 있다
+    }
+
+    /** 코스만 만들어 둔 기기도 "기록이 있는" 기기다. 복원 전에 올려 둔다. */
+    @Test
+    fun `a device with only courses is backed up before restoring`() = runTest {
+        val store = FakeStore(); val backup = FakeBackup(full, "원본".toByteArray())
+        val s = service(store, backup)
+        val first = s.backupNow()
+        backup.summary = BackupSummary(appVersion = "0.17.6", courseCount = 2)
+        backup.payload = "코스만".toByteArray()
+        now += 5000
+
+        s.restore(first.id)
+
+        assertThat(store.infos).hasSize(2)
+    }
+
     @Test
     fun `hash mismatch blocks restore`() = runTest {
         val store = FakeStore(); val backup = FakeBackup(full)

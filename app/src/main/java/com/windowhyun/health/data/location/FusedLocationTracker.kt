@@ -10,6 +10,7 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.util.Log
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -63,22 +64,16 @@ class FusedLocationTracker @Inject constructor(
             .setWaitForAccurateLocation(false)
             .build()
 
-        var received = false
         fun deliver(sample: LocationSample) {
-            received = true
             _problem.value = null
             trySend(sample)
-        }
-
-        val callback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                result.locations.forEach { location -> deliver(location.toSample()) }
-            }
         }
 
         // Google 위치 서비스가 조용하거나 실패해도 위치를 받을 수 있도록 기기 GPS 를 함께 쓸 수 있게 준비해 둔다.
         val manager = context.getSystemService(LocationManager::class.java)
         var platformStarted = false
+        // Google 위치 서비스에서 마지막으로 위치가 온 때(없으면 시작한 때). 조용한 시간을 여기서부터 잰다.
+        var lastFusedAt = SystemClock.elapsedRealtime()
         val platformListener = object : LocationListener {
             override fun onLocationChanged(location: Location) = deliver(location.toSample())
 
@@ -98,6 +93,23 @@ class FusedLocationTracker @Inject constructor(
             }.onFailure { Log.w(TAG, "기기 GPS 로 받기를 시작하지 못했습니다", it) }
         }
 
+        fun stopPlatform() {
+            if (!platformStarted) return
+            platformStarted = false
+            runCatching { manager?.removeUpdates(platformListener) }
+        }
+
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                if (result.locations.isEmpty()) return
+                lastFusedAt = SystemClock.elapsedRealtime()
+                // Google 위치 서비스가 (다시) 오기 시작했으면 기기 GPS 는 끈다. 둘을 함께 받으면 몇 m 씩 어긋난 두 좌표가
+                // 번갈아 들어와 경로가 지그재그가 되고 거리 · 페이스가 부풀며, GPS 도 이중으로 쓴다.
+                stopPlatform()
+                result.locations.forEach { location -> deliver(location.toSample()) }
+            }
+        }
+
         // 요청이 거절되거나 실패해도 예외로 나오지 않고 이 결과로만 알려 준다. 예전에는 이를 버려서,
         // 실패해도 앱은 모른 채 위치가 영영 안 왔다.
         client.requestLocationUpdates(request, callback, Looper.getMainLooper())
@@ -108,17 +120,20 @@ class FusedLocationTracker @Inject constructor(
             }
 
         // 실패 응답도 없이 조용한 경우(서비스가 멈춤 등)도 있어서, 한동안 하나도 안 오면 기기 GPS 로도 받는다.
+        // 시작할 때 한 번만 보지 않고 계속 지켜본다: 달리는 도중에 조용해져도 이어 받고, 다시 오면 위에서 끈다.
         launch {
-            delay(FUSED_SILENCE_MILLIS)
-            if (!received) {
-                if (_problem.value == null) _problem.value = FALLBACK_NOTICE
-                startPlatform()
+            while (true) {
+                delay(FUSED_SILENCE_CHECK_MILLIS)
+                if (!platformStarted && SystemClock.elapsedRealtime() - lastFusedAt >= FUSED_SILENCE_MILLIS) {
+                    if (_problem.value == null) _problem.value = FALLBACK_NOTICE
+                    startPlatform()
+                }
             }
         }
 
         awaitClose {
             client.removeLocationUpdates(callback)
-            if (platformStarted) runCatching { manager?.removeUpdates(platformListener) }
+            stopPlatform()
             _problem.value = null
         }
     }

@@ -26,7 +26,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** 코스를 고르면 목표 거리가 코스 길이로 맞춰지되, 이미 정한 목표는 건드리지 않는다. */
+/** 코스를 골라도 목표는 건드리지 않는다(자유 러닝은 자유 러닝으로, 정해 둔 목표는 그대로). */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class CourseGoalSyncTest {
@@ -63,16 +63,34 @@ class CourseGoalSyncTest {
         check(condition()) { "조건이 3초 안에 맞지 않았어요" }
     }
 
+    /**
+     * 코스를 골라도 목표는 그대로다. 예전에는 자유 러닝을 "목표 거리 = 코스 길이(0.5km 단위)" 로 바꿨는데,
+     * 목표 거리에 닿으면 러닝이 자동으로 끝나는 규칙 때문에 코스 끝 전에 러닝이 끝났다.
+     */
     @Test
-    fun `choosing a course in free mode sets the goal distance to its length`() = runTest {
+    fun `choosing a course keeps free mode so the run is not ended early`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val vm = TestScopeVm(testScheduler)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect { } }
         testScheduler.advanceUntilIdle()
         vm.selectCourse(1)
-        waitUntil { vm.uiState.value.goalType == RunGoalType.DISTANCE }
-        assertThat(vm.uiState.value.goalType).isEqualTo(RunGoalType.DISTANCE)
-        assertThat(vm.uiState.value.goalDistanceKm).isWithin(0.01).of(2.5)
+        waitUntil { vm.uiState.value.selectedCourseId == 1L }
+        assertThat(vm.uiState.value.goalType).isEqualTo(RunGoalType.FREE)
+        assertThat(vm.uiState.value.toGoal().type).isEqualTo(RunGoalType.FREE)
+    }
+
+    /** 코스를 해제해도 남는 목표가 없다(예전에는 처음 고른 코스의 거리가 목표로 남았다). */
+    @Test
+    fun `clearing the course leaves no goal behind`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val vm = TestScopeVm(testScheduler)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect { } }
+        testScheduler.advanceUntilIdle()
+        vm.selectCourse(1)
+        waitUntil { vm.uiState.value.selectedCourseId == 1L }
+        vm.selectCourse(null)
+        waitUntil { vm.uiState.value.selectedCourseId == null }
+        assertThat(vm.uiState.value.goalType).isEqualTo(RunGoalType.FREE)
     }
 
     @Test

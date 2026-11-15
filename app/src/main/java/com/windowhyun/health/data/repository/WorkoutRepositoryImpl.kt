@@ -231,6 +231,8 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun restoreSet(workoutExerciseId: Long, set: WorkoutSet) {
+        // 그사이 종목을 뺐다면 되살릴 곳이 없다. 없는 종목에 세트를 넣으면 DB 가 거절해 앱이 죽는다.
+        if (workoutDao.getTrackingTypeOfWorkoutExercise(workoutExerciseId) == null) return
         val existing = workoutDao.getSets(workoutExerciseId)
         // 되살릴 자리부터 뒤 세트를 한 칸씩 밀어 자리를 비운다.
         val at = set.setNumber.coerceIn(1, existing.size + 1)

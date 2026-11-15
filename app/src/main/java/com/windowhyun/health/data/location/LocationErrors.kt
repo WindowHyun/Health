@@ -25,3 +25,6 @@ internal const val FALLBACK_NOTICE = "Google 위치 서비스에서 위치가 �
 
 /** Google 위치 서비스에서 이만큼 위치가 하나도 안 오면 기기 GPS 로도 받기 시작한다. */
 internal const val FUSED_SILENCE_MILLIS = 20_000L
+
+/** 조용한지 살펴보는 간격. */
+internal const val FUSED_SILENCE_CHECK_MILLIS = 5_000L

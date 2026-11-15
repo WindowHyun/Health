@@ -276,8 +276,9 @@ internal fun RoutineTemplates.Template.summary(): String {
     return "루틴 ${days.size}개 · 종목 ${exercises}개 · 세트 ${sets}개"
 }
 
-private fun restLabel(seconds: Int?): String = when {
+internal fun restLabel(seconds: Int?): String = when {
     seconds == null -> "기본 휴식"
+    seconds < 60 -> "휴식 ${seconds}초"
     seconds % 60 == 0 -> "휴식 ${seconds / 60}분"
     else -> "휴식 ${seconds / 60}분 ${seconds % 60}초"
 }

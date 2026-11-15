@@ -2,7 +2,6 @@ package com.windowhyun.health.wear
 
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.di.ApplicationScope
-import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.domain.repository.WorkoutRepository
@@ -82,11 +81,7 @@ class BackgroundWorkoutBridge internal constructor(
         val current = CurrentSetFinder.find(workout.exercises) ?: return
         val set = current.set
         if (set.id != setId) return
-        val hasValue = when (current.record.exercise.trackingType) {
-            ExerciseTrackingType.TIME -> set.durationSeconds > 0
-            else -> set.reps > 0
-        }
-        if (!hasValue) return
+        if (!set.canComplete(current.record.exercise.trackingType)) return
         workouts.setCompleted(set.id, set.weightKg, set.reps, true, set.durationSeconds)
     }
 

@@ -90,6 +90,9 @@ fun RunActiveScreen(
 
     LaunchedEffect(tracking.status) {
         if (tracking.status == RunStatus.FINISHED) onFinished()
+        // 종료를 물어 둔 채 다시 달리기 시작했으면 그 질문은 끝난 것이다. 남겨 두면 다음 (자동) 일시정지 때
+        // 누르지도 않은 "종료할까요?" 가 저절로 떠서, 주머니 속 터치 한 번에 러닝이 끝난다.
+        if (tracking.status != RunStatus.PAUSED) confirmStop = false
     }
 
     Scaffold { padding ->

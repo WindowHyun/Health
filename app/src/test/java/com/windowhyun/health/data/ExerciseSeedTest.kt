@@ -49,6 +49,42 @@ class ExerciseSeedTest {
         assertThat(stored.all { it.isBuiltIn }).isTrue()
     }
 
+    /**
+     * 기본 휴식 시간이 생기기 전 버전부터 쓰던 기기는 기본 종목의 휴식이 비어 있다. 예전에는 없는 종목만 넣어서 이 값이 영영 안 들어갔다.
+     * 열 때 비어 있는 것만 채운다: 이미 값이 있는 종목과 사용자가 만든 종목은 건드리지 않는다.
+     */
+    @Test
+    fun `an upgraded install gets the default rest of built in exercises`() = runTest {
+        val raw = db.openHelper.writableDatabase
+        raw.execSQL("UPDATE exercise SET defaultRestSeconds = NULL") // 옛 버전에서 올라온 상태
+        raw.execSQL("UPDATE exercise SET defaultRestSeconds = 45 WHERE name = '덤벨 플라이'") // 값이 이미 있다
+        raw.execSQL(
+            "INSERT INTO exercise (name, category, bodyPart, isBuiltIn, defaultRestSeconds, trackingType) " +
+                "VALUES ('내 운동', 'BARBELL', 'CHEST', 0, NULL, 'WEIGHT_REPS')",
+        )
+
+        ExerciseSeedCallback.backfillDefaultRest(raw)
+
+        val stored = ExerciseRepositoryImpl(db.exerciseDao()).observeExercises().first().associateBy { it.name }
+        assertThat(stored.getValue("벤치프레스").defaultRestSeconds).isEqualTo(150)
+        assertThat(stored.getValue("덤벨 플라이").defaultRestSeconds).isEqualTo(45)
+        assertThat(stored.getValue("내 운동").defaultRestSeconds).isNull()
+        DefaultExercises.all.filter { it.name != "덤벨 플라이" }.forEach { expected ->
+            assertThat(stored.getValue(expected.name).defaultRestSeconds).isEqualTo(expected.defaultRestSeconds)
+        }
+    }
+
+    /** 새로 설치한 기기는 채울 것이 없다(다시 불러도 그대로다). */
+    @Test
+    fun `backfilling a fresh install changes nothing`() = runTest {
+        val repo = ExerciseRepositoryImpl(db.exerciseDao())
+        val before = repo.observeExercises().first()
+
+        ExerciseSeedCallback.backfillDefaultRest(db.openHelper.writableDatabase)
+
+        assertThat(repo.observeExercises().first()).isEqualTo(before)
+    }
+
     /** 기본 종목 이름은 유니크 인덱스를 위해 중복이 없어야 한다. */
     @Test
     fun `default exercise names are unique`() {
