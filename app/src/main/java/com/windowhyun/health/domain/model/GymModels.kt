@@ -84,9 +84,21 @@ data class WorkoutExerciseRecord(
 ) {
     val completedSets: List<WorkoutSet> get() = sets.filter { it.completed }
 
-    /** 체크하지 않았지만 완료로 저장할 수 있는 세트(종료할 때 "함께 저장"을 권하는 대상). */
-    val uncheckedCompletableSets: List<WorkoutSet>
-        get() = sets.filter { !it.completed && it.canComplete(exercise.trackingType) }
+    /**
+     * 종료할 때 "체크만 깜빡했다"고 보고 완료로 저장해 줄 수 있는 세트.
+     *
+     * 세트에는 지난 운동의 값이 미리 채워져 있어서, 값이 있다는 것만으로는 한 세트인지 알 수 없다(안 한 마지막 세트도 값이 있다).
+     * 그래서 아래 둘 중 하나일 때만 한 것으로 본다. 둘 다 완료로 저장할 수 있는 값(횟수 · 시간)이 있어야 한다.
+     * - 이번 운동에서 사용자가 직접 값을 고친 세트([editedSetIds])
+     * - 뒤의 세트를 이미 완료한 세트(세트는 순서대로 하므로, 2세트를 건너뛰고 3세트를 끝냈다면 2세트는 한 것이다)
+     * 미리 채워진 값 그대로이고 뒤에 끝낸 세트도 없는 세트(대개 안 한 마지막 세트)는 포함하지 않는다.
+     */
+    fun rescuableSets(editedSetIds: Set<Long>): List<WorkoutSet> {
+        val lastCompleted = sets.indexOfLast { it.completed }
+        return sets.filterIndexed { index, set ->
+            !set.completed && set.canComplete(exercise.trackingType) && (set.id in editedSetIds || index < lastCompleted)
+        }
+    }
 
     /** 집계 대상 세트. 워밍업은 빠진다. */
     val countedSets: List<WorkoutSet> get() = sets.filter { it.counts }

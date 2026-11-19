@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -186,6 +187,9 @@ class SessionUsabilityFixesTest {
         workouts.setCompleted(ids[2], 0.0, 0, false)
         val vm = viewModel(handleFor(workoutId))
         settle()
+        // 세트 2 는 화면에서 직접 고쳐 넣은 값이다.
+        vm.updateSetValues(workouts.getWorkout(workoutId)!!.exercises.single().sets[1], 62.5, 6, 0)
+        settle()
 
         vm.finishWorkout(completeUnchecked = true)
         settle()
@@ -217,6 +221,8 @@ class SessionUsabilityFixesTest {
         workouts.setCompleted(ids[0], 60.0, 8, false)
         val vm = viewModel(handleFor(workoutId))
         settle()
+        vm.updateSetValues(workouts.getWorkout(workoutId)!!.exercises.single().sets[0], 60.0, 8, 0)
+        settle()
 
         vm.finishWorkout(completeUnchecked = true)
         settle()
@@ -237,6 +243,8 @@ class SessionUsabilityFixesTest {
         workouts.setCompleted(ids[2], 60.0, 5, false) // 하고 나서 체크만 깜빡했다
         val vm = viewModel(handleFor(workoutId))
         settle()
+        vm.updateSetValues(workouts.getWorkout(workoutId)!!.exercises.single().sets[2], 60.0, 5, 0)
+        settle()
 
         vm.finishWorkout(completeUnchecked = true)
         settle()
@@ -246,17 +254,75 @@ class SessionUsabilityFixesTest {
         vm.viewModelScope.cancel()
     }
 
-    /** 종료 창이 세는 수와 실제로 저장하는 세트가 같은 규칙을 쓴다. */
+    /**
+     * 지난 운동 값이 미리 채워진 채 손대지 않은 세트(대개 안 한 마지막 세트)는 "체크 깜빡한 세트" 가 아니다.
+     * 종료 창에서 한 번 잘못 눌러 하지 않은 세트가 기록(볼륨 · 개인 기록)이 되지 않게 한다.
+     */
     @Test
-    fun `the unchecked count uses the same rule as the complete button`() = runVmTest {
+    fun `untouched prefilled sets are not offered for saving`() = runVmTest {
         val (workoutId, ids) = workoutWithSets()
-        workouts.setCompleted(ids[0], 60.0, 0, false)
-        workouts.setCompleted(ids[1], 0.0, 12, false)
-        workouts.setCompleted(ids[2], 0.0, 0, false)
+        workouts.setCompleted(ids[0], 60.0, 8, true)
+        workouts.setCompleted(ids[1], 60.0, 8, false) // 지난번 값이 미리 채워짐, 손대지 않음
+        workouts.setCompleted(ids[2], 60.0, 8, false)
 
         val record = workouts.getWorkout(workoutId)!!.exercises.single()
 
-        assertThat(record.uncheckedCompletableSets.map { it.id }).containsExactly(ids[1])
+        assertThat(record.rescuableSets(emptySet())).isEmpty()
+    }
+
+    @Test
+    fun `sets the user edited or skipped past are offered for saving`() = runVmTest {
+        val (workoutId, ids) = workoutWithSets()
+        workouts.setCompleted(ids[0], 60.0, 8, false) // 건너뛴 세트: 뒤의 세트가 끝났다
+        workouts.setCompleted(ids[1], 60.0, 8, true)
+        workouts.setCompleted(ids[2], 62.5, 6, false) // 직접 고친 세트
+        val record = workouts.getWorkout(workoutId)!!.exercises.single()
+
+        assertThat(record.rescuableSets(setOf(ids[2])).map { it.id }).containsExactly(ids[0], ids[2]).inOrder()
+        // 직접 고쳤어도 횟수가 없으면(무게만) 완료로 저장할 수 없다.
+        workouts.setCompleted(ids[2], 62.5, 0, false)
+        assertThat(workouts.getWorkout(workoutId)!!.exercises.single().rescuableSets(setOf(ids[2])).map { it.id }).containsExactly(ids[0])
+    }
+
+    /** 세트 값을 고친 기록은 화면이 다시 만들어져도(앱이 정리됐다 돌아와도) 남는다. */
+    @Test
+    fun `edited sets are remembered across a recreated screen`() = runVmTest {
+        val (workoutId, ids) = workoutWithSets()
+        val handle = handleFor(workoutId)
+        val first = viewModel(handle)
+        settle()
+        first.updateSetValues(workouts.getWorkout(workoutId)!!.exercises.single().sets[1], 62.5, 6, 0)
+        settle()
+        first.viewModelScope.cancel()
+
+        val second = viewModel(handle)
+        backgroundScope.launch(dispatcher) { second.uiState.collect { } } // 화면이 보고 있는 것처럼
+        settle()
+        assertThat(second.uiState.value.editedSetIds).containsExactly(ids[1])
+        second.viewModelScope.cancel()
+    }
+
+    /** 앞 세트를 고쳐 뒤 세트의 무게가 따라 바뀐 것은 "직접 고친 것" 이 아니다. */
+    @Test
+    fun `carried over weights do not count as edits`() = runVmTest {
+        val (workoutId, ids) = workoutWithSets()
+        val vm = viewModel(handleFor(workoutId))
+        backgroundScope.launch(dispatcher) { vm.uiState.collect { } } // 화면이 보고 있는 것처럼
+        settle()
+
+        vm.updateSetValues(workouts.getWorkout(workoutId)!!.exercises.single().sets[0], 70.0, 8, 0)
+        settle()
+
+        assertThat(vm.uiState.value.editedSetIds).containsExactly(ids[0])
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `the screen follows the exercise only when the active one changes`() {
+        assertThat(shouldScrollToActive(previous = null, current = 1L)).isFalse() // 처음 그릴 때
+        assertThat(shouldScrollToActive(previous = 1L, current = 1L)).isFalse()
+        assertThat(shouldScrollToActive(previous = 1L, current = 2L)).isTrue() // 종목을 끝냈다
+        assertThat(shouldScrollToActive(previous = 2L, current = null)).isFalse() // 모두 끝났다
     }
 
     /** 세트를 지우고 그 종목을 통째로 뺀 뒤 "실행 취소"를 눌러도 앱이 죽지 않는다(없는 종목에 세트를 넣으면 DB 가 거절한다). */

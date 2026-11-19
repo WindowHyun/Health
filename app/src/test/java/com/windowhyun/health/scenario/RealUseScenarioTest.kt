@@ -172,6 +172,9 @@ class RealUseScenarioTest {
         val events = mutableListOf<WorkoutSessionEvent>()
         val collector = CoroutineScope(dispatcher).launch { vm.events.collect { events += it } }
         cleanups += { collector.cancel() }
+        // 화면이 상태를 보고 있는 것처럼(직접 고친 세트 표시가 상태에 실려 온다).
+        val watching = CoroutineScope(dispatcher).launch { vm.uiState.collect { } }
+        cleanups += { watching.cancel() }
         settle(200)
 
         val firstName = day.exercises.first().first
@@ -233,7 +236,7 @@ class RealUseScenarioTest {
 
         // ----- 종료: "체크 안 한 세트도 완료로 저장" 을 고른다 -----
         // 종료 창이 세는 수: 3세트(80kg x 6)만. 무게만 있는 4세트와 손대지 않은 다른 종목의 빈 세트는 세지 않는다.
-        assertThat(workout(workoutId).exercises.sumOf { it.uncheckedCompletableSets.size }).isEqualTo(1)
+        assertThat(workout(workoutId).exercises.sumOf { it.rescuableSets(vm.uiState.value.editedSetIds).size }).isEqualTo(1)
         vm.finishWorkout(completeUnchecked = true)
         await("운동 종료") { events.any { it is WorkoutSessionEvent.Finished } }
 

@@ -54,6 +54,8 @@ data class WorkoutSessionUiState(
     val settings: AppSettings = AppSettings(),
     val elapsedSeconds: Long = 0,
     val loading: Boolean = true,
+    /** 이번 운동에서 사용자가 직접 값을 고친 세트 번호들(종료할 때 "체크 깜빡한 세트" 를 가리는 데 쓴다). */
+    val editedSetIds: Set<Long> = emptySet(),
 )
 
 /** 화면 전환이 필요한 일회성 이벤트. */
@@ -110,6 +112,15 @@ class WorkoutSessionViewModel internal constructor(
     private val lastPerformance = MutableStateFlow<Map<Long, List<WorkoutSet>>>(emptyMap())
     private val elapsedSeconds = MutableStateFlow(0L)
 
+    // 앱이 정리됐다 돌아와도 이어지도록 저장해 둔다.
+    private val editedSetIds = MutableStateFlow(savedStateHandle.get<LongArray>(KEY_EDITED_SETS)?.toSet().orEmpty())
+
+    private fun markEdited(setId: Long) {
+        if (setId in editedSetIds.value) return
+        editedSetIds.update { it + setId }
+        savedStateHandle[KEY_EDITED_SETS] = editedSetIds.value.toLongArray()
+    }
+
     private val _restTimer = MutableStateFlow(RestTimerState())
     val restTimer: StateFlow<RestTimerState> = _restTimer.asStateFlow()
 
@@ -131,13 +142,15 @@ class WorkoutSessionViewModel internal constructor(
         lastPerformance,
         settingsRepository.settings,
         elapsedSeconds,
-    ) { workout, last, settings, elapsed ->
+        editedSetIds,
+    ) { workout, last, settings, elapsed, edited ->
         WorkoutSessionUiState(
             workout = workout,
             lastPerformance = last,
             settings = settings,
             elapsedSeconds = elapsed,
             loading = false,
+            editedSetIds = edited,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WorkoutSessionUiState())
 
@@ -228,6 +241,8 @@ class WorkoutSessionViewModel internal constructor(
      * 아직 안 한 세트의 무게를 바꾸면, 같은 무게였던 뒤 세트도 같이 바뀐다([SetCarryOver]).
      */
     fun updateSetValues(set: WorkoutSet, weightKg: Double, reps: Int, durationSeconds: Int) {
+        // 사용자가 직접 고친 세트만 표시한다(앞 세트를 고쳐 뒤 세트가 따라 바뀐 것은 표시하지 않는다).
+        markEdited(set.id)
         viewModelScope.launch {
             setEditLock.withLock {
                 // 화면에서 넘어온 set 은 한 글자 전 값일 수 있어서 저장된 값을 새로 읽는다.
@@ -546,8 +561,9 @@ class WorkoutSessionViewModel internal constructor(
 
     /**
      * 운동을 마친다. [completeUnchecked] 가 true 면, 완료할 수 있는 값(횟수, 시간 종목은 시간)이 들어 있는데 체크하지 않은 세트를
-     * 먼저 완료로 바꾼다(마지막 세트를 치고 체크를 깜빡한 채 종료해도 기록이 사라지지 않게). 횟수가 없는 세트는 그대로 버린다
-     * (무게만 따라 채워진 세트를 60kg x 0회로 저장하지 않는다).
+     * 먼저 완료로 바꾼다(마지막 세트를 치고 체크를 깜빡한 채 종료해도 기록이 사라지지 않게). 대상은 [WorkoutExerciseRecord.rescuableSets]:
+     * 직접 고쳤거나 뒤 세트를 이미 끝낸 세트뿐이다. 지난 운동 값이 미리 채워진 채 손대지 않은 세트와 횟수가 없는 세트는 그대로 버린다
+     * (안 한 세트가 기록이 되지 않게).
      */
     fun finishWorkout(completeUnchecked: Boolean = false) {
         if (finishing) return
@@ -557,7 +573,7 @@ class WorkoutSessionViewModel internal constructor(
             lastRemovedSet = null
             if (completeUnchecked) {
                 workoutRepository.getWorkout(workoutId)?.exercises.orEmpty()
-                    .flatMap { it.uncheckedCompletableSets }
+                    .flatMap { it.rescuableSets(editedSetIds.value) }
                     .forEach { workoutRepository.setCompleted(it.id, it.weightKg, it.reps, true, it.durationSeconds) }
             }
             // 한 세트도 완료하지 않았다면 남길 기록이 없다. 빈 기록이 저장되어 주간 횟수에 들어가지 않게 버린다.
@@ -593,6 +609,7 @@ class WorkoutSessionViewModel internal constructor(
 
     private companion object {
         const val REST_TICK_MILLIS = 250L
+        const val KEY_EDITED_SETS = "edited_set_ids"
         const val KEY_REST_TOTAL = "rest_total_seconds"
         const val KEY_REST_ENDS_AT = "rest_ends_at"
         const val KEY_REST_PAUSED = "rest_paused"

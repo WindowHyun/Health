@@ -1,5 +1,10 @@
 package com.windowhyun.health.ui.session
 
+import kotlinx.coroutines.delay
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -149,12 +154,15 @@ fun SetRow(
                     NumberField(
                         value = weightText,
                         onValueChange = {
-                            weightText = it.filter { ch -> ch.isDigit() || ch == '.' }
+                            // 소수점 키가 쉼표로 나오는 키보드도 있어서 쉼표는 점으로 읽는다.
+                            weightText = it.replace(',', '.').filter { ch -> ch.isDigit() || ch == '.' }
                             changed()
                         },
                         suffix = weightUnit.label,
                         label = "${set.setNumber}세트 중량",
                         modifier = Modifier.weight(1f),
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next,
                     )
                     NumberField(
                         value = repsText,
@@ -165,6 +173,7 @@ fun SetRow(
                         suffix = "회",
                         label = "${set.setNumber}세트 횟수",
                         modifier = Modifier.weight(1f),
+                        imeAction = ImeAction.Done,
                     )
                 }
 
@@ -177,6 +186,7 @@ fun SetRow(
                     suffix = "회",
                     label = "${set.setNumber}세트 횟수",
                     modifier = Modifier.weight(2f),
+                    imeAction = ImeAction.Done,
                 )
 
                 ExerciseTrackingType.TIME -> {
@@ -189,6 +199,7 @@ fun SetRow(
                         suffix = "분",
                         label = "${set.setNumber}세트 시간(분)",
                         modifier = Modifier.weight(1f),
+                        imeAction = ImeAction.Next,
                     )
                     NumberField(
                         value = secondsText,
@@ -199,6 +210,7 @@ fun SetRow(
                         suffix = "초",
                         label = "${set.setNumber}세트 시간(초)",
                         modifier = Modifier.weight(1f),
+                        imeAction = ImeAction.Done,
                     )
                 }
             }
@@ -375,16 +387,36 @@ private fun NumberField(
     suffix: String,
     label: String,
     modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Number,
+    imeAction: ImeAction = ImeAction.Next,
 ) {
     // 입력칸 안의 숫자는 글자 크기를 1.3배까지만 키운다. 더 키우면 칸 폭이 모자라 값이 잘린다.
     val density = LocalDensity.current
+
+    // 칸을 누르면 값 전체를 선택한다. 지난 기록이 미리 채워져 있어서 가장 흔한 수정은 "80 을 85 로" 인데,
+    // 선택되지 않으면 지우개를 두 번 눌러 지우고 써야 한다. 글자와 선택 위치를 함께 들고 있어야 해서 TextFieldValue 를 쓴다.
+    var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    // 밖에서 값이 바뀌면(앞 세트를 고쳐 뒤 세트가 따라 바뀜, 칩의 ±) 그 값을 보여 준다.
+    if (field.text != value) field = TextFieldValue(value, TextRange(value.length))
+    var focused by remember { mutableStateOf(false) }
+    // 누른 자리에 커서가 놓이는 동작이 포커스 직후에 일어나 선택을 덮어쓴다. 그 뒤에 전체를 선택한다.
+    LaunchedEffect(focused) {
+        if (focused) {
+            delay(SELECT_ALL_DELAY_MILLIS)
+            field = field.copy(selection = TextRange(0, field.text.length))
+        }
+    }
+
     CompositionLocalProvider(
         LocalDensity provides Density(density.density, fontScale = density.fontScale.coerceAtMost(1.3f)),
     ) {
     OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier,
+        value = field,
+        onValueChange = {
+            field = it
+            onValueChange(it.text)
+        },
+        modifier = modifier.onFocusChanged { focused = it.isFocused },
         singleLine = true,
         label = null,
         // 입력한 값이 이 화면의 핵심이라 크고 굵은 숫자로, 폭을 맞춰 자리가 흔들리지 않게 한다.
@@ -394,7 +426,8 @@ private fun NumberField(
             textAlign = TextAlign.Center,
         ),
         suffix = { Text(suffix, style = MaterialTheme.typography.labelMedium, maxLines = 1) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        // 무게는 소수점(62.5kg)이 있는 키보드, 칸 사이는 "다음" 키로 넘어간다(마지막 칸은 "완료").
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
         colors = OutlinedTextFieldDefaults.colors(
             unfocusedBorderColor = MaterialTheme.colorScheme.outline,
             focusedBorderColor = MaterialTheme.colorScheme.onSurface,
@@ -403,6 +436,8 @@ private fun NumberField(
     )
     }
 }
+
+private const val SELECT_ALL_DELAY_MILLIS = 60L
 
 /**
  * 분·초 입력을 초로 바꾼다. 초 칸에 90 처럼 60 이상을 넣어도 그대로 더한다

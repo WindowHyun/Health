@@ -1,5 +1,7 @@
 package com.windowhyun.health.ui.session
 
+import com.windowhyun.health.core.model.SetType
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -136,6 +138,21 @@ fun WorkoutSessionScreen(
 
     val workout = state.workout
 
+    // 종목의 마지막 세트를 끝내면 다음 종목이 보이게 화면을 옮긴다. 종목이 줄줄이 이어진 긴 화면이라, 안 옮기면
+    // 땀 젖은 손으로 다음 종목을 찾아 내려야 한다. 같은 종목 안에서 세트를 끝낼 때는 옮기지 않는다(화면이 튀지 않게).
+    val listState = rememberLazyListState()
+    val activeExerciseId = activeExerciseId(workout?.exercises.orEmpty())
+    var previousActiveExerciseId by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(activeExerciseId) {
+        val previous = previousActiveExerciseId
+        previousActiveExerciseId = activeExerciseId
+        if (shouldScrollToActive(previous, activeExerciseId)) {
+            val index = workout?.exercises.orEmpty().indexOfFirst { it.id == activeExerciseId }
+            // 목록의 첫 칸은 요약 줄이라 종목은 한 칸씩 뒤에 있다.
+            if (index >= 0) listState.animateScrollToItem(index + 1)
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
@@ -175,6 +192,7 @@ fun WorkoutSessionScreen(
         },
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
@@ -190,8 +208,12 @@ fun WorkoutSessionScreen(
 
             val records = workout?.exercises.orEmpty()
             val groups = records.map { it.supersetGroup }
+            // 세트 종류(워밍업 · 드롭 · 실패)를 바꾸는 방법은 세트 번호를 누르는 것뿐이라, 처음 운동 화면에서는 한 줄로 알려 준다.
+            val showSetTypeHint = (workout?.totalCompletedSets ?: 0) == 0 &&
+                records.none { record -> record.sets.any { it.setType != SetType.NORMAL } }
             itemsIndexed(records, key = { _, record -> record.id }) { index, record ->
                 ExerciseBlock(
+                    showSetTypeHint = showSetTypeHint && index == 0,
                     record = record,
                     supersetLabel = SupersetGroups.label(groups, index),
                     restsAfter = SupersetGroups.restAfter(groups, index),
@@ -258,24 +280,25 @@ fun WorkoutSessionScreen(
     if (showFinishDialog) {
         val exercises = workout?.exercises.orEmpty()
         val completed = exercises.sumOf { it.completedSets.size }
-        val unchecked = exercises.sumOf { it.uncheckedCompletableSets.size }
+        val unchecked = exercises.sumOf { it.rescuableSets(state.editedSetIds).size }
         val prompt = finishPrompt(completed, incompleteSets = exercises.sumOf { it.sets.size } - completed, uncheckedWithValues = unchecked)
         AlertDialog(
             onDismissRequest = { showFinishDialog = false },
             title = { Text(prompt.title) },
             text = { Text(prompt.message) },
             confirmButton = {
+                // 기록을 더하는 선택지는 아래에 둔다. 위에 두면 눈에 띄는 첫 버튼을 눌러 하지 않은 세트가 기록되기 쉽다.
                 Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = {
+                        showFinishDialog = false
+                        viewModel.finishWorkout()
+                    }) { Text(prompt.confirmLabel) }
                     prompt.completeUncheckedLabel?.let { label ->
                         TextButton(onClick = {
                             showFinishDialog = false
                             viewModel.finishWorkout(completeUnchecked = true)
                         }) { Text(label) }
                     }
-                    TextButton(onClick = {
-                        showFinishDialog = false
-                        viewModel.finishWorkout()
-                    }) { Text(prompt.confirmLabel) }
                 }
             },
             dismissButton = { TextButton(onClick = { showFinishDialog = false }) { Text("취소") } },
@@ -344,6 +367,7 @@ private fun SessionSummaryRow(completedSets: Int, totalVolume: Double, weightUni
  */
 @Composable
 private fun ExerciseBlock(
+    showSetTypeHint: Boolean,
     record: WorkoutExerciseRecord,
     supersetLabel: String?,
     restsAfter: Boolean,
@@ -407,6 +431,15 @@ private fun ExerciseBlock(
 
         LastPerformanceBlock(lastSets = lastSets, weightUnit = weightUnit)
 
+        if (showSetTypeHint) {
+            Text(
+                text = "세트 번호를 누르면 워밍업 · 드롭 · 실패로 바뀌어요",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+
         Spacer(Modifier.height(12.dp))
 
         // 지금 할 세트(처음으로 안 끝낸 세트)에만 ± 버튼을 보인다.
@@ -456,3 +489,14 @@ private fun LastPerformanceBlock(lastSets: List<WorkoutSet>, weightUnit: WeightU
         modifier = Modifier.padding(top = 6.dp),
     )
 }
+
+/** 지금 하고 있는 종목: 아직 안 끝낸 세트가 남은 첫 종목. 모두 끝났으면 null. */
+internal fun activeExerciseId(records: List<WorkoutExerciseRecord>): Long? =
+    records.firstOrNull { record -> record.sets.any { !it.completed } }?.id
+
+/**
+ * 하고 있는 종목이 바뀌었을 때만 화면을 옮긴다. 처음 그릴 때(이전이 없음)나 모두 끝나 다음이 없을 때는 옮기지 않는다.
+ * 종목을 추가해 하고 있는 종목이 새 종목으로 바뀌는 경우도 옮긴다(방금 추가한 곳이 보인다).
+ */
+internal fun shouldScrollToActive(previous: Long?, current: Long?): Boolean =
+    previous != null && current != null && previous != current
