@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -40,6 +42,7 @@ import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatDuration
 import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.core.util.formatWeight
+import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.model.WorkoutExerciseRecord
 import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.domain.usecase.SupersetGroups
@@ -47,6 +50,7 @@ import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.components.Hairline
 import com.windowhyun.health.ui.components.HealthOutlinedButton
 import com.windowhyun.health.ui.components.MetricValue
+import com.windowhyun.health.ui.components.imeAboveNavigationBar
 import com.windowhyun.health.ui.gym.ExercisePickerSheet
 import kotlinx.coroutines.flow.collectLatest
 
@@ -72,6 +76,16 @@ fun WorkoutSessionScreen(
     var showFinishDialog by remember { mutableStateOf(false) }
     var showDiscardDialog by remember { mutableStateOf(false) }
     var showPicker by remember { mutableStateOf(false) }
+    // 완료한 세트가 있는 운동을 빼려 할 때만 묻는다(빈 운동은 바로 뺀다).
+    var exerciseToRemove by remember { mutableStateOf<WorkoutExerciseRecord?>(null) }
+
+    // 세트 사이에 쉬는 동안 화면이 꺼지지 않게 한다. 설정에서 끌 수 있다.
+    val view = LocalView.current
+    val keepScreenOn = state.settings.keepScreenOnDuringWorkout
+    DisposableEffect(view, keepScreenOn) {
+        view.keepScreenOn = keepScreenOn
+        onDispose { view.keepScreenOn = false }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
@@ -127,7 +141,8 @@ fun WorkoutSessionScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imeAboveNavigationBar(),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         ) {
             item {
@@ -158,7 +173,13 @@ fun WorkoutSessionScreen(
                     onCycleSetType = viewModel::cycleSetType,
                     onAddSet = { viewModel.addSet(record.id) },
                     onRemoveSet = viewModel::removeSet,
-                    onRemoveExercise = { viewModel.removeExercise(record.id) },
+                    onRemoveExercise = {
+                        if (record.completedSets.isEmpty()) {
+                            viewModel.removeExercise(record.id)
+                        } else {
+                            exerciseToRemove = record
+                        }
+                    },
                     onStartRest = { seconds -> viewModel.startRestTimer(seconds) },
                 )
                 Hairline()
@@ -206,17 +227,27 @@ fun WorkoutSessionScreen(
     if (showFinishDialog) {
         ConfirmDialog(
             title = "운동을 종료할까요?",
-            message = if (workout?.hasCompletedSets == false) {
-                "완료한 세트가 없어 이번 운동은 기록에 남지 않습니다."
-            } else {
-                "완료하지 않은 세트는 저장되지 않습니다."
-            },
+            message = finishDialogMessage(workout),
             confirmLabel = "종료",
             onConfirm = {
                 showFinishDialog = false
                 viewModel.finishWorkout()
             },
             onDismiss = { showFinishDialog = false },
+        )
+    }
+
+    exerciseToRemove?.let { record ->
+        ConfirmDialog(
+            title = "운동을 뺄까요?",
+            message = "'${record.exercise.name}'에 완료한 세트 ${record.completedSets.size}개가 있습니다. " +
+                "빼면 이 기록도 함께 사라지고 되돌릴 수 없습니다.",
+            confirmLabel = "빼기",
+            onConfirm = {
+                exerciseToRemove = null
+                viewModel.removeExercise(record.id)
+            },
+            onDismiss = { exerciseToRemove = null },
         )
     }
 
@@ -231,6 +262,21 @@ fun WorkoutSessionScreen(
             },
             onDismiss = { showDiscardDialog = false },
         )
+    }
+}
+
+/**
+ * 종료 확인창 문구. 완료하지 않은 세트는 저장되지 않으므로, 몇 개가 사라지는지 알려 준다.
+ * (완료 버튼을 못 누르고 끝내는 실수를 이 자리에서 잡는다.)
+ */
+internal fun finishDialogMessage(workout: Workout?): String {
+    if (workout == null) return "운동을 종료할까요?"
+    if (!workout.hasCompletedSets) return "완료한 세트가 없어 이번 운동은 기록에 남지 않습니다."
+    val unfinished = workout.exercises.sumOf { record -> record.sets.count { !it.completed } }
+    return if (unfinished > 0) {
+        "완료하지 않은 세트 ${unfinished}개는 저장되지 않습니다. 저장하려면 세트의 체크 버튼을 먼저 눌러 주세요."
+    } else {
+        "모든 세트를 완료했습니다. 지금까지의 기록이 저장됩니다."
     }
 }
 

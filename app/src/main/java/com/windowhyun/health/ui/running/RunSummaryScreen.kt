@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.imeAboveNavigationBar
 import com.windowhyun.health.ui.components.SectionLabel
 import com.windowhyun.health.ui.components.HealthButton
 import com.windowhyun.health.core.designsystem.theme.healthColors
@@ -61,7 +62,8 @@ fun RunSummaryScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imeAboveNavigationBar(),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {

@@ -54,6 +54,21 @@ class RoutineEditViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(RoutineEditUiState(routineId = routineId))
     val uiState: StateFlow<RoutineEditUiState> = _uiState.asStateFlow()
 
+    /** 화면을 연 시점(수정이면 불러온 직후)의 내용. 이것과 달라졌는지로 "저장 안 한 변경"을 가린다. */
+    private var baseline = RoutineEditUiState(routineId = routineId)
+
+    /**
+     * 저장하지 않은 변경이 있는가. 있으면 화면을 나가기 전에 한 번 확인한다.
+     * 저장이 끝났거나 진행 중이면 잃을 것이 없으므로 false.
+     */
+    fun hasUnsavedChanges(): Boolean {
+        val state = _uiState.value
+        if (state.saved || state.saving) return false
+        return state.name != baseline.name ||
+            state.scheduledDays != baseline.scheduledDays ||
+            state.items != baseline.items
+    }
+
     private val baseExerciseManager = RepositoryExerciseManager(exerciseRepository)
 
     /**
@@ -109,6 +124,7 @@ class RoutineEditViewModel @Inject constructor(
                             items = routine.items,
                         )
                     }
+                    baseline = _uiState.value
                 }
             }
         }

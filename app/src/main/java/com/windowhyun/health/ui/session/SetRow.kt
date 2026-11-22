@@ -41,6 +41,7 @@ import com.windowhyun.health.core.model.SetType
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatWeightValue
 import com.windowhyun.health.domain.model.WorkoutSet
+import com.windowhyun.health.ui.components.ConfirmDialog
 
 /**
  * 세트 한 줄. 중량/횟수 입력과 완료 버튼을 한 손으로 누를 수 있게 크게 배치한다.
@@ -80,6 +81,9 @@ fun SetRow(
     fun weightKg() = weightKgOf(weightText, storedKg = set.weightKg, unit = weightUnit)
     fun reps() = repsText.toIntOrNull() ?: 0
     fun duration() = durationSecondsOf(minutesText, secondsText)
+
+    // 끝낸 세트를 지우면 기록이 사라진다. 완료 버튼 바로 옆이라 잘못 누르기 쉬워 한 번 묻는다.
+    var confirmRemove by remember(set.id) { mutableStateOf(false) }
 
     val isWarmup = set.setType == SetType.WARMUP
     // 끝낸 세트는 라임을 옅게 깐다. 한눈에 "어디까지 했는지"가 보이되 입력칸 글자는 그대로 읽힌다.
@@ -172,13 +176,29 @@ fun SetRow(
             )
         }
 
-        IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+        IconButton(
+            onClick = { if (set.completed) confirmRemove = true else onRemove() },
+            modifier = Modifier.size(36.dp),
+        ) {
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = "세트 삭제",
                 tint = MaterialTheme.colorScheme.outline,
             )
         }
+    }
+
+    if (confirmRemove) {
+        ConfirmDialog(
+            title = "세트를 삭제할까요?",
+            message = "${set.setNumber}번 세트의 기록이 사라지고 되돌릴 수 없습니다.",
+            confirmLabel = "삭제",
+            onConfirm = {
+                confirmRemove = false
+                onRemove()
+            },
+            onDismiss = { confirmRemove = false },
+        )
     }
 }
 

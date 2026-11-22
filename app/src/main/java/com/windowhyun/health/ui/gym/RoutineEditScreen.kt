@@ -1,5 +1,6 @@
 package com.windowhyun.health.ui.gym
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,7 +30,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.components.SectionLabel
+import com.windowhyun.health.ui.components.imeAboveNavigationBar
 import com.windowhyun.health.ui.components.HealthOutlinedButton
 import com.windowhyun.health.ui.components.HealthButton
 import com.windowhyun.health.ui.components.Hairline
@@ -59,17 +62,28 @@ fun RoutineEditScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val exercises by viewModel.exercises.collectAsStateWithLifecycle()
     var showPicker by remember { mutableStateOf(false) }
+    var showLeaveDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.saved) {
         if (state.saved) onDone()
     }
+
+    // 이름과 운동을 한참 채운 뒤 뒤로 가기를 잘못 눌러도 통째로 사라지지 않게 한 번 묻는다.
+    val requestLeave: () -> Unit = {
+        if (viewModel.hasUnsavedChanges()) {
+            showLeaveDialog = true
+        } else {
+            onDone()
+        }
+    }
+    BackHandler { requestLeave() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (state.isNew) "루틴 만들기" else "루틴 수정") },
                 navigationIcon = {
-                    IconButton(onClick = onDone) {
+                    IconButton(onClick = requestLeave) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
                     }
                 },
@@ -87,7 +101,8 @@ fun RoutineEditScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imeAboveNavigationBar(),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         ) {
             item {
@@ -185,6 +200,20 @@ fun RoutineEditScreen(
             },
             onDismiss = { showPicker = false },
             manager = viewModel.exerciseManager,
+        )
+    }
+
+    if (showLeaveDialog) {
+        ConfirmDialog(
+            title = "저장하지 않고 나갈까요?",
+            message = "작성 중인 루틴이 저장되지 않고 사라집니다.",
+            confirmLabel = "나가기",
+            dismissLabel = "계속 작성",
+            onConfirm = {
+                showLeaveDialog = false
+                onDone()
+            },
+            onDismiss = { showLeaveDialog = false },
         )
     }
 }

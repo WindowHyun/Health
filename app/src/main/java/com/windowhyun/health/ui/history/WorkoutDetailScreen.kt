@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import com.windowhyun.health.ui.components.imeAboveNavigationBar
 import com.windowhyun.health.ui.components.PersonalRecordsPanel
 import com.windowhyun.health.ui.components.StatCard
 import com.windowhyun.health.ui.components.Hairline
@@ -91,7 +92,8 @@ fun WorkoutDetailScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imeAboveNavigationBar(),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
