@@ -55,8 +55,25 @@ fun ExercisePickerSheet(
      */
     addedCounts: Map<Long, Int> = emptyMap(),
 ) {
-    var editing by remember { mutableStateOf<Exercise?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        ExercisePickerBody(exercises, onPick, onCreate, onDismiss, manager, addedCounts)
+    }
+}
+
+/**
+ * 시트 안쪽 본문. 시트(별도 창) 없이도 그릴 수 있어, 눌렀을 때의 동작을 화면 테스트로 확인할 수 있다.
+ */
+@Composable
+internal fun ExercisePickerBody(
+    exercises: List<Exercise>,
+    onPick: (Exercise) -> Unit,
+    onCreate: (String, ExerciseCategory, BodyPart, ExerciseTrackingType) -> Unit,
+    onDismiss: () -> Unit,
+    manager: ExerciseManager? = null,
+    addedCounts: Map<Long, Int> = emptyMap(),
+) {
+    var editing by remember { mutableStateOf<Exercise?>(null) }
     var query by remember { mutableStateOf("") }
     var bodyPartFilter by remember { mutableStateOf<BodyPart?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -70,7 +87,7 @@ fun ExercisePickerSheet(
             (query.isBlank() || exercise.name.contains(query.trim(), ignoreCase = true))
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    run {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
