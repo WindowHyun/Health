@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.SavedStateHandle
@@ -111,6 +112,18 @@ class UsabilityFixesTest {
 
     // ----- 운동 선택 시트: 여러 종목 담기 -----
 
+    /**
+     * 선택 시트는 아래에서 올라오며 펼쳐진다. 다 펼쳐지기 전에는 목록의 아랫줄이 아직 그려지지 않고 누르는 자리도 어긋난다.
+     * 느린 기기(CI)에서 그 사이에 확인하면 실패하므로, 보일 때까지 화면을 돌리며 기다린 뒤 시간을 더 흘려 자리를 잡는다.
+     */
+    private fun awaitSheet(text: String) {
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+    }
+
     @Test
     fun `picker stays open after picking and marks what was added`() {
         val picked = mutableListOf<Long>()
@@ -127,6 +140,7 @@ class UsabilityFixesTest {
             }
         }
 
+        awaitSheet("스쿼트")
         compose.onNodeWithText("담음 ×2").assertIsDisplayed()
         compose.onNodeWithText("2개 담음", substring = true).assertIsDisplayed()
 
@@ -151,7 +165,9 @@ class UsabilityFixesTest {
             }
         }
 
+        awaitSheet("완료")
         compose.onNodeWithText("완료").performClick()
+        compose.waitForIdle()
 
         assertThat(dismissed).isEqualTo(1)
     }

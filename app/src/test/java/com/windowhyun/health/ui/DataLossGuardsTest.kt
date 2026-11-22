@@ -191,7 +191,8 @@ class DataLossGuardsTest {
         )
 
         val viewModel = editor(saved)
-        advanceUntilIdle()
+        // 루틴은 DB 스레드에서 읽혀 온다. 테스트 시계만 돌리면 읽기가 끝나기 전에 확인하게 되므로 실제 시간으로 기다린다.
+        awaitReal { viewModel.uiState.value.name == "하체" }
         assertThat(viewModel.uiState.value.name).isEqualTo("하체")
         assertThat(viewModel.hasUnsavedChanges()).isFalse()
 
@@ -199,7 +200,16 @@ class DataLossGuardsTest {
         assertThat(viewModel.hasUnsavedChanges()).isTrue()
 
         viewModel.save()
-        advanceUntilIdle()
+        awaitReal { viewModel.uiState.value.saved }
         assertThat(viewModel.hasUnsavedChanges()).isFalse()
+    }
+
+    /** 테스트 시계를 돌리며 [condition] 이 참이 될 때까지 실제 시간으로 기다린다(DB 는 다른 스레드에서 끝난다). */
+    private fun kotlinx.coroutines.test.TestScope.awaitReal(timeoutMillis: Long = 10_000, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (!condition() && System.currentTimeMillis() < deadline) {
+            advanceUntilIdle()
+            Thread.sleep(10)
+        }
     }
 }
