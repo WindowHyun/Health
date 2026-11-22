@@ -42,12 +42,14 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * 운동 중 · 루틴 만들 때 느끼는 불편을 줄인 변경의 회귀 테스트.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "w400dp-h860dp-xxhdpi")
 class UsabilityFixesTest {
 
     @get:Rule
