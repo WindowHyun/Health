@@ -3,6 +3,7 @@ package com.windowhyun.health.ui.running
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import com.windowhyun.health.ui.components.imeAboveNavigationBar
 import com.windowhyun.health.ui.components.SectionLabel
 import com.windowhyun.health.ui.components.HealthButton
 import com.windowhyun.health.core.designsystem.theme.healthColors
@@ -57,7 +60,32 @@ fun RunSummaryScreen(
 
     BackHandler { viewModel.save() }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("러닝 완료") }) }) { padding ->
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("러닝 완료") }) },
+        // 저장 · 삭제는 긴 화면(카드 · 지도 · 구간 · 메모) 맨 아래에 있어 스크롤해야 보였다. 늘 보이게 고정한다.
+        // 키보드가 올라오면 이 막대가 함께 올라오고, 위의 내용은 그만큼 줄어든다.
+        bottomBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .imeAboveNavigationBar()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextButton(onClick = { showDiscardDialog = true }) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+                HealthButton(
+                    onClick = viewModel::save,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                ) { Text("저장") }
+            }
+        },
+    ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -155,24 +183,6 @@ fun RunSummaryScreen(
                         .fillMaxWidth()
                         .height(120.dp),
                 )
-            }
-
-            item {
-                HealthButton(
-                    onClick = viewModel::save,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                ) { Text("저장") }
-            }
-
-            item {
-                TextButton(
-                    onClick = { showDiscardDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("이 기록 삭제", color = MaterialTheme.colorScheme.error)
-                }
             }
         }
     }

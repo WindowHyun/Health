@@ -24,6 +24,7 @@ import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.repository.StepCounter
 import com.windowhyun.health.ui.history.HistoryViewModel
 import com.windowhyun.health.ui.navigation.Routes
+import com.windowhyun.health.ui.session.WorkoutSessionEvent
 import com.windowhyun.health.ui.session.WorkoutSessionViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -288,6 +290,56 @@ class ReliabilityFixesTest {
         tracker.tick()
         assertThat(tracker.state.value.signalLost).isFalse()
         tracker.discard()
+    }
+
+    // ----- 운동 종료 -----
+
+    /**
+     * 실수로 루틴을 눌렀다가 나오면 완료한 세트가 없다. 그대로 종료하면 0세트짜리 운동이
+     * 기록 · 캘린더 · 주간 횟수에 잡히므로 버려야 한다.
+     */
+    @Test
+    fun `finishing without a completed set discards the workout`() = runTest(dispatcher) {
+        val squat = exercises.addExercise(
+            Exercise(id = 0, name = "스쿼트", category = ExerciseCategory.BARBELL, bodyPart = BodyPart.LEG),
+        )
+        val workoutId = workouts.startWorkout(null)
+        workouts.addExerciseToWorkout(workoutId, squat)
+
+        withSession { viewModel ->
+            val events = mutableListOf<WorkoutSessionEvent>()
+            val collecting = launch { viewModel.events.collect { events += it } }
+            settle()
+            viewModel.finishWorkout()
+            settle()
+            collecting.cancel()
+
+            assertThat(events).containsExactly(WorkoutSessionEvent.Discarded)
+            assertThat(db.workoutDao().getWorkout(workoutId)).isNull()
+        }
+    }
+
+    /** 세트를 하나라도 끝냈으면 전처럼 기록으로 남는다. */
+    @Test
+    fun `finishing with a completed set keeps the workout`() = runTest(dispatcher) {
+        val squat = exercises.addExercise(
+            Exercise(id = 0, name = "스쿼트", category = ExerciseCategory.BARBELL, bodyPart = BodyPart.LEG),
+        )
+        val workoutId = workouts.startWorkout(null)
+        val weId = workouts.addExerciseToWorkout(workoutId, squat)
+        workouts.setCompleted(db.workoutDao().getSets(weId).first().id, 100.0, 5, true)
+
+        withSession { viewModel ->
+            val events = mutableListOf<WorkoutSessionEvent>()
+            val collecting = launch { viewModel.events.collect { events += it } }
+            settle()
+            viewModel.finishWorkout()
+            settle()
+            collecting.cancel()
+
+            assertThat(events).containsExactly(WorkoutSessionEvent.Finished(workoutId))
+            assertThat(db.workoutDao().getWorkout(workoutId)!!.endTime).isNotNull()
+        }
     }
 
     // ----- 기록 목록 -----

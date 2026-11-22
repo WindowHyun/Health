@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
@@ -48,6 +49,11 @@ fun ExercisePickerSheet(
     onDismiss: () -> Unit,
     /** 있으면, 직접 만든 종목 옆에 "수정" 버튼이 생겨 고치거나 지울 수 있다. */
     manager: ExerciseManager? = null,
+    /**
+     * 이미 담긴 종목과 담은 횟수. 고르면 시트가 닫히지 않으므로, 무엇을 담았는지 목록에서 보여 준다.
+     * 여러 종목을 한 번에 담을 수 있어 운동 시작이나 루틴 만들기가 빨라진다.
+     */
+    addedCounts: Map<Long, Int> = emptyMap(),
 ) {
     var editing by remember { mutableStateOf<Exercise?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -72,7 +78,22 @@ fun ExercisePickerSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("운동 추가", style = MaterialTheme.typography.headlineSmall)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("운동 추가", style = MaterialTheme.typography.headlineSmall)
+                    if (addedCounts.isNotEmpty()) {
+                        Text(
+                            text = "${addedCounts.values.sum()}개 담음 · 계속 골라서 더 담을 수 있어요",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text("완료") }
+            }
 
             OutlinedTextField(
                 value = query,
@@ -178,6 +199,16 @@ fun ExercisePickerSheet(
                                 text = "${exercise.bodyPart.label} · ${exercise.category.label}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        val added = addedCounts[exercise.id] ?: 0
+                        if (added > 0) {
+                            Text(
+                                text = if (added == 1) "담음" else "담음 ×$added",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp),
                             )
                         }
                         if (manager != null && !exercise.isBuiltIn) {

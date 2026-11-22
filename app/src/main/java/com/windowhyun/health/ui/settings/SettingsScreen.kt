@@ -110,6 +110,15 @@ fun SettingsScreen(
                 )
             }
 
+            item {
+                SwitchRow(
+                    title = "운동 중 화면 켜 두기",
+                    subtitle = "헬스 운동 화면을 보고 있는 동안 화면이 꺼지지 않습니다. 러닝 중에는 항상 켜 둡니다.",
+                    checked = settings.keepScreenOnDuringWorkout,
+                    onCheckedChange = viewModel::setKeepScreenOn,
+                )
+            }
+
             item { SettingSectionTitle("단위") }
 
             item {

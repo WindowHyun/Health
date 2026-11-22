@@ -8,6 +8,7 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Point
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -83,6 +84,10 @@ fun RunRouteMap(
     // 타일을 아직 못 받았을 때 배경. osmdroid 기본값은 분홍빛 격자라 "고장난 화면"처럼 보이므로 지도 바탕색으로 바꾼다(이 색도 아래 색 변환을 거친다).
     val emptyTileColor = RouteMapStyle.TILE_PLACEHOLDER
 
+    // update 는 이 화면이 다시 그려질 때마다 불린다(기록 중에는 1초마다). 그릴 내용이 그대로면 선을 다시 만들 것도 지도를 다시 맞출 것도 없다.
+    // 매번 하면 점이 늘수록 무거워지고, 손으로 옮기거나 확대한 지도가 1초 만에 되돌아간다.
+    val renderState = remember { RouteRenderState() }
+
     val mapView = remember {
         initOsmdroid(context)
         (if (tileProvider != null) MapView(context, tileProvider) else MapView(context)).apply {
@@ -91,6 +96,11 @@ fun RunRouteMap(
             setUseDataConnection(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             isTilesScaledToDpi = true
+            // 터치는 "방금 손으로 지도를 옮겼다"는 것만 적고 지도에 그대로 넘긴다.
+            setOnTouchListener { _, _ ->
+                renderState.lastTouchAt = SystemClock.elapsedRealtime()
+                false
+            }
         }
     }
 
@@ -109,7 +119,11 @@ fun RunRouteMap(
         AndroidView(
             factory = { mapView },
             modifier = Modifier.fillMaxSize(),
-            update = { view ->
+            update = update@{ view ->
+                val key = RouteRenderKey(route.size, route.lastOrNull(), followLatest, darkMap, course)
+                if (key == renderState.key) return@update
+                renderState.key = key
+
                 view.overlayManager.tilesOverlay.apply {
                     setLoadingBackgroundColor(emptyTileColor)
                     setLoadingLineColor(emptyTileColor)
@@ -149,9 +163,16 @@ fun RunRouteMap(
                     route.isEmpty() -> Unit
 
                     followLatest -> {
-                        val last = route.last()
-                        view.controller.setZoom(RUNNING_ZOOM)
-                        view.controller.setCenter(GeoPoint(last.latitude, last.longitude))
+                        // 배율은 처음 한 번만 맞춘다. 그 뒤로는 손으로 바꾼 배율을 그대로 둔다.
+                        if (!renderState.zoomApplied) {
+                            view.controller.setZoom(RUNNING_ZOOM)
+                            renderState.zoomApplied = true
+                        }
+                        // 방금 지도를 만졌으면 그 자리를 보게 둔다. 손을 뗀 지 조금 지나면 다시 따라간다.
+                        if (!renderState.touchedRecently()) {
+                            val last = route.last()
+                            view.controller.setCenter(GeoPoint(last.latitude, last.longitude))
+                        }
                     }
 
                     route.size == 1 -> {
@@ -261,6 +282,31 @@ private class PaceRouteOverlay(
         const val OUTLINE_WIDTH_DP = 9f
     }
 }
+
+/** 지도를 다시 그려야 하는지 가리는 값. 이것이 그대로면 update 에서 아무것도 하지 않는다. */
+private data class RouteRenderKey(
+    val routeSize: Int,
+    val lastPoint: RunPoint?,
+    val followLatest: Boolean,
+    val darkMap: Boolean,
+    val course: com.windowhyun.health.domain.model.Course?,
+)
+
+private class RouteRenderState {
+    var key: RouteRenderKey? = null
+    var zoomApplied = false
+
+    /** 마지막으로 지도를 만진 시각(기기가 켜진 뒤 흐른 밀리초). 만진 적이 없으면 null. */
+    var lastTouchAt: Long? = null
+
+    fun touchedRecently(): Boolean {
+        val touchedAt = lastTouchAt ?: return false
+        return SystemClock.elapsedRealtime() - touchedAt < FOLLOW_RESUME_MILLIS
+    }
+}
+
+/** 지도를 만진 뒤 이 시간이 지나면 다시 마지막 위치를 따라간다. */
+private const val FOLLOW_RESUME_MILLIS = 10_000L
 
 /**
  * 시작/끝 점. 끝(기록 중에는 지금 위치)에는 은은한 둥근 빛을 둘러 눈에 띄게 한다.

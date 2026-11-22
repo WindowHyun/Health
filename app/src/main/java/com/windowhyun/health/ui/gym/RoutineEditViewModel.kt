@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
 import com.windowhyun.health.core.model.ExerciseTrackingType
+import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Exercise
 import com.windowhyun.health.domain.model.ExerciseDeleteResult
 import com.windowhyun.health.domain.model.ExerciseEditResult
@@ -14,12 +15,14 @@ import com.windowhyun.health.domain.model.RoutineItem
 import com.windowhyun.health.domain.usecase.SupersetGroups
 import com.windowhyun.health.domain.repository.ExerciseRepository
 import com.windowhyun.health.domain.repository.RoutineRepository
+import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -33,8 +36,6 @@ data class RoutineEditUiState(
     val items: List<RoutineItem> = emptyList(),
     val saving: Boolean = false,
     val saved: Boolean = false,
-    /** 앱 설정의 기본 휴식. "앱 기본값 사용" 인 종목의 ± 가 이 값에서 출발한다. */
-    val defaultRestSeconds: Int = 60,
 ) {
     val isNew: Boolean get() = routineId == 0L
     val canSave: Boolean get() = name.isNotBlank() && items.isNotEmpty() && !saving && !saved
@@ -48,8 +49,8 @@ data class RoutineEditUiState(
 class RoutineEditViewModel @Inject constructor(
     private val routineRepository: RoutineRepository,
     private val exerciseRepository: ExerciseRepository,
+    settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle,
-    settingsRepository: com.windowhyun.health.domain.repository.SettingsRepository? = null,
 ) : ViewModel() {
 
     private val routineId: Long = savedStateHandle[Routes.ARG_ROUTINE_ID] ?: 0L
@@ -57,13 +58,19 @@ class RoutineEditViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(RoutineEditUiState(routineId = routineId))
     val uiState: StateFlow<RoutineEditUiState> = _uiState.asStateFlow()
 
-    init {
-        // 설정의 기본 휴식을 따라간다(설정을 바꾸면 곧바로 반영).
-        settingsRepository?.let { repo ->
-            viewModelScope.launch {
-                repo.settings.collect { s -> _uiState.update { it.copy(defaultRestSeconds = s.defaultRestSeconds) } }
-            }
-        }
+    /** 화면을 연 시점(수정이면 불러온 직후)의 내용. 이것과 달라졌는지로 "저장 안 한 변경"을 가린다. */
+    private var baseline = RoutineEditUiState(routineId = routineId)
+
+    /**
+     * 저장하지 않은 변경이 있는가. 있으면 화면을 나가기 전에 한 번 확인한다.
+     * 저장이 끝났거나 진행 중이면 잃을 것이 없으므로 false.
+     */
+    fun hasUnsavedChanges(): Boolean {
+        val state = _uiState.value
+        if (state.saved || state.saving) return false
+        return state.name != baseline.name ||
+            state.scheduledDays != baseline.scheduledDays ||
+            state.items != baseline.items
     }
 
     private val baseExerciseManager = RepositoryExerciseManager(exerciseRepository)
@@ -106,6 +113,14 @@ class RoutineEditViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 설정의 기본 휴식시간. 종목에 따로 정한 휴식이 없으면 이 값으로 쉰다.
+     * 휴식 +/- 는 이 값에서 출발해야 한다(예전에는 60초로 고정이라, 기본이 120초인 사람이 +를 누르면 75초가 됐다).
+     */
+    val defaultRestSeconds: StateFlow<Int> = settingsRepository.settings
+        .map { it.defaultRestSeconds }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings().defaultRestSeconds)
+
     /** 운동 선택 시트에서 쓰는 전체 종목 목록. */
     val exercises: StateFlow<List<Exercise>> = exerciseRepository.observeExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -121,6 +136,7 @@ class RoutineEditViewModel @Inject constructor(
                             items = routine.items,
                         )
                     }
+                    baseline = _uiState.value
                 }
             }
         }

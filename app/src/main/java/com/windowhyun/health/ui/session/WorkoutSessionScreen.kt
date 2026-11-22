@@ -51,10 +51,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.windowhyun.health.core.model.ExerciseTrackingType
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatDuration
 import com.windowhyun.health.core.util.formatVolume
 import com.windowhyun.health.core.util.formatWeight
+import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.model.WorkoutExerciseRecord
 import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.domain.usecase.SupersetGroups
@@ -62,6 +64,7 @@ import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.components.Hairline
 import com.windowhyun.health.ui.components.HealthOutlinedButton
 import com.windowhyun.health.ui.components.MetricValue
+import com.windowhyun.health.ui.components.imeAboveNavigationBar
 import com.windowhyun.health.ui.gym.ExercisePickerSheet
 import kotlinx.coroutines.flow.collectLatest
 
@@ -195,7 +198,8 @@ fun WorkoutSessionScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imeAboveNavigationBar(),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         ) {
             item {
@@ -264,16 +268,15 @@ fun WorkoutSessionScreen(
     if (showPicker) {
         ExercisePickerSheet(
             exercises = exercises,
-            onPick = {
-                viewModel.addExercise(it.id)
-                showPicker = false
-            },
+            // 고른 뒤에도 시트를 닫지 않는다. 여러 종목을 연달아 담을 수 있다(완료 버튼으로 닫는다).
+            onPick = { viewModel.addExercise(it.id) },
             onCreate = { name, category, bodyPart, trackingType ->
                 viewModel.createAndAddExercise(name, category, bodyPart, trackingType)
                 showPicker = false
             },
             onDismiss = { showPicker = false },
             manager = viewModel.exerciseManager,
+            addedCounts = workout?.exercises.orEmpty().groupingBy { it.exercise.id }.eachCount(),
         )
     }
 
@@ -429,7 +432,11 @@ private fun ExerciseBlock(
             TextButton(onClick = onUnlinkSuperset) { Text("슈퍼셋에서 빼기") }
         }
 
-        LastPerformanceBlock(lastSets = lastSets, weightUnit = weightUnit)
+        LastPerformanceBlock(
+            lastSets = lastSets,
+            trackingType = record.exercise.trackingType,
+            weightUnit = weightUnit,
+        )
 
         if (showSetTypeHint) {
             Text(
@@ -476,14 +483,13 @@ private fun ExerciseBlock(
 }
 
 @Composable
-private fun LastPerformanceBlock(lastSets: List<WorkoutSet>, weightUnit: WeightUnit) {
-    val text = if (lastSets.isEmpty()) {
-        "지난 기록 없음 — 첫 기록을 만들어 보세요."
-    } else {
-        "지난 운동  " + lastSets.joinToString(" · ") { "${formatWeight(it.weightKg, weightUnit)}×${it.reps}" }
-    }
+private fun LastPerformanceBlock(
+    lastSets: List<WorkoutSet>,
+    trackingType: ExerciseTrackingType,
+    weightUnit: WeightUnit,
+) {
     Text(
-        text = text,
+        text = lastPerformanceText(lastSets, trackingType, weightUnit),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 6.dp),
@@ -500,3 +506,23 @@ internal fun activeExerciseId(records: List<WorkoutExerciseRecord>): Long? =
  */
 internal fun shouldScrollToActive(previous: Long?, current: Long?): Boolean =
     previous != null && current != null && previous != current
+/**
+ * "지난 운동" 한 줄. 종목의 기록 방식대로 적는다.
+ *
+ * 시간이나 횟수만 재는 종목은 중량·횟수가 0 으로 저장된다. 전부 "중량×횟수"로 쓰면
+ * 플랭크가 "0kg×0", 풀업이 "0kg×12" 로 나온다.
+ */
+internal fun lastPerformanceText(
+    lastSets: List<WorkoutSet>,
+    trackingType: ExerciseTrackingType,
+    weightUnit: WeightUnit,
+): String {
+    if (lastSets.isEmpty()) return "지난 기록 없음 — 첫 기록을 만들어 보세요."
+    return "지난 운동  " + lastSets.joinToString(" · ") { set ->
+        when (trackingType) {
+            ExerciseTrackingType.WEIGHT_REPS -> "${formatWeight(set.weightKg, weightUnit)}×${set.reps}"
+            ExerciseTrackingType.REPS_ONLY -> "${set.reps}회"
+            ExerciseTrackingType.TIME -> formatDuration(set.durationSeconds.toLong())
+        }
+    }
+}

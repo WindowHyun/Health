@@ -41,7 +41,8 @@ fun HealthNavHost(
             HomeScreen(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onStartWorkout = { workoutId ->
-                    navController.navigate(Routes.workoutSession(workoutId))
+                    // 시작 버튼을 빠르게 두 번 눌러도 운동 화면이 두 겹으로 쌓이지 않게 한다.
+                    navController.navigate(Routes.workoutSession(workoutId)) { launchSingleTop = true }
                 },
                 onOpenGym = { navController.navigate(Routes.GYM) },
                 onOpenRunning = { navController.navigate(Routes.RUNNING) },
@@ -55,7 +56,9 @@ fun HealthNavHost(
             RoutineListScreen(
                 onCreateRoutine = { navController.navigate(Routes.routineEdit()) },
                 onEditRoutine = { routineId -> navController.navigate(Routes.routineEdit(routineId)) },
-                onStartWorkout = { workoutId -> navController.navigate(Routes.workoutSession(workoutId)) },
+                onStartWorkout = { workoutId ->
+                    navController.navigate(Routes.workoutSession(workoutId)) { launchSingleTop = true }
+                },
             )
         }
 

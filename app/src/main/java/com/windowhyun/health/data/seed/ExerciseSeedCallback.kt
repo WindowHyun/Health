@@ -4,6 +4,21 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
+ * 빠진 기본 종목을 채우는 일. DB 를 열 때와 백업을 복원한 직후에 같은 것을 쓴다.
+ *
+ * 복원은 종목 표를 백업 내용으로 통째로 바꾸는데, [ExerciseSeedCallback] 은 DB 를 열 때만 돈다.
+ * 옛 버전에서 만든 백업을 복원하면 그 뒤에 추가된 기본 종목이 앱을 다시 켤 때까지 빠져 있게 된다.
+ */
+fun interface BuiltInExerciseSeeder {
+    fun seed(db: SupportSQLiteDatabase)
+
+    companion object {
+        /** 아무것도 채우지 않는다. 기본 종목 없이 DB 를 만드는 테스트에서 쓴다. */
+        val None = BuiltInExerciseSeeder { }
+    }
+}
+
+/**
  * DB 를 열 때마다 기본 운동 종목 중 **빠진 것만** 채운다.
  *
  * 처음 만들 때는 전부 들어가고, 앱을 업데이트해 [DefaultExercises] 가 늘면 이미 쓰던 기기에도

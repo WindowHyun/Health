@@ -123,7 +123,8 @@ fun HomeScreen(
                 item {
                     Spacer(Modifier.height(32.dp))
                     StatusStrip(
-                        label = "진행 중인 운동",
+                        // 어제 시작한 채 끝내지 않은 운동이면 알려 준다(끝내기를 잊은 경우가 많다).
+                        label = if (activeWorkout.date != state.today) "끝내지 않은 지난 운동" else "진행 중인 운동",
                         title = activeWorkout.displayName,
                         action = "이어하기",
                         onClick = { viewModel.startWorkout(null) },

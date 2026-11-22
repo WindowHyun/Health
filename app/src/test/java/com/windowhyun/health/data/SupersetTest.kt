@@ -283,6 +283,7 @@ class SupersetTest {
     private fun routineEditor() = RoutineEditViewModel(
         routineRepository = routines,
         exerciseRepository = exercises,
+        settingsRepository = settings,
         savedStateHandle = SavedStateHandle(),
     )
 
