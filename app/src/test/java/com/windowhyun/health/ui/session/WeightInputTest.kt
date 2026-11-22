@@ -45,4 +45,23 @@ class WeightInputTest {
         assertThat(shown(0.0, WeightUnit.KG)).isEqualTo("0")
         assertThat(weightKgOf("0", storedKg = 0.0, unit = WeightUnit.KG)).isEqualTo(0.0)
     }
+
+    @Test
+    fun `typed weight keeps digits and a single decimal point`() {
+        assertThat(sanitizeWeightInput("62.5")).isEqualTo("62.5")
+        assertThat(sanitizeWeightInput("1.2.3")).isEqualTo("1.23")
+        assertThat(sanitizeWeightInput("abc12-3")).isEqualTo("123")
+        assertThat(sanitizeWeightInput("")).isEqualTo("")
+    }
+
+    @Test
+    fun `a comma from the keyboard is read as the decimal point`() {
+        assertThat(sanitizeWeightInput("62,5")).isEqualTo("62.5")
+        assertThat(weightKgOf(sanitizeWeightInput("62,5"), storedKg = 0.0, unit = WeightUnit.KG)).isEqualTo(62.5)
+    }
+
+    @Test
+    fun `a double decimal point no longer turns the weight into zero`() {
+        assertThat(weightKgOf(sanitizeWeightInput("1.2.3"), storedKg = 0.0, unit = WeightUnit.KG)).isEqualTo(1.23)
+    }
 }

@@ -46,6 +46,7 @@ import com.windowhyun.health.domain.model.Workout
 import com.windowhyun.health.domain.model.WorkoutExerciseRecord
 import com.windowhyun.health.domain.model.WorkoutSet
 import com.windowhyun.health.domain.usecase.SupersetGroups
+import com.windowhyun.health.ui.components.AskNotificationPermissionOnce
 import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.components.Hairline
 import com.windowhyun.health.ui.components.HealthOutlinedButton
@@ -78,6 +79,9 @@ fun WorkoutSessionScreen(
     var showPicker by remember { mutableStateOf(false) }
     // 완료한 세트가 있는 운동을 빼려 할 때만 묻는다(빈 운동은 바로 뺀다).
     var exerciseToRemove by remember { mutableStateOf<WorkoutExerciseRecord?>(null) }
+
+    // 휴식 타이머 알림을 받으려면 알림 권한이 필요하다. 처음 한 번만 묻는다.
+    AskNotificationPermissionOnce()
 
     // 세트 사이에 쉬는 동안 화면이 꺼지지 않게 한다. 설정에서 끌 수 있다.
     val view = LocalView.current
@@ -211,16 +215,15 @@ fun WorkoutSessionScreen(
     if (showPicker) {
         ExercisePickerSheet(
             exercises = exercises,
-            onPick = {
-                viewModel.addExercise(it.id)
-                showPicker = false
-            },
+            // 고른 뒤에도 시트를 닫지 않는다. 여러 종목을 연달아 담을 수 있다(완료 버튼으로 닫는다).
+            onPick = { viewModel.addExercise(it.id) },
             onCreate = { name, category, bodyPart, trackingType ->
                 viewModel.createAndAddExercise(name, category, bodyPart, trackingType)
                 showPicker = false
             },
             onDismiss = { showPicker = false },
             manager = viewModel.exerciseManager,
+            addedCounts = workout?.exercises.orEmpty().groupingBy { it.exercise.id }.eachCount(),
         )
     }
 

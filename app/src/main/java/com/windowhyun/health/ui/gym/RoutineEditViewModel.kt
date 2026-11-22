@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
 import com.windowhyun.health.core.model.ExerciseTrackingType
+import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Exercise
 import com.windowhyun.health.domain.model.ExerciseDeleteResult
 import com.windowhyun.health.domain.model.ExerciseEditResult
@@ -14,12 +15,14 @@ import com.windowhyun.health.domain.model.RoutineItem
 import com.windowhyun.health.domain.usecase.SupersetGroups
 import com.windowhyun.health.domain.repository.ExerciseRepository
 import com.windowhyun.health.domain.repository.RoutineRepository
+import com.windowhyun.health.domain.repository.SettingsRepository
 import com.windowhyun.health.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -46,6 +49,7 @@ data class RoutineEditUiState(
 class RoutineEditViewModel @Inject constructor(
     private val routineRepository: RoutineRepository,
     private val exerciseRepository: ExerciseRepository,
+    settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -108,6 +112,14 @@ class RoutineEditViewModel @Inject constructor(
             return result
         }
     }
+
+    /**
+     * 설정의 기본 휴식시간. 종목에 따로 정한 휴식이 없으면 이 값으로 쉰다.
+     * 휴식 +/- 는 이 값에서 출발해야 한다(예전에는 60초로 고정이라, 기본이 120초인 사람이 +를 누르면 75초가 됐다).
+     */
+    val defaultRestSeconds: StateFlow<Int> = settingsRepository.settings
+        .map { it.defaultRestSeconds }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings().defaultRestSeconds)
 
     /** 운동 선택 시트에서 쓰는 전체 종목 목록. */
     val exercises: StateFlow<List<Exercise>> = exerciseRepository.observeExercises()

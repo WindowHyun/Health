@@ -15,6 +15,7 @@ import com.windowhyun.health.core.designsystem.theme.HealthTheme
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
 import com.windowhyun.health.core.model.WeightUnit
+import com.windowhyun.health.data.FakeSettingsRepository
 import com.windowhyun.health.data.local.HealthDatabase
 import com.windowhyun.health.data.repository.ExerciseRepositoryImpl
 import com.windowhyun.health.data.repository.RoutineRepositoryImpl
@@ -169,6 +170,7 @@ class DataLossGuardsTest {
     private fun editor(routineId: Long = 0) = RoutineEditViewModel(
         routineRepository = routines,
         exerciseRepository = exercises,
+        settingsRepository = FakeSettingsRepository(),
         savedStateHandle = SavedStateHandle(mapOf(Routes.ARG_ROUTINE_ID to routineId)),
     )
 

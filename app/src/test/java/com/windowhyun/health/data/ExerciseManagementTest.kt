@@ -180,7 +180,7 @@ class ExerciseManagementTest {
     // ----- 루틴 편집 중에 종목을 지우거나 고치면 목록에도 반영 -----
 
     private fun routineEditViewModel() = RoutineEditViewModel(
-        routines, exercises, SavedStateHandle(mapOf(Routes.ARG_ROUTINE_ID to 0L)),
+        routines, exercises, FakeSettingsRepository(), SavedStateHandle(mapOf(Routes.ARG_ROUTINE_ID to 0L)),
     )
 
     /** 지운 종목이 편집 중인 목록에 남으면 저장할 때 앱이 죽는다. */

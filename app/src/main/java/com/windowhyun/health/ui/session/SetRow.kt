@@ -31,6 +31,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -114,11 +116,12 @@ fun SetRow(
                 NumberField(
                     value = weightText,
                     onValueChange = {
-                        weightText = it.filter { ch -> ch.isDigit() || ch == '.' }
+                        weightText = sanitizeWeightInput(it)
                         onValuesChange(weightKg(), reps(), duration())
                     },
                     suffix = weightUnit.label,
                     label = "${set.setNumber}세트 중량",
+                    keyboardType = KeyboardType.Decimal,
                     modifier = Modifier.weight(1f),
                 )
                 NumberField(
@@ -266,11 +269,13 @@ private fun NumberField(
     suffix: String,
     label: String,
     modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Number,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier,
+        // 라벨 글자는 보이지 않게 두지만(칸이 좁다) 화면 읽기 도구에는 "3세트 중량"처럼 알려 준다.
+        modifier = modifier.semantics { contentDescription = label },
         singleLine = true,
         label = null,
         // 입력한 값이 이 화면의 핵심이라 크고 굵은 숫자로, 폭을 맞춰 자리가 흔들리지 않게 한다.
@@ -280,7 +285,7 @@ private fun NumberField(
             textAlign = TextAlign.Center,
         ),
         suffix = { Text(suffix, style = MaterialTheme.typography.labelMedium) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         colors = OutlinedTextFieldDefaults.colors(
             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
             focusedBorderColor = MaterialTheme.colorScheme.onSurface,
@@ -300,6 +305,27 @@ private fun NumberField(
 internal fun weightKgOf(text: String, storedKg: Double, unit: WeightUnit): Double {
     if (text == formatWeightValue(unit.fromKg(storedKg))) return storedKg
     return text.toDoubleOrNull()?.let { unit.toKg(it) } ?: 0.0
+}
+
+/**
+ * 중량 입력칸에 들어온 글자를 정리한다. 숫자와 소수점 하나만 남긴다.
+ *
+ * 소수점을 두 번 치면(`1.2.3`) 읽을 수 없는 값이라 저장할 때 조용히 0kg 이 된다. 처음 하나만 남겨서
+ * 그런 일이 없게 한다. 키보드에 따라 소수점이 쉼표로 나오기도 해서 쉼표도 소수점으로 본다.
+ */
+internal fun sanitizeWeightInput(raw: String): String {
+    val out = StringBuilder()
+    var hasDot = false
+    for (ch in raw) {
+        when {
+            ch.isDigit() -> out.append(ch)
+            (ch == '.' || ch == ',') && !hasDot -> {
+                out.append('.')
+                hasDot = true
+            }
+        }
+    }
+    return out.toString()
 }
 
 /**

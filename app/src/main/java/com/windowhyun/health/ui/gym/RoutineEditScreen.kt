@@ -61,6 +61,7 @@ fun RoutineEditScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val exercises by viewModel.exercises.collectAsStateWithLifecycle()
+    val defaultRestSeconds by viewModel.defaultRestSeconds.collectAsStateWithLifecycle()
     var showPicker by remember { mutableStateOf(false) }
     var showLeaveDialog by remember { mutableStateOf(false) }
 
@@ -160,6 +161,7 @@ fun RoutineEditScreen(
                 RoutineItemCard(
                     index = index,
                     item = item,
+                    defaultRestSeconds = defaultRestSeconds,
                     supersetLabel = SupersetGroups.label(state.items.map { it.supersetGroup }, index),
                     canLinkWithPrevious = index > 0 &&
                         !SupersetGroups.isLinkedWithPrevious(state.items.map { it.supersetGroup }, index),
@@ -190,16 +192,15 @@ fun RoutineEditScreen(
     if (showPicker) {
         ExercisePickerSheet(
             exercises = exercises,
-            onPick = {
-                viewModel.addExercise(it)
-                showPicker = false
-            },
+            // 고른 뒤에도 시트를 닫지 않는다. 여러 종목을 연달아 담을 수 있다(완료 버튼으로 닫는다).
+            onPick = { viewModel.addExercise(it) },
             onCreate = { name, category, bodyPart, trackingType ->
                 viewModel.createAndAddExercise(name, category, bodyPart, trackingType)
                 showPicker = false
             },
             onDismiss = { showPicker = false },
             manager = viewModel.exerciseManager,
+            addedCounts = state.items.groupingBy { it.exercise.id }.eachCount(),
         )
     }
 
@@ -222,6 +223,7 @@ fun RoutineEditScreen(
 private fun RoutineItemCard(
     index: Int,
     item: RoutineItem,
+    defaultRestSeconds: Int,
     supersetLabel: String?,
     canLinkWithPrevious: Boolean,
     onLinkSuperset: () -> Unit,
@@ -309,16 +311,16 @@ private fun RoutineItemCard(
                 Column {
                     Text("휴식시간", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        text = item.restSeconds?.let { "${it}초" } ?: "앱 기본값 사용",
+                        text = item.restSeconds?.let { "${it}초" } ?: "앱 기본값 사용 (${defaultRestSeconds}초)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { onRestChange((item.restSeconds ?: 60) - 15) }) {
+                    IconButton(onClick = { onRestChange((item.restSeconds ?: defaultRestSeconds) - 15) }) {
                         Icon(Icons.Filled.Remove, contentDescription = "휴식 줄이기")
                     }
-                    IconButton(onClick = { onRestChange((item.restSeconds ?: 60) + 15) }) {
+                    IconButton(onClick = { onRestChange((item.restSeconds ?: defaultRestSeconds) + 15) }) {
                         Icon(Icons.Filled.Add, contentDescription = "휴식 늘리기")
                     }
                     if (item.restSeconds != null) {
