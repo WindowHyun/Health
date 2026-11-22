@@ -31,6 +31,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -41,6 +43,7 @@ import com.windowhyun.health.core.model.SetType
 import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.core.util.formatWeightValue
 import com.windowhyun.health.domain.model.WorkoutSet
+import com.windowhyun.health.ui.components.ConfirmDialog
 
 /**
  * 세트 한 줄. 중량/횟수 입력과 완료 버튼을 한 손으로 누를 수 있게 크게 배치한다.
@@ -81,6 +84,9 @@ fun SetRow(
     fun reps() = repsText.toIntOrNull() ?: 0
     fun duration() = durationSecondsOf(minutesText, secondsText)
 
+    // 끝낸 세트를 지우면 기록이 사라진다. 완료 버튼 바로 옆이라 잘못 누르기 쉬워 한 번 묻는다.
+    var confirmRemove by remember(set.id) { mutableStateOf(false) }
+
     val isWarmup = set.setType == SetType.WARMUP
     // 끝낸 세트는 라임을 옅게 깐다. 한눈에 "어디까지 했는지"가 보이되 입력칸 글자는 그대로 읽힌다.
     val background = when {
@@ -110,11 +116,12 @@ fun SetRow(
                 NumberField(
                     value = weightText,
                     onValueChange = {
-                        weightText = it.filter { ch -> ch.isDigit() || ch == '.' }
+                        weightText = sanitizeWeightInput(it)
                         onValuesChange(weightKg(), reps(), duration())
                     },
                     suffix = weightUnit.label,
                     label = "${set.setNumber}세트 중량",
+                    keyboardType = KeyboardType.Decimal,
                     modifier = Modifier.weight(1f),
                 )
                 NumberField(
@@ -172,13 +179,29 @@ fun SetRow(
             )
         }
 
-        IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+        IconButton(
+            onClick = { if (set.completed) confirmRemove = true else onRemove() },
+            modifier = Modifier.size(36.dp),
+        ) {
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = "세트 삭제",
                 tint = MaterialTheme.colorScheme.outline,
             )
         }
+    }
+
+    if (confirmRemove) {
+        ConfirmDialog(
+            title = "세트를 삭제할까요?",
+            message = "${set.setNumber}번 세트의 기록이 사라지고 되돌릴 수 없습니다.",
+            confirmLabel = "삭제",
+            onConfirm = {
+                confirmRemove = false
+                onRemove()
+            },
+            onDismiss = { confirmRemove = false },
+        )
     }
 }
 
@@ -225,9 +248,13 @@ private fun SetNumberChip(set: WorkoutSet, onCycleSetType: (() -> Unit)?) {
         .size(30.dp)
         .then(if (special) Modifier.border(1.dp, ink, MaterialTheme.shapes.extraSmall) else Modifier)
 
+    // W · D · F 한 글자만으로는 화면 읽기 도구가 무엇인지 알 수 없다. 번호와 종류, 누르면 바뀐다는 것을 말해 준다.
+    val description = "${set.setNumber}번 세트, ${set.setType.label}" +
+        if (onCycleSetType != null) ". 누르면 종류가 바뀝니다" else ""
     Box(
         modifier = Modifier
             .size(width = 40.dp, height = 48.dp)
+            .semantics { contentDescription = description }
             .then(
                 if (onCycleSetType != null) Modifier.clickable(role = Role.Button, onClick = onCycleSetType) else Modifier,
             ),
@@ -246,11 +273,13 @@ private fun NumberField(
     suffix: String,
     label: String,
     modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Number,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier,
+        // 라벨 글자는 보이지 않게 두지만(칸이 좁다) 화면 읽기 도구에는 "3세트 중량"처럼 알려 준다.
+        modifier = modifier.semantics { contentDescription = label },
         singleLine = true,
         label = null,
         // 입력한 값이 이 화면의 핵심이라 크고 굵은 숫자로, 폭을 맞춰 자리가 흔들리지 않게 한다.
@@ -260,7 +289,7 @@ private fun NumberField(
             textAlign = TextAlign.Center,
         ),
         suffix = { Text(suffix, style = MaterialTheme.typography.labelMedium) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         colors = OutlinedTextFieldDefaults.colors(
             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
             focusedBorderColor = MaterialTheme.colorScheme.onSurface,
@@ -280,6 +309,27 @@ private fun NumberField(
 internal fun weightKgOf(text: String, storedKg: Double, unit: WeightUnit): Double {
     if (text == formatWeightValue(unit.fromKg(storedKg))) return storedKg
     return text.toDoubleOrNull()?.let { unit.toKg(it) } ?: 0.0
+}
+
+/**
+ * 중량 입력칸에 들어온 글자를 정리한다. 숫자와 소수점 하나만 남긴다.
+ *
+ * 소수점을 두 번 치면(`1.2.3`) 읽을 수 없는 값이라 저장할 때 조용히 0kg 이 된다. 처음 하나만 남겨서
+ * 그런 일이 없게 한다. 키보드에 따라 소수점이 쉼표로 나오기도 해서 쉼표도 소수점으로 본다.
+ */
+internal fun sanitizeWeightInput(raw: String): String {
+    val out = StringBuilder()
+    var hasDot = false
+    for (ch in raw) {
+        when {
+            ch.isDigit() -> out.append(ch)
+            (ch == '.' || ch == ',') && !hasDot -> {
+                out.append('.')
+                hasDot = true
+            }
+        }
+    }
+    return out.toString()
 }
 
 /**
