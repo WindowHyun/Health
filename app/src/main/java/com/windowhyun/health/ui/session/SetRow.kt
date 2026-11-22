@@ -248,9 +248,13 @@ private fun SetNumberChip(set: WorkoutSet, onCycleSetType: (() -> Unit)?) {
         .size(30.dp)
         .then(if (special) Modifier.border(1.dp, ink, MaterialTheme.shapes.extraSmall) else Modifier)
 
+    // W · D · F 한 글자만으로는 화면 읽기 도구가 무엇인지 알 수 없다. 번호와 종류, 누르면 바뀐다는 것을 말해 준다.
+    val description = "${set.setNumber}번 세트, ${set.setType.label}" +
+        if (onCycleSetType != null) ". 누르면 종류가 바뀝니다" else ""
     Box(
         modifier = Modifier
             .size(width = 40.dp, height = 48.dp)
+            .semantics { contentDescription = description }
             .then(
                 if (onCycleSetType != null) Modifier.clickable(role = Role.Button, onClick = onCycleSetType) else Modifier,
             ),

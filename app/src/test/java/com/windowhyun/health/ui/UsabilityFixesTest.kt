@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.SavedStateHandle
@@ -13,12 +14,16 @@ import com.google.common.truth.Truth.assertThat
 import com.windowhyun.health.core.designsystem.theme.HealthTheme
 import com.windowhyun.health.core.model.BodyPart
 import com.windowhyun.health.core.model.ExerciseCategory
+import com.windowhyun.health.core.model.SetType
+import com.windowhyun.health.core.model.WeightUnit
 import com.windowhyun.health.data.FakeSettingsRepository
 import com.windowhyun.health.data.local.HealthDatabase
 import com.windowhyun.health.data.repository.ExerciseRepositoryImpl
 import com.windowhyun.health.data.repository.RoutineRepositoryImpl
 import com.windowhyun.health.domain.model.AppSettings
 import com.windowhyun.health.domain.model.Exercise
+import com.windowhyun.health.domain.model.WorkoutSet
+import com.windowhyun.health.ui.session.SetRow
 import com.windowhyun.health.ui.components.shouldAskNotificationPermission
 import com.windowhyun.health.ui.gym.ExercisePickerSheet
 import com.windowhyun.health.ui.gym.RoutineEditViewModel
@@ -149,5 +154,25 @@ class UsabilityFixesTest {
         compose.onNodeWithText("완료").performClick()
 
         assertThat(dismissed).isEqualTo(1)
+    }
+
+    // ----- 세트 번호 칩: 화면 읽기 도구 설명 -----
+
+    @Test
+    fun `set number chip describes the set and its type for screen readers`() {
+        compose.setContent {
+            HealthTheme {
+                SetRow(
+                    set = WorkoutSet(id = 1, setNumber = 3, weightKg = 60.0, reps = 8, completed = false, setType = SetType.WARMUP),
+                    weightUnit = WeightUnit.KG,
+                    onValuesChange = { _, _, _ -> },
+                    onToggleCompleted = { _, _, _ -> },
+                    onRemove = { },
+                    onCycleSetType = { },
+                )
+            }
+        }
+
+        compose.onNodeWithContentDescription("3번 세트, 워밍업. 누르면 종류가 바뀝니다").assertIsDisplayed()
     }
 }

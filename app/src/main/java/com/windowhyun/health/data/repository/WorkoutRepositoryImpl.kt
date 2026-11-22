@@ -13,6 +13,7 @@ import com.windowhyun.health.data.local.entity.PersonalRecordEntity
 import com.windowhyun.health.data.local.entity.WorkoutEntity
 import com.windowhyun.health.data.local.entity.WorkoutExerciseEntity
 import com.windowhyun.health.data.local.entity.WorkoutSetEntity
+import com.windowhyun.health.data.local.relation.WorkoutWithDetail
 import com.windowhyun.health.data.mapper.toDomain
 import com.windowhyun.health.domain.model.ExerciseHistorySummary
 import com.windowhyun.health.domain.model.ExerciseSession
@@ -386,13 +387,27 @@ class WorkoutRepositoryImpl @Inject constructor(
             )
         }
 
-        val end = System.currentTimeMillis()
+        val now = System.currentTimeMillis()
+        val end = endTimeOf(detail, now)
         val duration = ((end - workout.startTime) / 1000).coerceAtLeast(0)
         workoutDao.updateWorkout(
             detail.workout.copy(endTime = end, durationSeconds = duration),
         )
 
         return workout.toSummary(durationSeconds = duration, personalRecords = personalRecords)
+    }
+
+    /**
+     * 운동이 끝난 시각. 보통은 지금이다.
+     *
+     * 종료를 잊고 한참 뒤에 누르면 그 사이가 전부 운동 시간이 되어(다음 날 누르면 20시간) 주간 운동 시간이
+     * 부풀려지고, 지난 기록에서 고칠 방법도 없다. 마지막 세트를 끝낸 지 [IDLE_END_MILLIS] 넘게 지났으면
+     * 그 뒤는 운동이 아니었다고 보고 마지막 세트를 끝낸 시각을 종료로 한다.
+     */
+    private fun endTimeOf(detail: WorkoutWithDetail, now: Long): Long {
+        val lastDone = detail.exercises.flatMap { it.sets }.mapNotNull { it.completedAt }.maxOrNull()
+            ?: return now
+        return if (now - lastDone > IDLE_END_MILLIS) maxOf(lastDone, detail.workout.startTime) else now
     }
 
     private fun Workout.toSummary(durationSeconds: Long, personalRecords: List<PersonalRecord>) =
@@ -484,6 +499,9 @@ class WorkoutRepositoryImpl @Inject constructor(
         return PersonalRecordCalculator.currentRecords(exerciseId, exercise.name, bests, exercise.trackingType)
     }
 }
+
+/** 마지막 세트를 끝낸 뒤 이만큼 지나서 종료하면, 마지막 세트를 끝낸 시각까지만 운동으로 센다. */
+internal const val IDLE_END_MILLIS = 2 * 60 * 60 * 1000L
 
 /**
  * 종목의 기록 방식에서 쓰지 않는 칸을 0 으로 비운다.
