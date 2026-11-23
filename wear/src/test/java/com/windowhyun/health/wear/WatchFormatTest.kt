@@ -1,6 +1,7 @@
 package com.windowhyun.health.wear
 
 import com.google.common.truth.Truth.assertThat
+import com.windowhyun.health.shared.WatchCommand
 import org.junit.Test
 
 class WatchFormatTest {
@@ -67,5 +68,25 @@ class WatchFormatTest {
         assertThat(WatchFormat.setValue(base.copy(kind = com.windowhyun.health.shared.WatchSetKind.TIME)))
             .isEqualTo("0:45")
         assertThat(WatchFormat.setValue(base.copy(useLb = true))).isEqualTo("137.8lb × 8")
+    }
+
+    @Test
+    fun `short set values stay big and long ones shrink to fit one line`() {
+        assertThat(WatchFormat.setValueSp("0:45")).isEqualTo(28)
+        assertThat(WatchFormat.setValueSp("8회")).isEqualTo(28)
+        // 둥근 화면 가로 144dp 에 들어가도록 글자 수가 늘수록 작아진다.
+        val sizes = listOf("62.5kg × 8", "102.5kg × 12", "1002.5kg × 12").map { WatchFormat.setValueSp(it) }
+        assertThat(sizes).isInOrder(Comparator.reverseOrder<Int>())
+        assertThat(sizes.first()).isLessThan(28)
+        assertThat(sizes.last()).isAtLeast(14)
+        assertThat(WatchFormat.setValueSp("가".repeat(40))).isEqualTo(14) // 읽을 수 없을 만큼 줄이지는 않는다
+        assertThat(WatchFormat.setValueSp("")).isEqualTo(28)
+    }
+
+    @Test
+    fun `every rejected command has a short explanation`() {
+        WatchCommand.entries.forEach { assertThat(WatchFormat.rejection(it)).isNotEmpty() }
+        assertThat(WatchFormat.rejection(WatchCommand.RUN_START)).contains("직접 시작")
+        assertThat(WatchFormat.rejection(WatchCommand.SET_COMPLETE)).contains("완료")
     }
 }

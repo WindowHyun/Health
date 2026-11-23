@@ -56,4 +56,25 @@ internal object WatchFormat {
         com.windowhyun.health.shared.WatchSetKind.REPS_ONLY -> "${workout.reps}회"
         com.windowhyun.health.shared.WatchSetKind.TIME -> duration(workout.durationSeconds.toLong())
     }
+
+    /** 폰이 거절한 명령을 사용자에게 알리는 한 줄. 한 줄 안내에도 들어가게 짧게 쓴다. */
+    fun rejection(command: com.windowhyun.health.shared.WatchCommand): String = when (command) {
+        com.windowhyun.health.shared.WatchCommand.RUN_START -> "폰에서 시작할 수 없어요. 폰에서 직접 시작해 주세요."
+        com.windowhyun.health.shared.WatchCommand.SET_COMPLETE -> "폰에서 완료하지 못했어요"
+        else -> "폰에서 처리하지 못했어요"
+    }
+
+    /**
+     * 세트 값을 한 줄에 담을 글자 크기(sp). 둥근 192dp 화면에서 좌우 여백을 뺀 폭(약 144dp)에
+     * 글자 수만큼 들어가게 줄이되, 너무 작아져 읽기 어려워지지는 않게 14sp 아래로는 내리지 않는다.
+     */
+    fun setValueSp(text: String): Int {
+        val fitting = (AVAILABLE_WIDTH_DP / (DIGIT_WIDTH_EM * text.length.coerceAtLeast(1))).toInt()
+        return fitting.coerceIn(MIN_VALUE_SP, MAX_VALUE_SP)
+    }
+
+    private const val AVAILABLE_WIDTH_DP = 144.0
+    private const val DIGIT_WIDTH_EM = 0.6
+    private const val MIN_VALUE_SP = 14
+    private const val MAX_VALUE_SP = 28
 }

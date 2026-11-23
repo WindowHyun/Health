@@ -6,6 +6,7 @@ import com.windowhyun.health.domain.model.RunGoalType
 import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.domain.model.RunTrackingState
 import com.windowhyun.health.service.RunControl
+import com.windowhyun.health.shared.CommandAck
 import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
 import com.windowhyun.health.shared.WatchCommand
@@ -412,5 +413,27 @@ class WatchBridgeTest {
         WatchCommand.entries.filter { it.key.startsWith("rest") }.forEach {
             assertThat(handler.handle(it)).isFalse()
         }
+    }
+
+    @Test
+    fun `the watch is told whether the phone accepted the command`() {
+        val (running, control) = handler(RunStatus.TRACKING)
+        assertThat(running.handleForAck(WatchCommand.RUN_PAUSE)).isEqualTo(CommandAck(WatchCommand.RUN_PAUSE, true))
+        assertThat(control.calls).containsExactly("pause")
+
+        // 이미 끝난 러닝에 온 일시정지는 거절하고, 그 사실을 시계가 안다.
+        val (idle, _) = handler(RunStatus.IDLE)
+        assertThat(idle.handleForAck(WatchCommand.RUN_PAUSE)).isEqualTo(CommandAck(WatchCommand.RUN_PAUSE, false))
+        // 세트 번호가 없는 세트 완료도 거절이다.
+        assertThat(idle.handleForAck(WatchCommand.SET_COMPLETE, null).accepted).isFalse()
+    }
+
+    @Test
+    fun `a refused run start is reported back so the watch does not wait for a phone notification`() {
+        val refusing = WatchCommandHandler(FakeRunControl(), { RunStatus.IDLE }, WatchLink { 0 }, RunStarter { false })
+        val accepting = WatchCommandHandler(FakeRunControl(), { RunStatus.IDLE }, WatchLink { 0 }, RunStarter { true })
+
+        assertThat(refusing.handleForAck(WatchCommand.RUN_START).accepted).isFalse()
+        assertThat(accepting.handleForAck(WatchCommand.RUN_START).accepted).isTrue()
     }
 }

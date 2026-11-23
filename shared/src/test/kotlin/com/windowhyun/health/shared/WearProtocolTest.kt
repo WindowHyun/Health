@@ -266,4 +266,33 @@ class WearProtocolTest {
         assertThat(snapshot.isStale(1_000_000 + WearProtocol.STALE_MILLIS + 1)).isTrue()
         assertThat(WorkoutSnapshot.None.isStale(9_999_999_999)).isFalse()
     }
+
+    // ----- 명령 처리 결과 응답 -----
+
+    @Test
+    fun `an ack survives the trip as path and payload`() {
+        WatchCommand.entries.forEach { command ->
+            listOf(true, false).forEach { accepted ->
+                val ack = CommandAck(command, accepted)
+                assertThat(CommandAck.parse(ack.path, ack.payload)).isEqualTo(ack)
+            }
+        }
+    }
+
+    @Test
+    fun `an ack path is not a command path`() {
+        // 응답이 명령으로 읽혀 폰 · 시계가 서로 핑퐁하지 않게 경로가 달라야 한다.
+        WatchCommand.entries.forEach { command ->
+            assertThat(WatchCommand.fromPath(CommandAck(command, true).path)).isNull()
+        }
+    }
+
+    @Test
+    fun `garbage acks are ignored instead of throwing`() {
+        assertThat(CommandAck.parse("/health/cmd/run_pause", "1".toByteArray())).isNull()
+        assertThat(CommandAck.parse(WearProtocol.ACK_PREFIX + "no_such_command", "1".toByteArray())).isNull()
+        assertThat(CommandAck.parse(WearProtocol.ACK_PREFIX + "run_pause", null)).isNull()
+        assertThat(CommandAck.parse(WearProtocol.ACK_PREFIX + "run_pause", "maybe".toByteArray())).isNull()
+        assertThat(CommandAck.parse(WearProtocol.ACK_PREFIX + "run_pause", ByteArray(0))).isNull()
+    }
 }

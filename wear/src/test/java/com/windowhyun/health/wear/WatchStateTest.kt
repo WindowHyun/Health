@@ -3,6 +3,7 @@ package com.windowhyun.health.wear
 import com.google.common.truth.Truth.assertThat
 import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
+import com.windowhyun.health.shared.WatchCommand
 import com.windowhyun.health.shared.WatchRunStatus
 import com.windowhyun.health.shared.WorkoutSnapshot
 import org.junit.Test
@@ -101,5 +102,39 @@ class WatchStateTest {
         assertThat(WatchUiState(startRequestedAtMillis = asked, nowMillis = asked + 1_000).startPending).isTrue()
         assertThat(WatchUiState(startRequestedAtMillis = asked, nowMillis = asked + START_HINT_MILLIS - 1).startPending).isTrue()
         assertThat(WatchUiState(startRequestedAtMillis = asked, nowMillis = asked + START_HINT_MILLIS).startPending).isFalse()
+    }
+
+    // ----- 문제 안내 -----
+
+    @Test
+    fun `a send failure is shown only for a few seconds`() {
+        val failed = WatchUiState(sendFailed = true, sendFailedAtMillis = 10_000, nowMillis = 10_000)
+        assertThat(failed.problemText).isEqualTo("폰에 보내지 못했어요")
+
+        assertThat(failed.copy(nowMillis = 10_000 + SEND_FAILED_MILLIS - 1).problemText).isNotNull()
+        assertThat(failed.copy(nowMillis = 10_000 + SEND_FAILED_MILLIS).problemText).isNull()
+    }
+
+    @Test
+    fun `a failure with no time recorded stays visible`() {
+        assertThat(WatchUiState(sendFailed = true, nowMillis = 999_999).problemText).isEqualTo("폰에 보내지 못했어요")
+    }
+
+    @Test
+    fun `a refusal from the phone is explained and then forgotten`() {
+        val refused = WatchUiState(rejectedCommand = WatchCommand.SET_COMPLETE, rejectedAtMillis = 5_000, nowMillis = 5_000)
+        assertThat(refused.problemText).isEqualTo(WatchFormat.rejection(WatchCommand.SET_COMPLETE))
+
+        assertThat(refused.copy(nowMillis = 5_000 + REJECTION_MILLIS).problemText).isNull()
+        assertThat(WatchUiState().problemText).isNull()
+    }
+
+    @Test
+    fun `not reaching the phone is reported before a refusal`() {
+        val both = WatchUiState(
+            sendFailed = true, sendFailedAtMillis = 1_000,
+            rejectedCommand = WatchCommand.RUN_PAUSE, rejectedAtMillis = 1_000, nowMillis = 1_000,
+        )
+        assertThat(both.problemText).isEqualTo("폰에 보내지 못했어요")
     }
 }

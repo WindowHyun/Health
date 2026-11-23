@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Chip
@@ -65,6 +66,7 @@ private fun StatusLine(text: String, warning: Boolean) {
         fontSize = 12.sp,
         textAlign = TextAlign.Center,
         maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
     )
 }
 
@@ -80,13 +82,13 @@ private fun IdleScreen(state: WatchUiState, onStartRun: () -> Unit) {
         Text(text = "Health", color = Lime, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
         Text(
             text = when {
-                state.sendFailed -> "폰에 보내지 못했어요"
+                state.problemText != null -> state.problemText!!
                 state.startPending -> "폰에 요청했어요. 폰 알림에서 '러닝 시작'을 눌러야 할 수 있어요."
                 state.run.status == WatchRunStatus.FINISHED -> "러닝이 끝났어요. 결과는 폰에서 확인하세요."
                 else -> "폰에서 운동을 시작하면 여기에 나타나요."
             },
             textAlign = TextAlign.Center,
-            color = if (state.sendFailed) Danger else Muted,
+            color = if (state.problemText != null) Danger else Muted,
             fontSize = 12.sp,
             modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
         )
@@ -132,16 +134,30 @@ private fun WorkoutScreen(state: WatchUiState, onCompleteSet: () -> Unit) {
             )
             return@Column
         }
-        StatusLine(
-            text = if (state.sendFailed) "폰에 보내지 못했어요" else "${workout.exerciseName} · ${workout.setNumber}/${workout.setCount}세트",
-            warning = state.sendFailed,
-        )
+        val problem = state.problemText
+        if (problem != null) {
+            StatusLine(text = problem, warning = true)
+        } else {
+            // 종목 이름이 길어도 몇 번째 세트인지는 항상 보이게, 이름은 두 줄까지만 쓰고 줄임표로 줄인다.
+            Text(
+                text = workout.exerciseName,
+                color = Muted,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            StatusLine(text = "${workout.setNumber}/${workout.setCount}세트", warning = false)
+        }
+        val value = WatchFormat.setValue(workout)
         Text(
-            text = WatchFormat.setValue(workout),
-            fontSize = 28.sp,
+            text = value,
+            // 무게 · 횟수가 길어져도(102.5kg × 12) 한 줄에 들어가게 글자 수에 맞춰 줄인다.
+            fontSize = WatchFormat.setValueSp(value).sp,
             fontWeight = FontWeight.ExtraBold,
             textAlign = TextAlign.Center,
             maxLines = 1,
+            softWrap = false,
             modifier = Modifier.padding(vertical = 6.dp),
         )
         if (workout.canComplete) {
@@ -194,12 +210,12 @@ private fun RestScreen(state: WatchUiState, onCommand: (WatchCommand) -> Unit) {
         ) {
             StatusLine(
                 text = when {
-                    state.sendFailed -> "폰에 보내지 못했어요"
+                    state.problemText != null -> state.problemText!!
                     finished -> "휴식 끝"
                     rest.paused -> "휴식 · 멈춤"
                     else -> "휴식"
                 },
-                warning = state.sendFailed || finished,
+                warning = state.problemText != null || finished,
             )
             Text(
                 text = WatchFormat.restClock(state.restRemainingSeconds),
@@ -207,8 +223,8 @@ private fun RestScreen(state: WatchUiState, onCommand: (WatchCommand) -> Unit) {
                 fontWeight = FontWeight.ExtraBold,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Action("-15") { onCommand(WatchCommand.REST_SUB) }
-                Action("+15") { onCommand(WatchCommand.REST_ADD) }
+                Action("-10") { onCommand(WatchCommand.REST_SUB) }
+                Action("+10") { onCommand(WatchCommand.REST_ADD) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!finished) {
@@ -240,7 +256,7 @@ private fun RunScreen(
     ) {
         StatusLine(
             text = when {
-                state.sendFailed -> "폰에 보내지 못했어요"
+                state.problemText != null -> state.problemText!!
                 state.runStale -> "폰과 연결이 끊겼을 수 있어요"
                 state.confirmingStop -> "러닝을 끝낼까요?"
                 run.autoPaused -> "멈춰서 자동 일시정지"
@@ -248,7 +264,7 @@ private fun RunScreen(
                 run.signalLost -> "러닝 · 위치 신호 없음"
                 else -> "러닝"
             },
-            warning = state.sendFailed || state.runStale || paused || run.signalLost,
+            warning = state.problemText != null || state.runStale || paused || run.signalLost,
         )
         Row(verticalAlignment = Alignment.Bottom) {
             Text(

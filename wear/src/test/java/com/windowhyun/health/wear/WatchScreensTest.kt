@@ -3,10 +3,12 @@ package com.windowhyun.health.wear
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.TextLayoutResult
 import com.google.common.truth.Truth.assertThat
 import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
@@ -141,9 +143,57 @@ class WatchScreensTest {
     fun `the set screen shows the exercise and the values`() {
         show(WatchUiState(workout = workout(), nowMillis = sentAt), shot = "watch_workout")
 
-        compose.onNodeWithText("벤치프레스 · 2/4세트").assertIsDisplayed()
+        compose.onNodeWithText("벤치프레스").assertIsDisplayed()
+        compose.onNodeWithText("2/4세트").assertIsDisplayed()
         compose.onNodeWithText("62.5kg × 8").assertIsDisplayed()
         compose.onNodeWithText("완료").assertIsDisplayed()
+    }
+
+    /** 글자가 자기 칸을 넘쳐 잘렸는지. 화면에 그려진 그대로의 글자 배치 결과를 읽는다. */
+    private fun overflows(text: String): Boolean {
+        val results = mutableListOf<TextLayoutResult>()
+        val node = compose.onNodeWithText(text).fetchSemanticsNode()
+        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        return results.any { it.didOverflowWidth || it.didOverflowHeight }
+    }
+
+    @Test
+    fun `a long exercise name and big numbers still fit on the round screen`() {
+        show(
+            WatchUiState(
+                workout = workout().copy(exerciseName = "인클라인 덤벨 벤치프레스 머신 변형", weightKg = 102.5, reps = 12),
+                nowMillis = sentAt,
+            ),
+            shot = "watch_workout_long",
+        )
+
+        // 몇 번째 세트인지는 이름이 아무리 길어도 보인다.
+        compose.onNodeWithText("2/4세트").assertIsDisplayed()
+        assertThat(overflows("102.5kg × 12")).isFalse()
+        compose.onNodeWithText("완료").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a refusal from the phone is shown on the set screen`() {
+        show(
+            WatchUiState(
+                workout = workout(), nowMillis = sentAt,
+                rejectedCommand = WatchCommand.SET_COMPLETE, rejectedAtMillis = sentAt,
+            ),
+        )
+
+        compose.onNodeWithText(WatchFormat.rejection(WatchCommand.SET_COMPLETE)).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a refused run start tells the user to start on the phone`() {
+        show(
+            WatchUiState(
+                nowMillis = sentAt, rejectedCommand = WatchCommand.RUN_START, rejectedAtMillis = sentAt,
+            ),
+        )
+
+        compose.onNodeWithText(WatchFormat.rejection(WatchCommand.RUN_START)).assertIsDisplayed()
     }
 
     @Test
@@ -298,8 +348,8 @@ class WatchScreensTest {
     fun `rest buttons send their commands`() {
         val taps = show(WatchUiState(rest = rest(), nowMillis = sentAt))
 
-        compose.onNodeWithText("+15").performClick()
-        compose.onNodeWithText("-15").performClick()
+        compose.onNodeWithText("+10").performClick()
+        compose.onNodeWithText("-10").performClick()
         compose.onNodeWithText("멈춤").performClick()
         compose.onNodeWithText("건너뛰기").performClick()
 

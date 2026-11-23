@@ -619,7 +619,7 @@ class WorkoutSessionViewModel internal constructor(
         /** 세트 값이 이만큼 가만히 있어야 시계로 보낸다. */
         const val WATCH_PUBLISH_DEBOUNCE_MILLIS = 400L
 
-        /** 시계의 +15초 / -15초 버튼이 더하고 빼는 만큼. */
-        const val REST_WATCH_STEP_SECONDS = 15
+        /** 시계의 +10초 / -10초 버튼이 더하고 빼는 만큼(폰의 휴식 막대와 같다). */
+        const val REST_WATCH_STEP_SECONDS = 10
     }
 }

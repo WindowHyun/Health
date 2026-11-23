@@ -7,6 +7,7 @@ import android.os.VibratorManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.windowhyun.health.shared.CommandAck
 import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
 import com.windowhyun.health.shared.WatchCommand
@@ -16,13 +17,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** 시계가 손목을 울리는 곳. 테스트에서는 가짜로 바꾼다. */
-fun interface WatchHaptics {
-    fun restFinished()
+interface WatchHaptics {
+    /** 휴식이 끝났다. [endsAtMillis] 는 그 휴식이 끝나는 시각(같은 휴식에 두 번 울리지 않게 구분하는 데 쓴다). */
+    fun restFinished(endsAtMillis: Long)
+
+    /** 폰이 명령을 받아들였다. 버튼이 먹혔다는 짧은 느낌. */
+    fun commandAccepted() {}
+
+    /** 폰이 명령을 받아들이지 않았다. */
+    fun commandRejected() {}
 }
 
 /** 폰에서 받은 상태를 화면에 올리고, 버튼 입력을 폰으로 보낸다. */
@@ -44,26 +54,71 @@ class WatchViewModel internal constructor(
     /** 휴식 끝 진동을 이미 울린 휴식. 같은 휴식에 두 번 울리지 않게 끝나는 시각으로 구분한다. */
     private var vibratedRestEndsAt: Long = -1
 
+    /** 화면이 보이는 중인지. 보이지 않을 때는 초를 새로 세지 않는다(손목 배터리). */
+    private val screenVisible = MutableStateFlow(true)
+
     init {
         viewModelScope.launch {
-            source.run.catch { }.collect { snapshot ->
+            source.run.keepListening().collect { snapshot ->
                 _state.update { it.copy(run = snapshot, nowMillis = clock()) }
             }
         }
         viewModelScope.launch {
-            source.rest.catch { }.collect { snapshot ->
+            source.rest.keepListening().collect { snapshot ->
                 _state.update { it.copy(rest = snapshot, nowMillis = clock()) }
             }
         }
         viewModelScope.launch {
-            source.workout.catch { }.collect { snapshot ->
+            source.workout.keepListening().collect { snapshot ->
                 _state.update { it.copy(workout = snapshot, nowMillis = clock()) }
             }
         }
         viewModelScope.launch {
-            while (true) {
-                delay(TICK_MILLIS)
+            source.acks.keepListening().collect { ack -> onAck(ack) }
+        }
+        viewModelScope.launch {
+            // 화면이 보일 때만 초를 센다. 손목을 내려 화면이 꺼진 동안에도 돌면 배터리만 쓴다.
+            // 그때의 휴식 끝 진동은 알람([RestFinishAlarm])이 맡는다.
+            screenVisible.collectLatest { visible ->
+                if (!visible) return@collectLatest
                 tick()
+                while (true) {
+                    delay(TICK_MILLIS)
+                    tick()
+                }
+            }
+        }
+    }
+
+    /** 화면이 보이기 시작하거나 안 보이게 됐다. */
+    fun setScreenVisible(visible: Boolean) {
+        screenVisible.value = visible
+    }
+
+    /**
+     * 폰과의 연결이 일시적으로 끊기거나 Play 서비스가 아직 준비되지 않아 흐름이 실패해도,
+     * 잠시 뒤 다시 듣는다. 한 번 실패했다고 앱을 다시 열 때까지 상태를 못 받으면 안 된다.
+     */
+    private fun <T> Flow<T>.keepListening(): Flow<T> = retryWhen { _, attempt ->
+        delay(retryDelayMillis(attempt))
+        true
+    }
+
+    /** 폰이 명령을 처리한 결과를 받았다. */
+    private fun onAck(ack: CommandAck) {
+        if (ack.accepted) {
+            haptics.commandAccepted()
+            _state.update { it.copy(rejectedCommand = null) }
+        } else {
+            haptics.commandRejected()
+            _state.update {
+                it.copy(
+                    rejectedCommand = ack.command,
+                    rejectedAtMillis = clock(),
+                    // 폰이 시작을 거절했다면 알림에서 누르라고 안내할 이유가 없다.
+                    startRequestedAtMillis = if (ack.command == WatchCommand.RUN_START) 0 else it.startRequestedAtMillis,
+                    nowMillis = clock(),
+                )
             }
         }
     }
@@ -72,9 +127,12 @@ class WatchViewModel internal constructor(
     internal fun tick() {
         val now = clock()
         val rest = _state.value.rest
-        if (rest.isFinished(now) && vibratedRestEndsAt != rest.endsAtMillis) {
+        // 끝난 지 한참 지난 휴식(앱을 늦게 열었다)에는 울리지 않는다. 그 순간에는 알람이 이미 울렸다.
+        if (rest.isFinished(now) && now - rest.endsAtMillis <= REST_BUZZ_WINDOW_MILLIS &&
+            vibratedRestEndsAt != rest.endsAtMillis
+        ) {
             vibratedRestEndsAt = rest.endsAtMillis
-            haptics.restFinished()
+            haptics.restFinished(rest.endsAtMillis)
         }
         _state.update { it.copy(nowMillis = now) }
     }
@@ -82,7 +140,7 @@ class WatchViewModel internal constructor(
     fun send(command: WatchCommand) {
         viewModelScope.launch {
             val delivered = source.send(command)
-            _state.update { it.copy(sendFailed = !delivered) }
+            _state.update { it.withSendResult(delivered, clock()) }
         }
     }
 
@@ -95,7 +153,7 @@ class WatchViewModel internal constructor(
         if (!workout.canComplete) return
         viewModelScope.launch {
             val delivered = source.send(WatchCommand.SET_COMPLETE, WearCodec.encodeSetId(workout.setId))
-            _state.update { it.copy(sendFailed = !delivered) }
+            _state.update { it.withSendResult(delivered, clock()) }
         }
     }
 
@@ -104,10 +162,7 @@ class WatchViewModel internal constructor(
         viewModelScope.launch {
             val delivered = source.send(WatchCommand.RUN_START)
             _state.update {
-                it.copy(
-                    sendFailed = !delivered,
-                    startRequestedAtMillis = if (delivered) clock() else 0,
-                )
+                it.withSendResult(delivered, clock()).copy(startRequestedAtMillis = if (delivered) clock() else 0)
             }
         }
     }
@@ -137,14 +192,36 @@ class WatchViewModel internal constructor(
         _state.update { it.copy(sendFailed = false) }
     }
 
+    private fun WatchUiState.withSendResult(delivered: Boolean, now: Long): WatchUiState =
+        // 새 명령을 보내면 이전에 거절당한 안내는 치운다.
+        copy(
+            sendFailed = !delivered,
+            sendFailedAtMillis = if (delivered) 0 else now,
+            rejectedCommand = null,
+            nowMillis = now,
+        )
+
     companion object {
         const val TICK_MILLIS = 250L
         const val STOP_CONFIRM_MILLIS = 5_000L
+
+        /** 휴식이 끝난 뒤 이 시간 안에만 손목을 울린다. */
+        const val REST_BUZZ_WINDOW_MILLIS = 5_000L
+
+        private const val RETRY_BASE_MILLIS = 1_000L
+        private const val RETRY_MAX_MILLIS = 30_000L
+
+        /** 다시 듣기까지 기다리는 시간: 1초, 2초, 4초 … 최대 30초. */
+        internal fun retryDelayMillis(attempt: Long): Long =
+            (RETRY_BASE_MILLIS shl attempt.coerceIn(0, 5).toInt()).coerceAtMost(RETRY_MAX_MILLIS)
     }
 }
 
-/** 휴식이 끝났을 때 짧게 두 번 울린다. 진동이 없는 기기에서는 아무 일도 없다. */
-internal class SystemWatchHaptics(application: Application) : WatchHaptics {
+/**
+ * 손목을 울린다. 휴식 끝은 알람([RestFinishReceiver])과 같은 곳을 거쳐 같은 휴식에 두 번 울리지 않는다.
+ * 진동이 없는 기기에서는 아무 일도 없다.
+ */
+internal class SystemWatchHaptics(private val application: Application) : WatchHaptics {
     private val vibrator: Vibrator? = if (android.os.Build.VERSION.SDK_INT >= 31) {
         application.getSystemService(VibratorManager::class.java)?.defaultVibrator
     } else {
@@ -152,8 +229,15 @@ internal class SystemWatchHaptics(application: Application) : WatchHaptics {
         application.getSystemService(Vibrator::class.java)
     }
 
-    override fun restFinished() {
-        vibrator?.takeIf { it.hasVibrator() }
-            ?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 200, 120, 200), -1))
+    override fun restFinished(endsAtMillis: Long) {
+        RestVibration.vibrateOnce(application, endsAtMillis)
+    }
+
+    override fun commandAccepted() = tick(longArrayOf(0, 25))
+
+    override fun commandRejected() = tick(longArrayOf(0, 70, 70, 70))
+
+    private fun tick(pattern: LongArray) {
+        vibrator?.takeIf { it.hasVibrator() }?.vibrate(VibrationEffect.createWaveform(pattern, -1))
     }
 }

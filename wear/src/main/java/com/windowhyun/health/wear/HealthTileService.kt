@@ -35,7 +35,14 @@ class HealthTileService : TileService() {
                     val content = OngoingPresenter.describe(
                         snapshots.run, snapshots.rest, snapshots.workout, System.currentTimeMillis(),
                     )
-                    completer.set(buildTile(applicationContext, OngoingPresenter.tileLines(content)))
+                    completer.set(
+                        buildTile(
+                            applicationContext,
+                            OngoingPresenter.tileLines(content),
+                            // 시간이 흐르는 숫자를 타일은 스스로 못 센다. 운동 중에는 보이는 동안 몇 초마다 새로 그리게 한다.
+                            freshnessMillis = if (content != null) ACTIVE_FRESHNESS_MILLIS else 0,
+                        ),
+                    )
                 } catch (e: Exception) {
                     completer.setException(e)
                 }
@@ -53,6 +60,9 @@ class HealthTileService : TileService() {
 
     companion object {
         private const val RESOURCES_VERSION = "1"
+
+        /** 운동 중 타일이 이 시간이 지나면 낡은 것으로 보고 새로 그린다. */
+        internal const val ACTIVE_FRESHNESS_MILLIS = 10_000L
         private val IO = Executors.newSingleThreadExecutor()
 
         private const val LIME = 0xFFC6F432.toInt()
@@ -64,9 +74,10 @@ class HealthTileService : TileService() {
             runCatching { getUpdater(context).requestUpdate(HealthTileService::class.java) }
         }
 
-        internal fun buildTile(context: Context, lines: List<String>): TileBuilders.Tile =
+        internal fun buildTile(context: Context, lines: List<String>, freshnessMillis: Long = 0): TileBuilders.Tile =
             TileBuilders.Tile.Builder()
                 .setResourcesVersion(RESOURCES_VERSION)
+                .setFreshnessIntervalMillis(freshnessMillis)
                 .setTileTimeline(TimelineBuilders.Timeline.fromLayoutElement(layout(context, lines)))
                 .build()
 

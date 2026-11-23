@@ -1,6 +1,7 @@
 package com.windowhyun.health.wear
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.Application
 import android.app.Notification
 import android.app.NotificationManager
@@ -24,6 +25,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowAlarmManager
 
 /** 워치페이스 칩(알림) · 타일 · 앱이 꺼져 있어도 깨어나는 서비스. 실제 시계 없이 확인할 수 있는 만큼 확인한다. */
 @RunWith(RobolectricTestRunner::class)
@@ -180,6 +182,15 @@ class WatchSurfacesTest {
     }
 
     @Test
+    fun `an active tile asks to be redrawn every few seconds and an idle one does not`() {
+        val active = HealthTileService.buildTile(context, listOf("러닝", "2.00km"), HealthTileService.ACTIVE_FRESHNESS_MILLIS)
+        val idle = HealthTileService.buildTile(context, listOf("Health", "폰에서 운동을 시작하세요"))
+
+        assertThat(active.freshnessIntervalMillis).isEqualTo(10_000L)
+        assertThat(idle.freshnessIntervalMillis).isEqualTo(0L)
+    }
+
+    @Test
     fun `tapping the tile opens the app`() {
         val layout = HealthTileService.layout(context, listOf("Health", "폰에서 운동을 시작하세요"))
 
@@ -230,5 +241,109 @@ class WatchSurfacesTest {
         assertThat(services.map { it.serviceInfo.name }).contains(HealthTileService::class.java.name)
         assertThat(services.first { it.serviceInfo.name == HealthTileService::class.java.name }.serviceInfo.permission)
             .isEqualTo("com.google.android.wearable.permission.BIND_TILE_PROVIDER")
+    }
+
+    // ----- 휴식 끝 알람 -----
+
+    private fun alarms() = shadowOf(context.getSystemService(AlarmManager::class.java)).scheduledAlarms
+
+    private fun restEndingAt(endsAt: Long, paused: Boolean = false) = RestSnapshot(
+        active = true, totalSeconds = 60, endsAtMillis = if (paused) 0 else endsAt, paused = paused,
+        pausedRemainingMillis = if (paused) 30_000 else 0, sentAtMillis = now,
+    )
+
+    @Before
+    fun resetRestVibration() {
+        RestVibration.reset()
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+    }
+
+    @Test
+    fun `a rest sets an alarm for the moment it ends`() {
+        refresh(snapshots(rest = restEndingAt(now + 45_000)))
+
+        val alarm = alarms().single()
+        assertThat(alarm.triggerAtMs).isEqualTo(now + 45_000)
+        assertThat(alarm.type).isEqualTo(AlarmManager.RTC_WAKEUP)
+        assertThat(shadowOf(alarm.operation).savedIntents.single().component?.className)
+            .isEqualTo(RestFinishReceiver::class.java.name)
+    }
+
+    @Test
+    fun `adding time moves the alarm instead of adding a second one`() {
+        refresh(snapshots(rest = restEndingAt(now + 45_000)))
+        refresh(snapshots(rest = restEndingAt(now + 60_000)))
+
+        assertThat(alarms().single().triggerAtMs).isEqualTo(now + 60_000)
+    }
+
+    @Test
+    fun `skipping pausing or ending the rest removes the alarm`() {
+        refresh(snapshots(rest = restEndingAt(now + 45_000)))
+        refresh(snapshots(rest = RestSnapshot.None))
+        assertThat(alarms()).isEmpty()
+
+        refresh(snapshots(rest = restEndingAt(now + 45_000)))
+        refresh(snapshots(rest = restEndingAt(now + 45_000, paused = true)))
+        assertThat(alarms()).isEmpty()
+    }
+
+    @Test
+    fun `a rest that already ended sets no alarm`() {
+        refresh(snapshots(rest = restEndingAt(now - 1_000)))
+
+        assertThat(alarms()).isEmpty()
+    }
+
+    @Test
+    fun `a failed read leaves the alarm alone`() {
+        refresh(snapshots(rest = restEndingAt(now + 45_000)))
+        refresh(null)
+
+        assertThat(alarms()).hasSize(1)
+    }
+
+    @Test
+    fun `the alarm is still set when exact alarms are not allowed`() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+
+        refresh(snapshots(rest = restEndingAt(now + 45_000)))
+
+        assertThat(alarms()).hasSize(1)
+    }
+
+    @Test
+    fun `the alarm receiver is declared and not exported`() {
+        val info = context.packageManager.getReceiverInfo(
+            android.content.ComponentName(context, RestFinishReceiver::class.java),
+            0,
+        )
+        assertThat(info.exported).isFalse()
+    }
+
+    @Test
+    fun `the alarm buzzes once and the screen does not buzz again for the same rest`() {
+        var buzzes = 0
+        val buzz: (Context) -> Unit = { buzzes++ }
+
+        assertThat(RestVibration.vibrateOnce(context, 5_000, buzz)).isTrue()
+        // 같은 휴식을 앱 화면도 울리려 한다.
+        assertThat(RestVibration.vibrateOnce(context, 5_000, buzz)).isFalse()
+        assertThat(buzzes).isEqualTo(1)
+
+        // 시간을 더해 끝나는 시각이 달라졌다면 새 휴식이라 다시 울린다.
+        assertThat(RestVibration.vibrateOnce(context, 20_000, buzz)).isTrue()
+        assertThat(buzzes).isEqualTo(2)
+    }
+
+    @Test
+    fun `the receiver vibrates through the shared guard`() {
+        RestVibration.reset()
+        val receiver = RestFinishReceiver()
+        val intent = Intent().putExtra(RestFinishAlarm.EXTRA_ENDS_AT, 7_000L)
+
+        // 진동 장치가 없는 환경에서도 터지지 않는다.
+        receiver.onReceive(context, intent)
+        receiver.onReceive(context, intent)
     }
 }

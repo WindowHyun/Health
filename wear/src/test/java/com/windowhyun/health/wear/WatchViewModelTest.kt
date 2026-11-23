@@ -1,6 +1,7 @@
 package com.windowhyun.health.wear
 
 import com.google.common.truth.Truth.assertThat
+import com.windowhyun.health.shared.CommandAck
 import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
 import com.windowhyun.health.shared.WatchCommand
@@ -32,6 +33,7 @@ class WatchViewModelTest {
         val runFlow = MutableSharedFlow<RunSnapshot>(replay = 1)
         val restFlow = MutableSharedFlow<RestSnapshot>(replay = 1)
         val workoutFlow = MutableSharedFlow<WorkoutSnapshot>(replay = 1)
+        val ackFlow = MutableSharedFlow<CommandAck>()
         val sent = mutableListOf<WatchCommand>()
         val payloads = mutableListOf<ByteArray>()
         var delivers = true
@@ -39,6 +41,7 @@ class WatchViewModelTest {
         override val run = runFlow
         override val rest = restFlow
         override val workout = workoutFlow
+        override val acks = ackFlow
         override suspend fun send(command: WatchCommand, payload: ByteArray): Boolean {
             sent += command
             payloads += payload
@@ -48,8 +51,18 @@ class WatchViewModelTest {
 
     private class FakeHaptics : WatchHaptics {
         var count = 0
-        override fun restFinished() {
+        var accepted = 0
+        var rejected = 0
+        override fun restFinished(endsAtMillis: Long) {
             count++
+        }
+
+        override fun commandAccepted() {
+            accepted++
+        }
+
+        override fun commandRejected() {
+            rejected++
         }
     }
 
@@ -358,6 +371,151 @@ class WatchViewModelTest {
 
             assertThat(viewModel.state.value.sendFailed).isTrue()
             assertThat(viewModel.state.value.startPending).isFalse()
+        }
+    }
+
+    // ----- 폰의 응답 -----
+
+    @Test
+    fun `a refusal from the phone is shown and buzzes`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.ackFlow.emit(CommandAck(WatchCommand.SET_COMPLETE, accepted = false))
+            runCurrent()
+
+            assertThat(viewModel.state.value.problemText).isEqualTo(WatchFormat.rejection(WatchCommand.SET_COMPLETE))
+            assertThat(haptics.rejected).isEqualTo(1)
+            assertThat(haptics.accepted).isEqualTo(0)
+        }
+    }
+
+    @Test
+    fun `an accepted command gives a small tick and clears an old refusal`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.ackFlow.emit(CommandAck(WatchCommand.REST_SKIP, accepted = false))
+            runCurrent()
+            source.ackFlow.emit(CommandAck(WatchCommand.REST_SKIP, accepted = true))
+            runCurrent()
+
+            assertThat(haptics.accepted).isEqualTo(1)
+            assertThat(viewModel.state.value.problemText).isNull()
+        }
+    }
+
+    @Test
+    fun `a refused run start drops the waiting hint`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            viewModel.startRun()
+            runCurrent()
+            assertThat(viewModel.state.value.startPending).isTrue()
+
+            source.ackFlow.emit(CommandAck(WatchCommand.RUN_START, accepted = false))
+            runCurrent()
+
+            assertThat(viewModel.state.value.startPending).isFalse()
+            assertThat(viewModel.state.value.problemText).contains("직접 시작")
+        }
+    }
+
+    @Test
+    fun `sending a new command forgets the earlier refusal`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.ackFlow.emit(CommandAck(WatchCommand.REST_ADD, accepted = false))
+            runCurrent()
+
+            viewModel.send(WatchCommand.REST_SKIP)
+            runCurrent()
+
+            assertThat(viewModel.state.value.rejectedCommand).isNull()
+        }
+    }
+
+    // ----- 실패 안내는 오래 남지 않는다 -----
+
+    @Test
+    fun `a send failure fades after a few seconds`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.delivers = false
+            viewModel.send(WatchCommand.REST_SKIP)
+            runCurrent()
+            assertThat(viewModel.state.value.problemText).isEqualTo("폰에 보내지 못했어요")
+
+            advanceTimeBy(SEND_FAILED_MILLIS + 1_000)
+
+            assertThat(viewModel.state.value.problemText).isNull()
+        }
+    }
+
+    // ----- 한 번 실패해도 계속 듣는다 -----
+
+    private class FlakySource : WatchDataSource {
+        var attempts = 0
+        override val run = kotlinx.coroutines.flow.flow<RunSnapshot> {
+            attempts++
+            if (attempts == 1) throw java.io.IOException("Play 서비스가 아직 준비되지 않았다")
+            emit(RunSnapshot(status = WatchRunStatus.TRACKING, distanceMeters = 500.0, sentAtMillis = 1_000_000))
+            kotlinx.coroutines.awaitCancellation()
+        }
+        override val rest = kotlinx.coroutines.flow.emptyFlow<RestSnapshot>()
+        override val workout = kotlinx.coroutines.flow.emptyFlow<WorkoutSnapshot>()
+        override suspend fun send(command: WatchCommand, payload: ByteArray) = true
+    }
+
+    @Test
+    fun `a failed connection is retried instead of freezing the screen`() = runTest(dispatcher) {
+        val flaky = FlakySource()
+        val viewModel = WatchViewModel(flaky, haptics) { wall + testScheduler.currentTime }
+        try {
+            runCurrent()
+            assertThat(flaky.attempts).isEqualTo(1)
+            assertThat(viewModel.state.value.run.distanceMeters).isEqualTo(0.0)
+
+            advanceTimeBy(WatchViewModel.retryDelayMillis(0) + 100)
+
+            assertThat(flaky.attempts).isEqualTo(2)
+            assertThat(viewModel.state.value.run.distanceMeters).isEqualTo(500.0)
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun `the wait before listening again grows but is capped`() {
+        val delays = (0L..10L).map { WatchViewModel.retryDelayMillis(it) }
+        assertThat(delays).isInOrder()
+        assertThat(delays.first()).isEqualTo(1_000)
+        assertThat(delays.last()).isAtMost(30_000)
+    }
+
+    // ----- 화면이 안 보일 때 -----
+
+    @Test
+    fun `the clock stops ticking while the screen is hidden and resumes when shown`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            source.runFlow.emit(tracking())
+            runCurrent()
+
+            viewModel.setScreenVisible(false)
+            runCurrent()
+            val frozen = viewModel.state.value.nowMillis
+            advanceTimeBy(10_000)
+            assertThat(viewModel.state.value.nowMillis).isEqualTo(frozen)
+
+            viewModel.setScreenVisible(true)
+            runCurrent()
+            // 다시 보이는 즉시 지금 시각으로 맞춘다.
+            assertThat(viewModel.state.value.nowMillis).isEqualTo(wall + testScheduler.currentTime)
+        }
+    }
+
+    @Test
+    fun `no buzz for a rest that ended long before the app was opened`() = runTest(dispatcher) {
+        withViewModel { viewModel ->
+            // 끝난 지 30초가 지난 휴식이 폰에서 지워지지 않은 채 남아 있다(알람은 그때 이미 울렸다).
+            source.restFlow.emit(rest(endsAt = wall - 30_000))
+            runCurrent()
+            advanceTimeBy(2_000)
+
+            assertThat(haptics.count).isEqualTo(0)
         }
     }
 }

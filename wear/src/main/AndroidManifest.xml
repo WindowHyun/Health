@@ -6,6 +6,15 @@
     <!-- 휴식이 끝났을 때 손목을 울린다. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!--
+        휴식이 끝나는 시각에 손목을 울리는 알람. 앱 화면이 꺼져 있어도 울려야 한다.
+        Android 13+ 는 타이머 앱이 쓰는 USE_EXACT_ALARM, 12 이하는 SCHEDULE_EXACT_ALARM(폰 앱과 같다).
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+
     <!-- 워치페이스의 "진행 중" 칩(알림). 안드로이드 13 기반 Wear OS 4 부터는 권한이 필요하다. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -37,6 +46,11 @@
                     android:scheme="wear" />
             </intent-filter>
         </service>
+
+        <!-- 휴식 끝 알람이 울리면 손목을 울린다. -->
+        <receiver
+            android:name=".RestFinishReceiver"
+            android:exported="false" />
 
         <!-- 시계 타일: 지금 러닝이나 세트를 보여 준다. -->
         <service

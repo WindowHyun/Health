@@ -28,7 +28,7 @@ class PhoneStateListenerService : WearableListenerService() {
 }
 
 /**
- * 지금 폰의 상태를 읽어 워치페이스 칩과 타일을 맞춘다. 읽지 못했으면(Play 서비스 오류 등) 아무것도 건드리지 않는다.
+ * 지금 폰의 상태를 읽어 워치페이스 칩 · 타일 · 휴식 끝 알람을 맞춘다. 읽지 못했으면(Play 서비스 오류 등) 아무것도 건드리지 않는다.
  * [read] 와 [nowMillis] 는 테스트에서 바꾼다.
  */
 internal suspend fun refreshWatchSurfaces(
@@ -39,5 +39,7 @@ internal suspend fun refreshWatchSurfaces(
     val snapshots = read() ?: return
     val content = OngoingPresenter.describe(snapshots.run, snapshots.rest, snapshots.workout, nowMillis)
     OngoingNotifier(context).show(content, nowMillis)
+    // 휴식이 끝나는 시각에 손목을 울릴 알람(앱이 꺼져 있어도 울린다). 시간을 더하거나 건너뛰면 옮기거나 치운다.
+    RestFinishAlarm(context).sync(snapshots.rest, nowMillis)
     HealthTileService.requestUpdate(context)
 }

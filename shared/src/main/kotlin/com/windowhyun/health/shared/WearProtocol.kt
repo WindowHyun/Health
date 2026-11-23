@@ -20,6 +20,9 @@ object WearProtocol {
     const val PATH_WORKOUT_STATE = "/health/workout_state"
     const val COMMAND_PREFIX = "/health/cmd/"
 
+    /** 폰이 시계의 명령을 처리한 결과를 돌려보내는 메시지의 경로 머리말. 뒤에 명령 이름이 붙는다. */
+    const val ACK_PREFIX = "/health/ack/"
+
     /** 이 시간 넘게 새 상태가 안 오면 폰과 끊겼을 수 있다고 알린다. 폰은 진행 중에 이보다 자주 보낸다. */
     const val STALE_MILLIS = 60_000L
 
@@ -173,6 +176,32 @@ enum class WatchCommand(val key: String) {
         /** 메시지 경로로 명령을 찾는다. 모르는 경로(다른 버전이 보낸 것 등)는 null. */
         fun fromPath(path: String): WatchCommand? =
             entries.firstOrNull { it.path == path }
+    }
+}
+
+/**
+ * 폰이 시계의 명령을 어떻게 처리했는지. 시계는 메시지를 "보냈다"까지만 알 수 있어서,
+ * 폰이 받아들였는지(실행했는지) 거절했는지를 이 응답으로 안다.
+ */
+data class CommandAck(val command: WatchCommand, val accepted: Boolean) {
+    /** 이 응답을 실어 보낼 메시지 경로. */
+    val path: String get() = WearProtocol.ACK_PREFIX + command.key
+
+    /** 메시지 내용: 받아들였으면 "1", 거절했으면 "0". */
+    val payload: ByteArray get() = (if (accepted) "1" else "0").toByteArray()
+
+    companion object {
+        /** 메시지 경로와 내용에서 응답을 읽는다. 응답이 아니거나 모르는 명령이면 null. */
+        fun parse(path: String, payload: ByteArray?): CommandAck? {
+            if (!path.startsWith(WearProtocol.ACK_PREFIX)) return null
+            val key = path.removePrefix(WearProtocol.ACK_PREFIX)
+            val command = WatchCommand.entries.firstOrNull { it.key == key } ?: return null
+            return when (payload?.decodeToString()?.trim()) {
+                "1" -> CommandAck(command, true)
+                "0" -> CommandAck(command, false)
+                else -> null
+            }
+        }
     }
 }
 

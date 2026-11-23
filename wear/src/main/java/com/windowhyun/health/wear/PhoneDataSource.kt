@@ -5,7 +5,10 @@ import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataClient
 import com.google.android.gms.wearable.DataItem
+import com.google.android.gms.wearable.MessageClient
+import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
+import com.windowhyun.health.shared.CommandAck
 import com.windowhyun.health.shared.RestSnapshot
 import com.windowhyun.health.shared.RunSnapshot
 import com.windowhyun.health.shared.WatchCommand
@@ -64,6 +67,16 @@ class PhoneDataSource(private val context: Context) : WatchDataSource {
     override val workout: Flow<WorkoutSnapshot> =
         observe(WearProtocol.PATH_WORKOUT_STATE) { WearCodec.decodeWorkout(it) }
 
+    /** 폰이 돌려보내는 명령 처리 결과. 앱이 열려 있는 동안 받는다(명령은 화면을 보며 누르는 것이라 충분하다). */
+    override val acks: Flow<CommandAck> = callbackFlow {
+        val client = Wearable.getMessageClient(context)
+        val listener = MessageClient.OnMessageReceivedListener { event: MessageEvent ->
+            CommandAck.parse(event.path, event.data)?.let { trySend(it) }
+        }
+        client.addListener(listener).await()
+        awaitClose { client.removeListener(listener) }
+    }
+
     /**
      * [path] 의 데이터 항목을 지켜본다. 먼저 이미 있는 값을 한 번 읽고(앱을 늦게 켜도 마지막 상태가 보이게),
      * 이후 바뀔 때마다 흘려 보낸다.
@@ -75,7 +88,9 @@ class PhoneDataSource(private val context: Context) : WatchDataSource {
                     .forEach { event -> decode(event.dataItem.data)?.let { value -> trySend(value) } }
             }
         }
-        dataClient.addListener(listener)
+        // 등록하지 못하면(Play 서비스가 아직 준비 안 됨 등) 흐름이 실패하고, 받는 쪽이 잠시 뒤 다시 시도한다.
+        // 결과를 기다리지 않으면 실패를 알 수 없어서 영영 상태를 못 받는다.
+        dataClient.addListener(listener).await()
 
         // 현재 값 읽기. 폰이 아직 아무것도 올리지 않았으면 비어 있다.
         try {

@@ -4,6 +4,7 @@ import com.windowhyun.health.data.tracking.RunTracker
 import com.windowhyun.health.domain.model.RunStatus
 import com.windowhyun.health.service.RunControl
 import com.windowhyun.health.service.RunServiceController
+import com.windowhyun.health.shared.CommandAck
 import com.windowhyun.health.shared.WatchCommand
 import com.windowhyun.health.shared.WearCodec
 import javax.inject.Inject
@@ -49,6 +50,10 @@ class WatchCommandHandler internal constructor(
         WatchCommand.REST_TOGGLE_PAUSE,
         -> link.emitRestCommand(command)
     }
+
+    /** [handle] 하고, 시계에 돌려줄 결과를 만든다. 시계는 이 응답으로 폰이 받아들였는지 안다. */
+    fun handleForAck(command: WatchCommand, payload: ByteArray? = null): CommandAck =
+        CommandAck(command, handle(command, payload))
 
     private inline fun runIf(allowed: Boolean, action: () -> Any?): Boolean {
         if (!allowed) return false
