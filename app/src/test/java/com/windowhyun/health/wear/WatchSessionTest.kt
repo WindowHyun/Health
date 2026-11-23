@@ -112,7 +112,7 @@ class WatchSessionTest {
             viewModel.adjustRestTimer(15)
 
             assertThat(link.rest.value.endsAtMillis).isEqualTo(wallNow + 75_000)
-            assertThat(link.rest.value.totalSeconds).isEqualTo(70)
+            assertThat(link.rest.value.totalSeconds).isEqualTo(75)
         }
     }
 
