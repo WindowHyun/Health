@@ -112,7 +112,7 @@ class WatchSessionTest {
             viewModel.adjustRestTimer(15)
 
             assertThat(link.rest.value.endsAtMillis).isEqualTo(wallNow + 75_000)
-            assertThat(link.rest.value.totalSeconds).isEqualTo(75)
+            assertThat(link.rest.value.totalSeconds).isEqualTo(70)
         }
     }
 
@@ -160,21 +160,21 @@ class WatchSessionTest {
     // ----- 시계에서 온 명령 -----
 
     @Test
-    fun `plus and minus fifteen from the watch change the rest like the phone buttons`() = runTest(dispatcher) {
+    fun `plus and minus ten from the watch change the rest like the phone buttons`() = runTest(dispatcher) {
         withSession { viewModel ->
             viewModel.startRestTimer(60)
 
             link.emitRestCommand(WatchCommand.REST_ADD)
             advanceTimeBy(1)
-            assertThat(viewModel.restTimer.value.remainingSeconds).isEqualTo(75)
+            assertThat(viewModel.restTimer.value.remainingSeconds).isEqualTo(70)
 
             link.emitRestCommand(WatchCommand.REST_SUB)
             link.emitRestCommand(WatchCommand.REST_SUB)
             advanceTimeBy(1)
-            assertThat(viewModel.restTimer.value.remainingSeconds).isEqualTo(45)
+            assertThat(viewModel.restTimer.value.remainingSeconds).isEqualTo(50)
             // 명령을 처리하느라 흐른 1ms 안팎의 차이는 허용한다(테스트 시계와 보내는 시각의 기준이 다르다).
             assertThat(link.rest.value.endsAtMillis).isIn(
-                com.google.common.collect.Range.closed(wallNow + 44_990, wallNow + 45_000),
+                com.google.common.collect.Range.closed(wallNow + 49_990, wallNow + 50_000),
             )
         }
     }
