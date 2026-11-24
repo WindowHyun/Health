@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -366,7 +367,15 @@ private fun MetricColumn(label: String, value: String, modifier: Modifier = Modi
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(text = value, style = LargeMetricTextStyle)
+        // 지도 아래 3칸으로 나뉘는 줄이라 LargeMetricTextStyle(34sp) 는 "0.09km" 같은 값도
+        // 한 줄에 못 들어가 "0.09k"/"m"처럼 단어 중간에서 줄바꿈된다. 한 줄로 고정하고
+        // 글자 크기도 이 칸 너비에 맞춰 줄인다.
+        Text(
+            text = value,
+            style = LargeMetricTextStyle.copy(fontSize = 24.sp, lineHeight = 28.sp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

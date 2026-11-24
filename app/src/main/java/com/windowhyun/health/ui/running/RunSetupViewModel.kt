@@ -54,13 +54,17 @@ class RunSetupViewModel @Inject constructor(
 
     private val selection = MutableStateFlow(RunSetupUiState())
 
+    // WhileSubscribed(5_000) 는 러닝 탭을 5초 이상 벗어나면(러닝은 늘 그보다 오래 걸린다)
+    // 구독이 끊겨 "러닝 시작을 누른 순간"의 tracking.isActive=true 스냅샷이 캐시로 남는다.
+    // 돌아와 재구독할 때 그 stale 값이 먼저 방출되며 onRunStarted() 가 잘못 불려
+    // 추적 중이 아닌데도 진행 화면으로 튕기는 버그가 있었다. Eagerly 로 바꿔 항상 최신 상태를 본다.
     val uiState: StateFlow<RunSetupUiState> = combine(
         selection,
         settingsRepository.settings,
         runTracker.state,
     ) { current, settings, tracking ->
         current.copy(settings = settings, tracking = tracking)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RunSetupUiState())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, RunSetupUiState())
 
     init {
         refreshLocationStatus()

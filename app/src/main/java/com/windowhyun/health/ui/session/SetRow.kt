@@ -68,8 +68,11 @@ fun SetRow(
     showComplete: Boolean = true,
 ) {
     // set.id 가 같은 동안에는 화면 입력값을 유지한다.
+    // 0kg 을 글자 "0"으로 보여 주면 포커스를 받아도 전체 선택이 안 되어, 숫자를 치면
+    // "0"에 이어붙어 "012.5" 처럼 보인다(횟수 칸은 이 문제가 없도록 빈 칸으로 시작한다).
+    // 새 세트는 빈 칸으로 시작해 숫자를 바로 치게 하고, 저장된 중량이 있으면 그대로 보여 준다.
     var weightText by remember(set.id) {
-        mutableStateOf(formatWeightValue(weightUnit.fromKg(set.weightKg)))
+        mutableStateOf(if (set.weightKg > 0) formatWeightValue(weightUnit.fromKg(set.weightKg)) else "")
     }
     var repsText by remember(set.id) { mutableStateOf(if (set.reps > 0) set.reps.toString() else "") }
     // 시간은 분과 초를 따로 받는다. 숫자 키패드에는 ':' 이 없어서 "1:30" 을 칠 수 없다.
