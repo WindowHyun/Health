@@ -21,7 +21,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
-import com.windowhyun.health.ui.components.imeAboveNavigationBar
+import com.windowhyun.health.ui.components.liftAboveKeyboard
 import com.windowhyun.health.ui.components.SectionLabel
 import com.windowhyun.health.ui.components.HealthButton
 import com.windowhyun.health.core.designsystem.theme.healthColors
@@ -61,6 +61,7 @@ fun RunSummaryScreen(
     BackHandler { viewModel.save() }
 
     Scaffold(
+        modifier = Modifier.liftAboveKeyboard(),
         topBar = { TopAppBar(title = { Text("러닝 완료") }) },
         // 저장 · 삭제는 긴 화면(카드 · 지도 · 구간 · 메모) 맨 아래에 있어 스크롤해야 보였다. 늘 보이게 고정한다.
         // 키보드가 올라오면 이 막대가 함께 올라오고, 위의 내용은 그만큼 줄어든다.
@@ -69,7 +70,6 @@ fun RunSummaryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.background)
-                    .imeAboveNavigationBar()
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),

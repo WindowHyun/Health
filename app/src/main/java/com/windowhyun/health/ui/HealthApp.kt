@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -49,8 +50,7 @@ fun HealthApp() {
     val topLevelRoutes = remember { TopLevelDestination.entries.map { it.route }.toSet() }
     val showBottomBar = currentDestination?.route in topLevelRoutes
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
+    AppFrame(
         bottomBar = {
             if (showBottomBar) {
                 HealthBottomBar(
@@ -67,9 +67,29 @@ fun HealthApp() {
                 )
             }
         },
+    ) {
+        HealthNavHost(navController = navController)
+    }
+}
+
+/**
+ * 앱 맨 바깥 틀. 시스템 막대(상태 · 내비게이션)와 하단 탭의 자리를 한 번 비워 주고, 안쪽 화면에 내어 준다.
+ *
+ * 안쪽 화면도 각자 Scaffold 를 쓴다. Scaffold 는 시스템 막대 여백을 스스로 두기 때문에, 바깥에서 이미 비운 여백을
+ * "적용됨"으로 표시하지 않으면 안쪽이 같은 여백을 한 번 더 둔다(위 막대 위 · 아래 모두 두 배). 키보드가 올라올 때
+ * 입력칸 아래에 막대 높이만큼의 빈 띠가 생기는 원인 중 하나였다.
+ */
+@Composable
+internal fun AppFrame(
+    bottomBar: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = bottomBar,
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding)) {
-            HealthNavHost(navController = navController)
+        Column(modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding)) {
+            content()
         }
     }
 }

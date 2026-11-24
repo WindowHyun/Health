@@ -32,7 +32,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.components.SectionLabel
-import com.windowhyun.health.ui.components.imeAboveNavigationBar
+import com.windowhyun.health.ui.components.liftAboveKeyboard
 import com.windowhyun.health.ui.components.HealthOutlinedButton
 import com.windowhyun.health.ui.components.HealthButton
 import com.windowhyun.health.ui.components.Hairline
@@ -80,6 +80,7 @@ fun RoutineEditScreen(
     BackHandler { requestLeave() }
 
     Scaffold(
+        modifier = Modifier.liftAboveKeyboard(),
         topBar = {
             TopAppBar(
                 title = { Text(if (state.isNew) "루틴 만들기" else "루틴 수정") },
@@ -102,8 +103,7 @@ fun RoutineEditScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .imeAboveNavigationBar(),
+                .padding(padding),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         ) {
             item {

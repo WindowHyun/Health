@@ -64,7 +64,7 @@ import com.windowhyun.health.ui.components.ConfirmDialog
 import com.windowhyun.health.ui.components.Hairline
 import com.windowhyun.health.ui.components.HealthOutlinedButton
 import com.windowhyun.health.ui.components.MetricValue
-import com.windowhyun.health.ui.components.imeAboveNavigationBar
+import com.windowhyun.health.ui.components.liftAboveKeyboard
 import com.windowhyun.health.ui.gym.ExercisePickerSheet
 import kotlinx.coroutines.flow.collectLatest
 
@@ -157,6 +157,7 @@ fun WorkoutSessionScreen(
     }
 
     Scaffold(
+        modifier = Modifier.liftAboveKeyboard(),
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
@@ -198,8 +199,7 @@ fun WorkoutSessionScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .imeAboveNavigationBar(),
+                .padding(padding),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         ) {
             item {
